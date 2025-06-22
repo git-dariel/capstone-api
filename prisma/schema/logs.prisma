@@ -1,0 +1,38 @@
+enum LogType {
+  activity
+  audit
+  notification
+}
+
+enum LogStatus {
+  pending
+  success
+  failed
+  read
+  unread
+}
+
+enum LogSeverity {
+  critical
+  high
+  medium
+  low
+  info
+}
+
+model Log {
+  id         String      @id @default(auto()) @map("_id") @db.ObjectId
+  type       LogType
+  action     String // e.g., "LOGIN", "CREATE", "NOTIFICATION_SENT"
+  title      String
+  message    String?
+  user       User?       @relation(fields: [userId], references: [id])
+  userId     String      @unique @db.ObjectId
+  entityType String? // e.g., "User", "Insurance", "Payment"
+  entityId   String?
+  data       Json?
+  status     LogStatus   @default(pending)
+  severity   LogSeverity @default(info)
+  readAt     DateTime?
+  createdAt  DateTime    @default(now())
+}

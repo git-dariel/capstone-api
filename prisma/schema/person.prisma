@@ -1,0 +1,50 @@
+enum AddressType {
+  permanent
+  current
+  temporary
+  previous
+}
+
+enum Gender {
+  male
+  female
+  others
+}
+
+enum CivilStatus {
+  single
+  married
+  separated
+  widow
+  cohabiting
+}
+
+type Address {
+  houseNo  Int
+  street   String
+  province String
+  city     String
+  barangay String
+  zipCode  Int
+  country  String
+  type     AddressType @default(current)
+}
+
+model Person {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  firstName     String?
+  lastName      String?
+  middleName    String?
+  contactNumber String?
+  email         String?
+  suffix        String?
+  gender        Gender?
+  birthDate     DateTime?
+  birthPlace    String?
+  age           Int?
+  religion      String?
+  civilStatus   CivilStatus? @default(single)
+  address       Address?
+  users         User[] // One person can have multiple user accounts
+  isDeleted     Boolean      @default(false)
+}

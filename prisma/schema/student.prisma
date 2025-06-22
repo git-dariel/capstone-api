@@ -1,0 +1,9 @@
+model Student {
+  id            String  @id @default(auto()) @map("_id") @db.ObjectId
+  studentNumber String
+  program       String
+  year          String
+  user          User?   @relation(fields: [userId], references: [id])
+  userId        String  @unique @db.ObjectId
+  isDeleted     Boolean @default(false)
+}

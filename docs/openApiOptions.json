@@ -1,0 +1,18 @@
+{
+	"failOnErrors": true,
+	"definition": {
+		"openapi": "3.0.0",
+		"info": {
+			"title": "SureOne Backend API",
+			"version": "1.0.0",
+			"description": "Welcome to the SureOne API documentation. This is a RESTful API that allows you to interact with the SureOne backend services."
+		},
+		"tags": [
+			{
+				"name": "Template",
+				"description": "Template routes"
+			}
+		]
+	},
+	"apis": ["./docs/models/*.yaml", "./app/**/*.router.ts"]
+}
