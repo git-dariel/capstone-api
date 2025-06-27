@@ -1,5 +1,5 @@
 {
-	"name": "sureone-api",
+	"name": "mental-health-api",
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
@@ -21,9 +21,9 @@
 	"prisma": {
 		"seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
 	},
-	"author": "SureOne",
+	"author": "Mental Health",
 	"license": "ISC",
-	"description": "SureOne API is a RESTful API built with TypeScript, Express, and Prisma. It provides a secure and efficient way to manage user authentication, authorization, and data storage.",
+	"description": "Mental Health API is a RESTful API built with TypeScript, Express, and Prisma. It provides a secure and efficient way to manage user authentication, authorization, and data storage.",
 	"keywords": [
 		"typescript",
 		"express",
