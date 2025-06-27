@@ -1,0 +1,40 @@
+enum AnxietyLevel {
+  not_at_all
+  several_days
+  more_than_half_days
+  nearly_every_day
+}
+
+enum SeverityLevel {
+  minimal
+  mild
+  moderate
+  severe
+}
+
+enum DifficultyLevel {
+  not_difficult_at_all
+  somewhat_difficult
+  very_difficult
+  extremely_difficult
+}
+
+model AnxietyAssessment {
+  id                                 String          @id @default(auto()) @map("_id") @db.ObjectId
+  user                               User            @relation(fields: [userId], references: [id])
+  userId                             String          @db.ObjectId
+  feeling_nervous_anxious_edge       AnxietyLevel    @default(not_at_all)
+  not_able_stop_control_worrying     AnxietyLevel    @default(not_at_all)
+  worrying_too_much_different_things AnxietyLevel    @default(not_at_all)
+  trouble_relaxing                   AnxietyLevel    @default(not_at_all)
+  restless_hard_sit_still            AnxietyLevel    @default(not_at_all)
+  easily_annoyed_irritable           AnxietyLevel    @default(not_at_all)
+  feeling_afraid_awful_happen        AnxietyLevel    @default(not_at_all)
+  totalScore                         Int             @default(0) // Sum of all responses (0-21)
+  severityLevel                      SeverityLevel   @default(minimal)
+  assessmentDate                     DateTime        @default(now())
+  difficulty_level                   DifficultyLevel
+  createdAt                          DateTime        @default(now())
+  updatedAt                          DateTime        @updatedAt
+  isDeleted                          Boolean         @default(false)
+}

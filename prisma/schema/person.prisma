@@ -20,13 +20,13 @@ enum CivilStatus {
 }
 
 type Address {
-  houseNo  Int
-  street   String
-  province String
-  city     String
-  barangay String
-  zipCode  Int
-  country  String
+  houseNo  Int?
+  street   String?
+  province String?
+  city     String?
+  barangay String?
+  zipCode  Int?
+  country  String?
   type     AddressType @default(current)
 }
 
@@ -46,5 +46,6 @@ model Person {
   civilStatus   CivilStatus? @default(single)
   address       Address?
   users         User[] // One person can have multiple user accounts
+  students      Student[] // One person can be associated with multiple student records
   isDeleted     Boolean      @default(false)
 }

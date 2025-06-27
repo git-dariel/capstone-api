@@ -2,14 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
-import { controller as authController } from "../auth/auth.controller";
-import bcrypt from "bcrypt";
+import { controller as personController } from "../person/person.controller";
 
 const logger = getLogger();
 const studentLogger = logger.child({ module: "student" });
 
 export const controller = (prisma: PrismaClient) => {
-	const authCtrl = authController(prisma);
+	const personCtrl = personController(prisma);
 
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
@@ -134,6 +133,9 @@ export const controller = (prisma: PrismaClient) => {
 								{ studentNumber: { contains: String(query) } },
 								{ program: { contains: String(query) } },
 								{ year: { contains: String(query) } },
+								{ person: { firstName: { contains: String(query) } } },
+								{ person: { lastName: { contains: String(query) } } },
+								{ person: { email: { contains: String(query) } } },
 							],
 						}
 					: {}),
@@ -193,9 +195,29 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const create = async (req: Request, res: Response, _next: NextFunction) => {
-		const { studentNumber, program, year, user } = req.body;
+	const create = async (req: Request, res: Response, next: NextFunction) => {
+		const {
+			studentNumber,
+			program,
+			year,
+			personId,
+			firstName,
+			lastName,
+			middleName,
+			suffix,
+			contactNumber,
+			email,
+			gender,
+			birthDate,
+			birthPlace,
+			age,
+			religion,
+			civilStatus,
+			address,
+			...otherData
+		} = req.body;
 
+		// Validate required fields
 		if (!studentNumber) {
 			studentLogger.error(config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED);
 			res.status(400).json({
@@ -220,10 +242,11 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (!user || !user.person || !user.person.email) {
-			studentLogger.error(config.ERROR.STUDENT.INVALID_USER_DATA);
+		// Only require firstName and lastName if we're creating a new person
+		if (!personId && (!firstName || !lastName)) {
+			studentLogger.error("First name and last name are required when creating a new person");
 			res.status(400).json({
-				error: config.ERROR.STUDENT.INVALID_USER_DATA,
+				error: "First name and last name are required when creating a new person",
 			});
 			return;
 		}
@@ -247,112 +270,130 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const existingUser = await prisma.user.findFirst({
-				where: {
-					person: {
-						email: user.person.email,
-					},
-					isDeleted: false,
-				},
-			});
-
-			if (existingUser) {
-				const existingStudent = await prisma.student.findFirst({
+			// If personId is provided, verify the person exists
+			if (personId) {
+				const existingPerson = await prisma.person.findFirst({
 					where: {
-						userId: existingUser.id,
+						id: personId,
 						isDeleted: false,
-					},
-					include: {
-						user: {
-							include: {
-								person: true,
-							},
-						},
 					},
 				});
 
-				if (existingStudent) {
-					studentLogger.info(
-						`${config.SUCCESS.STUDENT.RETRIEVED}: ${existingStudent.id}`,
-					);
-					res.status(200).json({
-						...existingStudent,
-						message: config.ERROR.STUDENT.EXISTING_STUDENT,
+				if (!existingPerson) {
+					studentLogger.error(`Person not found with ID: ${personId}`);
+					res.status(404).json({
+						error: "Person not found",
+					});
+					return;
+				}
+			}
+			// Check if email already exists (if provided and creating new person)
+			else if (email) {
+				const existingPerson = await prisma.person.findFirst({
+					where: {
+						email,
+						isDeleted: false,
+					},
+				});
+
+				if (existingPerson) {
+					studentLogger.error(`Person with this email already exists: ${email}`);
+					res.status(400).json({
+						error: "Person with this email already exists",
 					});
 					return;
 				}
 			}
 
-			const { person, ...userData } = user;
-			const { firstName, lastName, email, ...otherPersonData } = person;
+			const result = await prisma.$transaction(async (tx) => {
+				let person;
 
-			const mockAuthReq = {
-				body: {
-					...userData,
-					firstName,
-					lastName,
-					email,
-					type: "client",
-					role: "user",
-					...otherPersonData,
-				},
-			} as Request;
+				if (personId) {
+					// If personId is provided, use existing person
+					person = await tx.person.findUnique({
+						where: { id: personId },
+					});
 
-			const mockAuthRes = {
-				statusCode: 0,
-				data: null,
-				status: function (code: number) {
-					this.statusCode = code;
-					return this;
-				},
-				json: function (data: any) {
-					this.data = data;
-					return this;
-				},
-				cookie: function () {
-					return this;
-				},
-			} as any;
+					if (!person) {
+						throw new Error("Person not found");
+					}
+				} else {
+					// Create person if no personId provided
+					const mockReq = {
+						body: {
+							firstName,
+							lastName,
+							...(middleName ? { middleName } : {}),
+							...(suffix ? { suffix } : {}),
+							...(email ? { email } : {}),
+							...(contactNumber ? { contactNumber } : {}),
+							...(gender ? { gender } : {}),
+							...(birthDate && { birthDate: new Date(birthDate) }),
+							...(birthPlace ? { birthPlace } : {}),
+							...(age ? { age } : {}),
+							...(religion ? { religion } : {}),
+							...(civilStatus ? { civilStatus } : {}),
+							...(address ? { address } : {}),
+							...otherData,
+						},
+					} as Request;
 
-			await authCtrl.register(mockAuthReq, mockAuthRes, _next);
+					const mockRes = {
+						statusCode: 0,
+						data: null,
+						status: function (code: number) {
+							this.statusCode = code;
+							return this;
+						},
+						json: function (data: any) {
+							this.data = data;
+							return this;
+						},
+					} as any;
 
-			if (mockAuthRes.statusCode !== 201 || !mockAuthRes.data.user) {
-				throw new Error("Failed to create user");
-			}
+					await personCtrl.create(mockReq, mockRes, next);
 
-			const createdUser = mockAuthRes.data.user;
+					if (mockRes.statusCode !== 201) {
+						throw new Error("Failed to create person");
+					}
 
-			const newStudent = await prisma.student.create({
-				data: {
-					studentNumber,
-					program,
-					year,
-					user: {
-						connect: {
-							id: createdUser.id,
+					person = mockRes.data;
+				}
+
+				// Create student record
+				const student = await tx.student.create({
+					data: {
+						studentNumber,
+						program,
+						year,
+						person: {
+							connect: {
+								id: person.id,
+							},
 						},
 					},
-				},
-				include: {
-					user: {
-						include: {
-							person: true,
-						},
+					include: {
+						person: true,
 					},
-				},
+				});
+
+				return student;
 			});
 
-			studentLogger.info(`${config.SUCCESS.STUDENT.CREATED}: ${newStudent.id}`);
-			res.status(201).json(newStudent);
+			studentLogger.info(`${config.SUCCESS.STUDENT.CREATED}: ${result.id}`);
+			res.status(201).json({
+				message: "Student created successfully",
+				...result,
+			});
 		} catch (error) {
 			studentLogger.error(`${config.ERROR.STUDENT.INTERNAL_SERVER_ERROR}: ${error}`);
 			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
 		}
 	};
 
-	const update = async (req: Request, res: Response, _next: NextFunction) => {
+	const update = async (req: Request, res: Response, next: NextFunction) => {
 		const { id } = req.params;
-		const { studentNumber, program, year, user } = req.body;
+		const { studentNumber, program, year, person } = req.body;
 
 		if (!id) {
 			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
@@ -377,11 +418,7 @@ export const controller = (prisma: PrismaClient) => {
 					isDeleted: false,
 				},
 				include: {
-					user: {
-						include: {
-							person: true,
-						},
-					},
+					person: true,
 				},
 			});
 
@@ -391,9 +428,9 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			if (!existingStudent.user || !existingStudent.user.person) {
-				studentLogger.error(`Student user or person data not found: ${id}`);
-				res.status(400).json({ error: "Student user or person data not found" });
+			if (!existingStudent.person) {
+				studentLogger.error(`Student person data not found: ${id}`);
+				res.status(400).json({ error: "Student person data not found" });
 				return;
 			}
 
@@ -419,6 +456,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			await prisma.$transaction(async (tx) => {
+				// Update student fields
 				if (studentNumber || program || year) {
 					await tx.student.update({
 						where: { id },
@@ -430,54 +468,35 @@ export const controller = (prisma: PrismaClient) => {
 					});
 				}
 
-				if (user) {
-					const { person, password, ...userData } = user;
+				// Update person fields
+				if (person) {
+					const { address: newAddress, ...personData } = person;
 
-					let hashedPassword = null;
-					if (password) {
-						hashedPassword = await bcrypt.hash(password, 10);
-						studentLogger.info(`Password hashed for user: ${existingStudent.user!.id}`);
-					}
+					if (newAddress) {
+						const existingPerson = await tx.person.findUnique({
+							where: { id: existingStudent.person!.id },
+							select: { address: true },
+						});
 
-					if (Object.keys(userData).length > 0 || hashedPassword) {
-						await tx.user.update({
-							where: { id: existingStudent.user!.id },
+						const mergedAddress = {
+							...existingPerson?.address,
+							...newAddress,
+						};
+
+						await tx.person.update({
+							where: { id: existingStudent.person!.id },
 							data: {
-								...userData,
-								...(hashedPassword && { password: hashedPassword }),
+								...personData,
+								address: {
+									set: mergedAddress,
+								},
 							},
 						});
-					}
-
-					if (person) {
-						const { address: newAddress, ...personData } = person;
-
-						if (newAddress) {
-							const existingPerson = await tx.person.findUnique({
-								where: { id: existingStudent.user!.person!.id },
-								select: { address: true },
-							});
-
-							const mergedAddress = {
-								...existingPerson?.address,
-								...newAddress,
-							};
-
-							await tx.person.update({
-								where: { id: existingStudent.user!.person!.id },
-								data: {
-									...personData,
-									address: {
-										set: mergedAddress,
-									},
-								},
-							});
-						} else {
-							await tx.person.update({
-								where: { id: existingStudent.user!.person!.id },
-								data: personData,
-							});
-						}
+					} else {
+						await tx.person.update({
+							where: { id: existingStudent.person!.id },
+							data: personData,
+						});
 					}
 				}
 			});
@@ -485,11 +504,7 @@ export const controller = (prisma: PrismaClient) => {
 			const updatedStudent = await prisma.student.findUnique({
 				where: { id },
 				include: {
-					user: {
-						include: {
-							person: true,
-						},
-					},
+					person: true,
 				},
 			});
 
@@ -516,11 +531,7 @@ export const controller = (prisma: PrismaClient) => {
 			const existingStudent = await prisma.student.findUnique({
 				where: { id },
 				include: {
-					user: {
-						include: {
-							person: true,
-						},
-					},
+					person: true,
 				},
 			});
 
