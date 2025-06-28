@@ -21,6 +21,7 @@ const student = require("./app/student")(prisma);
 const announcement = require("./app/announcement")(prisma);
 const loggings = require("./app/loggings")(prisma);
 const anxiety = require("./app/anxiety")(prisma);
+const stress = require("./app/stress")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -51,6 +52,7 @@ app.use(config.baseApiPath, announcement);
 app.use(config.baseApiPath, user);
 app.use(config.baseApiPath, loggings);
 app.use(config.baseApiPath, anxiety);
+app.use(config.baseApiPath, stress);
 
 const server = createServer(app);
 const io = new Server(server);

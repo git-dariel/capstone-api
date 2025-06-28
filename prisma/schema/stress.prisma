@@ -1,0 +1,35 @@
+enum StressFrequency {
+  never
+  almost_never
+  sometimes
+  fairly_often
+  very_often
+}
+
+enum StressSeverityLevel {
+  low
+  moderate
+  high
+}
+
+model StressAssessment {
+  id                                   String              @id @default(auto()) @map("_id") @db.ObjectId
+  user                                 User                @relation(fields: [userId], references: [id])
+  userId                               String              @db.ObjectId
+  upset_because_something_unexpected   StressFrequency     @default(never)
+  unable_control_important_things      StressFrequency     @default(never)
+  feeling_nervous_and_stressed         StressFrequency     @default(never)
+  confident_handle_personal_problems   StressFrequency     @default(never)
+  feeling_things_going_your_way        StressFrequency     @default(never)
+  unable_cope_with_all_things          StressFrequency     @default(never)
+  able_control_irritations             StressFrequency     @default(never)
+  feeling_on_top_of_things             StressFrequency     @default(never)
+  angered_things_outside_control       StressFrequency     @default(never)
+  difficulties_piling_up_cant_overcome StressFrequency     @default(never)
+  totalScore                           Int                 @default(0) // Sum of all responses (0-40)
+  severityLevel                        StressSeverityLevel @default(low)
+  assessmentDate                       DateTime            @default(now())
+  createdAt                            DateTime            @default(now())
+  updatedAt                            DateTime            @updatedAt
+  isDeleted                            Boolean             @default(false)
+}
