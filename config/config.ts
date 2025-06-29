@@ -26,19 +26,23 @@ export const config = {
 			wildCardOrigin(origin, callback, "http://localhost:5173");
 		},
 		DEV_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://sureone-platform-dev.web.app");
+			wildCardOrigin(origin, callback, "https://pup-bloom.vercel.app");
 		},
 		TEST_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://sureone-platform-test.web.app");
+			wildCardOrigin(origin, callback, "https://pup-bloom.vercel.app");
 		},
 		PROD_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://sureoneplatform.com");
+			wildCardOrigin(origin, callback, "https://pup-bloom.vercel.app");
 		},
 		LOCAL_API: function (origin: string, callback: CallbackFunction) {
 			wildCardOrigin(origin, callback, "http://localhost:5000");
 		},
 		DEV_API: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "");
+			wildCardOrigin(
+				origin,
+				callback,
+				"https://mental-health-dev-796aa66da7d5.herokuapp.com",
+			);
 		},
 		TEST_API: function (origin: string, callback: CallbackFunction) {
 			wildCardOrigin(origin, callback, "");
