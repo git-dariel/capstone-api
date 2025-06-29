@@ -342,7 +342,7 @@ export const controller = (prisma: PrismaClient) => {
 					thoughts_better_off_dead_hurting_yourself,
 					totalScore,
 					severityLevel,
-					difficulty_level: difficulty_level || "not_difficult_at_all",
+					...(difficulty_level !== undefined && { difficulty_level }),
 					assessmentDate: assessmentDate ? new Date(assessmentDate) : new Date(),
 					isDeleted: false,
 				},
