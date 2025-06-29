@@ -218,13 +218,13 @@ export const controller = (prisma: PrismaClient) => {
 		} = req.body;
 
 		// Validate required fields
-		if (!studentNumber) {
-			studentLogger.error(config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED);
-			res.status(400).json({
-				error: config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED,
-			});
-			return;
-		}
+		// if (!studentNumber) {
+		// 	studentLogger.error(config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED);
+		// 	res.status(400).json({
+		// 		error: config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED,
+		// 	});
+		// 	return;
+		// }
 
 		if (!program) {
 			studentLogger.error(config.ERROR.STUDENT.PROGRAM_REQUIRED);

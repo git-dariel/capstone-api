@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { config } from "../../config/error.config";
-import { Prisma, PrismaClient } from "../../generated/prisma";
+import { Prisma, PrismaClient, AnnouncementStatus } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 
 const logger = getLogger();
@@ -175,7 +175,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
-		const { title, description, attachement } = req.body;
+		const { title, description, attachement, status } = req.body;
 
 		if (!title || !description) {
 			announcementLogger.error("Invalid announcement data");
@@ -194,6 +194,15 @@ export const controller = (prisma: PrismaClient) => {
 		if (typeof description !== "string" || description.trim().length === 0) {
 			announcementLogger.error(`Invalid description: ${description}`);
 			res.status(400).json({ error: config.ERROR.ANNOUNCEMENT.INVALID_DESCRIPTION });
+			return;
+		}
+
+		// Validate status if provided
+		if (status && !Object.values(AnnouncementStatus).includes(status)) {
+			announcementLogger.error(`Invalid status: ${status}`);
+			res.status(400).json({
+				error: `Invalid status. Must be one of: ${Object.values(AnnouncementStatus).join(", ")}`,
+			});
 			return;
 		}
 
@@ -219,6 +228,7 @@ export const controller = (prisma: PrismaClient) => {
 					title: title.trim(),
 					description: description.trim(),
 					attachement: attachement || null,
+					status: status || AnnouncementStatus.academic,
 					updatedAt: new Date(),
 					isDeleted: false,
 				},
@@ -234,7 +244,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const update = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
-		const { title, description, attachement } = req.body;
+		const { title, description, attachement, status } = req.body;
 
 		if (!id) {
 			announcementLogger.error(config.ERROR.ANNOUNCEMENT.MISSING_ID);
@@ -265,6 +275,15 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		// Validate status if provided
+		if (status !== undefined && !Object.values(AnnouncementStatus).includes(status)) {
+			announcementLogger.error(`Invalid status: ${status}`);
+			res.status(400).json({
+				error: `Invalid status. Must be one of: ${Object.values(AnnouncementStatus).join(", ")}`,
+			});
+			return;
+		}
+
 		announcementLogger.info(`Updating announcement: ${id}`);
 
 		try {
@@ -285,6 +304,7 @@ export const controller = (prisma: PrismaClient) => {
 			if (title) updateData.title = title.trim();
 			if (description) updateData.description = description.trim();
 			if (attachement !== undefined) updateData.attachement = attachement || null;
+			if (status !== undefined) updateData.status = status;
 
 			const updatedAnnouncement = await prisma.announcement.update({
 				where: { id },

@@ -1,6 +1,6 @@
 model Student {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  studentNumber String   @unique
+  studentNumber String?  @unique
   program       String
   year          String
   person        Person   @relation(fields: [personId], references: [id])
