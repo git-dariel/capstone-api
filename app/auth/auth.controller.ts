@@ -266,6 +266,7 @@ export const controller = (prisma: PrismaClient) => {
 			const responseData: any = {
 				message: "Registration successful",
 				user: result.user,
+				token: token,
 			};
 
 			// Include student data in response if applicable
@@ -389,6 +390,7 @@ export const controller = (prisma: PrismaClient) => {
 					type: user.type,
 					person,
 				},
+				token: token,
 			};
 
 			// Include student data if person has student records

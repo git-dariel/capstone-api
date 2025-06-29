@@ -33,14 +33,13 @@ if (process.env.NODE_ENV !== "production") {
 	app.use(`${config.baseApiPath}/docs`, swaggerUi.serve, swaggerUi.setup(openApiSpecs()));
 }
 
-app.use(config.baseApiPath, student);
-
-// Set up routes that need authentication
+// Auth routes should be public (login/register)
 app.use(config.baseApiPath, auth);
-// Apply middleware for protected routes, excluding /docs
+
+// Apply middleware for protected routes
 app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) => {
-	if (req.path.startsWith("/docs")) {
-		// Skip middleware for the docs route
+	if (req.path.startsWith("/docs") || req.path.startsWith("/auth")) {
+		// Skip middleware for docs and auth routes
 		return next();
 	}
 	// Apply middleware for other routes
@@ -48,7 +47,10 @@ app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) =>
 		verifyRole([Role.admin, Role.user, Role.super_admin])(req, res, next);
 	});
 });
+
+// Protected routes
 app.use(config.baseApiPath, person);
+app.use(config.baseApiPath, student);
 app.use(config.baseApiPath, announcement);
 app.use(config.baseApiPath, user);
 app.use(config.baseApiPath, loggings);

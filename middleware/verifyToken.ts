@@ -23,7 +23,16 @@ export default (req: AuthRequest, res: Response, next: NextFunction) => {
 		return next();
 	}
 
-	const token = req.cookies.token;
+	// Check for token in cookies first, then in Authorization header
+	let token = req.cookies.token;
+
+	if (!token) {
+		// Check Authorization header
+		const authHeader = req.headers.authorization;
+		if (authHeader && authHeader.startsWith("Bearer ")) {
+			token = authHeader.substring(7); // Remove "Bearer " prefix
+		}
+	}
 
 	if (!token) {
 		res.status(401).json({ message: "Unauthorized" });
