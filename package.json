@@ -84,6 +84,7 @@
 		"ml-matrix": "^6.12.1",
 		"ml-random-forest": "^2.1.0",
 		"nodemailer": "^7.0.3",
+		"random-forest": "^0.0.7",
 		"socket.io": "^4.8.1",
 		"winston": "^3.17.0"
 	}
