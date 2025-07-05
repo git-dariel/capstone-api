@@ -1,0 +1,1001 @@
+Gender,Age,Education Level,Sleep Duration (hrs),Stress Level,Academic Performance Change
+Male,15,Class 8,8.9,Medium,Same
+Female,25,MSc,5,Medium,Same
+Male,20,BTech,5.4,Medium,Same
+Male,20,BA,5.6,High,Same
+Female,17,Class 11,5.4,Medium,Same
+Male,23,MSc,8.4,Low,Improved
+Male,22,MTech,6.6,Medium,Improved
+Male,25,MTech,4.7,Medium,Same
+Male,20,BA,5,Medium,Improved
+Female,16,Class 9,8.4,Low,Improved
+Female,15,Class 8,7.3,Low,Same
+Male,23,MSc,8.8,High,Same
+Female,16,Class 10,4.4,High,Same
+Female,23,MA,4.3,Low,Improved
+Male,22,MSc,7.8,High,Declined
+Male,21,MA,8.5,Medium,Declined
+Male,25,MTech,5.6,Medium,Declined
+Female,18,Class 11,4.8,Low,Declined
+Female,16,Class 9,7.2,High,Same
+Male,18,Class 11,7.9,High,Same
+Female,20,BTech,5.4,Medium,Declined
+Male,20,BA,7.3,Low,Same
+Male,19,BSc,7.7,Low,Same
+Female,15,Class 8,8.5,Medium,Improved
+Male,17,Class 11,4.3,High,Improved
+Female,26,MTech,6.8,Medium,Declined
+Female,24,MTech,7.9,Medium,Declined
+Male,24,MTech,8.2,Low,Improved
+Male,18,Class 11,4.7,Low,Declined
+Female,17,Class 11,4.9,Medium,Same
+Male,18,Class 11,4.6,Medium,Declined
+Male,16,Class 9,8.5,Low,Same
+Female,19,BA,4.5,High,Same
+Female,20,BSc,8.8,Medium,Declined
+Female,18,Class 12,8.6,Medium,Declined
+Female,20,BSc,6.4,High,Same
+Male,18,Class 12,8.6,Medium,Same
+Male,22,BSc,6.5,Low,Same
+Male,25,MSc,7.6,Low,Same
+Male,21,MTech,8.3,Medium,Improved
+Female,23,MA,8.1,Medium,Same
+Female,20,BTech,4.7,Low,Improved
+Female,16,Class 9,6.9,Low,Same
+Female,23,MSc,5.1,High,Improved
+Female,15,Class 9,6.6,Medium,Same
+Other,16,Class 10,6.2,Medium,Declined
+Female,21,BSc,6.8,Medium,Same
+Male,21,BA,7.3,Medium,Same
+Male,21,BTech,8.5,High,Declined
+Male,24,MA,5.4,Low,Same
+Male,20,BSc,7.8,Low,Declined
+Female,19,Class 12,7.2,Medium,Same
+Female,20,BTech,5.1,Low,Same
+Female,23,MTech,6.4,Medium,Same
+Male,19,BTech,8.5,Medium,Same
+Male,19,BA,9,Medium,Improved
+Female,16,Class 9,7,Low,Declined
+Female,16,Class 9,5.6,Low,Improved
+Male,22,BSc,5,Low,Same
+Male,16,Class 10,4.5,High,Same
+Female,15,Class 9,6.1,Medium,Same
+Male,25,MTech,5.6,Medium,Improved
+Female,15,Class 9,8.5,High,Same
+Other,18,Class 11,8,High,Improved
+Male,22,MA,8.8,Medium,Same
+Female,20,BTech,8.1,Medium,Same
+Male,20,BTech,6,High,Declined
+Female,15,Class 8,5.6,Low,Same
+Female,21,BSc,7.3,Medium,Declined
+Female,18,Class 12,7.2,High,Improved
+Female,23,MSc,6.7,High,Improved
+Male,17,Class 10,4.1,Medium,Improved
+Female,25,MSc,7.8,High,Declined
+Male,26,MSc,5.2,Medium,Same
+Female,15,Class 9,5.5,Medium,Declined
+Male,25,MSc,8.7,Medium,Declined
+Female,18,Class 12,4.7,Medium,Same
+Female,22,MTech,6.6,High,Same
+Male,21,MSc,4.9,Medium,Declined
+Male,15,Class 9,8.3,High,Same
+Male,15,Class 8,6.4,High,Improved
+Male,24,MSc,5,Medium,Declined
+Female,17,Class 10,4.6,High,Same
+Male,16,Class 9,7.5,Medium,Improved
+Female,24,MSc,4.1,Medium,Same
+Female,21,BTech,7.2,High,Improved
+Female,19,BSc,6.8,Low,Improved
+Male,24,MA,6.8,Low,Same
+Female,19,BSc,6.4,Low,Declined
+Male,26,MTech,5,Medium,Improved
+Female,23,MSc,5.4,Low,Improved
+Female,26,MSc,5.3,Medium,Same
+Male,25,MTech,4.1,Medium,Improved
+Female,20,BSc,8.2,Low,Same
+Female,23,MTech,4.3,Low,Improved
+Female,17,Class 10,5.8,Low,Improved
+Male,22,MTech,6.7,Low,Improved
+Female,20,BSc,5.5,Medium,Declined
+Female,17,Class 10,4,Low,Declined
+Male,17,Class 11,6.2,Medium,Improved
+Female,19,BTech,4.6,Medium,Declined
+Male,15,Class 9,5,Medium,Declined
+Male,16,Class 10,7.5,Medium,Improved
+Male,23,MTech,8.5,Low,Same
+Other,18,Class 12,6.4,High,Same
+Male,22,BTech,7.2,Low,Same
+Female,26,MSc,6.4,Medium,Improved
+Female,21,MSc,7.8,Medium,Same
+Male,16,Class 10,4.9,Low,Same
+Male,24,MA,4.6,Low,Declined
+Female,23,MA,7.7,Low,Declined
+Female,21,MSc,6.6,Low,Improved
+Female,17,Class 10,4.2,Medium,Declined
+Male,15,Class 9,4.7,Low,Improved
+Female,20,BTech,7.7,Low,Improved
+Male,20,BTech,5.5,High,Same
+Male,23,MTech,5,Medium,Improved
+Female,16,Class 10,5.4,Medium,Same
+Male,16,Class 9,7.7,Medium,Declined
+Female,18,Class 11,6.8,Low,Improved
+Male,20,BSc,6.1,Medium,Declined
+Male,17,Class 11,5.7,Medium,Same
+Female,21,MA,4.8,Low,Declined
+Female,24,MTech,7.2,Medium,Declined
+Male,24,MSc,7.9,Low,Declined
+Female,26,MTech,4.6,Medium,Same
+Female,18,Class 12,8.4,Low,Same
+Male,17,Class 11,5.3,Medium,Declined
+Male,18,Class 11,8.5,Low,Declined
+Male,23,MTech,7.5,Medium,Same
+Male,23,MTech,4.4,Medium,Declined
+Male,21,MA,6.6,High,Same
+Male,22,MSc,7.8,Low,Improved
+Male,26,MSc,8.5,Medium,Improved
+Male,19,BTech,4.6,Medium,Improved
+Female,17,Class 11,7.3,Low,Declined
+Male,23,MA,6.5,Medium,Improved
+Female,20,BSc,6.7,Low,Improved
+Male,25,MTech,9,Medium,Declined
+Female,17,Class 10,4.8,Low,Declined
+Male,17,Class 11,6.8,High,Declined
+Male,16,Class 10,4.5,High,Same
+Female,26,MSc,8.7,Low,Declined
+Male,18,Class 12,7.1,Medium,Declined
+Female,23,MA,7.1,Low,Same
+Male,15,Class 9,7.1,Medium,Improved
+Female,23,MTech,8.9,Low,Improved
+Female,16,Class 9,5.3,Low,Improved
+Male,16,Class 9,5.3,Medium,Declined
+Male,18,Class 11,8,Medium,Same
+Male,24,MSc,7.1,Medium,Improved
+Female,18,Class 12,4.1,Medium,Declined
+Male,26,MTech,5.1,High,Same
+Male,23,MSc,5.8,High,Declined
+Female,22,MSc,5.8,High,Same
+Female,16,Class 10,6.1,Low,Improved
+Female,15,Class 8,7.7,High,Declined
+Male,20,BA,4.8,Low,Improved
+Male,24,MSc,6.1,Medium,Improved
+Female,26,MSc,5.2,Medium,Same
+Male,25,MTech,4.2,High,Improved
+Female,24,MSc,5.1,Low,Same
+Female,18,Class 12,7.1,Low,Improved
+Female,18,Class 12,6.3,Low,Declined
+Female,15,Class 8,6.8,Medium,Same
+Female,24,MSc,5.6,Medium,Improved
+Female,26,MTech,6.6,Medium,Declined
+Female,15,Class 8,9,Medium,Improved
+Male,21,MA,4.8,Low,Declined
+Other,17,Class 10,5.1,Low,Same
+Male,26,MSc,7.1,High,Declined
+Male,15,Class 9,6.5,Low,Improved
+Female,21,BTech,8.6,Low,Declined
+Male,19,Class 12,7.6,Low,Declined
+Female,23,MA,7.2,High,Same
+Female,20,BTech,6.1,Medium,Same
+Female,15,Class 8,7.5,Low,Improved
+Male,24,MA,6.7,Medium,Declined
+Female,21,MSc,7.5,Low,Same
+Female,19,BSc,7.8,High,Improved
+Female,24,MA,4.2,Medium,Same
+Female,23,MTech,5.1,Low,Declined
+Female,15,Class 9,8.3,Low,Declined
+Female,23,MSc,8.9,Medium,Improved
+Female,15,Class 9,8.8,Low,Same
+Male,24,MA,5.3,Medium,Declined
+Female,16,Class 10,4.4,Medium,Same
+Male,18,Class 12,5.7,Low,Improved
+Male,17,Class 10,8,Low,Same
+Male,22,MSc,8.9,Medium,Declined
+Male,15,Class 8,8.3,Medium,Same
+Female,22,BTech,7,High,Same
+Female,25,MTech,8.9,Medium,Improved
+Female,25,MTech,8,Medium,Improved
+Male,19,BSc,8.5,Low,Improved
+Female,15,Class 8,5.7,Medium,Declined
+Male,23,MA,4.8,Medium,Declined
+Female,16,Class 10,4.4,Low,Declined
+Female,15,Class 9,8.8,Low,Same
+Male,19,BTech,8.7,Medium,Improved
+Female,26,MTech,5.8,Medium,Declined
+Female,20,BTech,7.3,High,Improved
+Male,22,BTech,5.5,Medium,Same
+Female,20,BA,5.7,Medium,Declined
+Female,26,MTech,6.2,Low,Declined
+Female,26,MSc,8.9,Low,Improved
+Female,20,BA,8.9,Medium,Same
+Female,20,BA,8.5,Medium,Same
+Male,25,MA,7.1,Low,Declined
+Female,24,MTech,4.6,Medium,Same
+Female,22,MA,7.1,Low,Declined
+Female,21,BSc,5.4,High,Same
+Male,16,Class 10,7.4,Low,Improved
+Female,21,BSc,8.2,Low,Declined
+Female,18,Class 11,7,High,Same
+Female,23,MA,7.1,High,Same
+Female,17,Class 10,8.2,Low,Improved
+Female,19,BA,4.2,Medium,Same
+Female,20,BTech,8.8,Medium,Improved
+Male,18,Class 11,4.4,High,Declined
+Female,17,Class 10,8.8,Low,Declined
+Female,23,MSc,7.5,Medium,Same
+Male,25,MA,4.5,Low,Improved
+Male,15,Class 8,4,Medium,Same
+Male,26,MTech,6.8,Medium,Improved
+Female,23,MTech,5.2,Medium,Same
+Female,26,MA,6.1,Medium,Declined
+Male,26,MA,8.6,High,Improved
+Female,20,BTech,7.4,Medium,Same
+Female,17,Class 10,4.7,High,Improved
+Male,19,Class 12,4.9,Low,Same
+Female,22,MSc,8.5,Medium,Same
+Male,25,MA,8.9,Medium,Declined
+Male,23,MTech,7.8,Medium,Same
+Female,23,MSc,7.8,Medium,Declined
+Female,15,Class 8,6.2,Medium,Improved
+Male,26,MTech,4.8,Medium,Declined
+Male,21,MTech,4.8,Medium,Same
+Female,20,BA,8.4,Medium,Same
+Male,22,MSc,8.1,Low,Same
+Male,21,BSc,5.7,Medium,Improved
+Female,20,BTech,8,High,Declined
+Other,16,Class 10,7.8,Low,Improved
+Other,21,BSc,7.4,Low,Same
+Male,15,Class 9,4.7,High,Improved
+Male,23,MA,7,Low,Improved
+Female,15,Class 8,7.6,Low,Improved
+Female,17,Class 11,7.6,Low,Improved
+Male,16,Class 10,4.3,Medium,Improved
+Male,15,Class 8,7.5,Medium,Same
+Male,17,Class 10,7.7,Medium,Same
+Female,19,BSc,6.6,Medium,Declined
+Female,16,Class 10,8.4,Medium,Declined
+Female,25,MTech,4.4,Low,Same
+Male,15,Class 9,8,Medium,Same
+Female,16,Class 9,4.9,Medium,Declined
+Male,22,BSc,8.2,Medium,Declined
+Male,24,MSc,8.5,High,Declined
+Male,16,Class 9,8.5,Low,Same
+Male,16,Class 9,4.9,Medium,Declined
+Male,25,MTech,8.1,High,Improved
+Female,15,Class 8,4.4,Medium,Same
+Male,25,MSc,4.4,Medium,Improved
+Male,18,Class 12,4.4,High,Improved
+Male,26,MTech,6.9,Medium,Same
+Female,15,Class 8,6.2,Medium,Declined
+Other,25,MA,5.9,Medium,Improved
+Male,19,Class 12,6.1,Medium,Improved
+Male,15,Class 8,6.4,High,Declined
+Female,15,Class 8,4.8,High,Declined
+Male,16,Class 9,6.4,High,Improved
+Female,17,Class 11,7.9,Medium,Same
+Female,19,BSc,6.3,High,Declined
+Male,18,Class 11,8.4,Medium,Same
+Male,16,Class 9,7.1,Low,Same
+Female,26,MTech,7.2,Medium,Improved
+Male,20,BA,4.1,High,Improved
+Male,24,MA,8.9,Low,Same
+Female,16,Class 10,5.4,Low,Declined
+Male,23,MA,8.5,Medium,Improved
+Male,26,MSc,8.1,Medium,Improved
+Female,23,MSc,8.2,Low,Same
+Male,15,Class 9,6.4,Low,Declined
+Female,15,Class 8,5.6,Medium,Improved
+Female,18,Class 11,8.7,Low,Same
+Female,25,MA,4.3,High,Declined
+Male,20,BA,6.8,Medium,Declined
+Female,26,MSc,4.2,Low,Declined
+Male,20,BA,5.3,Low,Improved
+Male,15,Class 9,5.1,Low,Declined
+Female,22,MSc,6.4,Low,Same
+Male,18,Class 11,6.5,Medium,Same
+Female,18,Class 11,4.1,Low,Declined
+Other,23,MTech,6.1,High,Declined
+Female,22,MTech,4.8,Low,Declined
+Female,20,BA,7.8,Low,Same
+Male,26,MA,8.4,Medium,Same
+Male,24,MTech,5,Low,Same
+Female,23,MSc,5.2,Medium,Declined
+Male,23,MSc,4,Low,Same
+Female,19,BTech,4.6,Medium,Declined
+Female,17,Class 10,8.5,Medium,Improved
+Male,18,Class 11,6.8,Medium,Declined
+Male,19,BSc,6.3,High,Improved
+Female,18,Class 12,8.3,Medium,Same
+Male,17,Class 10,6,Medium,Improved
+Female,26,MSc,5.9,High,Declined
+Other,18,Class 12,5,Low,Same
+Female,24,MTech,7,Medium,Same
+Male,18,Class 11,7.6,Low,Same
+Female,16,Class 9,8.3,Low,Improved
+Female,19,BSc,4.5,Medium,Same
+Male,26,MA,7.8,Medium,Declined
+Male,17,Class 10,8.7,Medium,Same
+Male,21,BTech,5.4,Medium,Improved
+Male,26,MA,7.5,Low,Declined
+Male,19,BSc,5.3,Low,Improved
+Male,21,MTech,8.2,Medium,Improved
+Female,24,MTech,7.2,Low,Improved
+Female,22,BTech,8.3,Medium,Same
+Male,26,MTech,4.8,Medium,Same
+Male,20,BA,7.9,Medium,Same
+Male,18,Class 12,4.5,Low,Improved
+Other,20,BSc,5.7,Medium,Same
+Female,21,BSc,6.7,Medium,Same
+Male,20,BTech,4.1,Low,Same
+Other,17,Class 11,7.8,Medium,Declined
+Male,22,BTech,6.4,High,Same
+Female,19,Class 12,5.5,Medium,Declined
+Male,23,MTech,5.2,Medium,Improved
+Male,25,MA,6.9,Low,Same
+Female,22,MSc,8.3,Medium,Improved
+Male,20,BSc,8.1,Low,Declined
+Female,15,Class 8,6.8,Low,Improved
+Male,22,BSc,6.8,Medium,Same
+Male,15,Class 8,5.4,Medium,Declined
+Female,25,MTech,4.2,Low,Declined
+Male,21,MTech,6.8,Medium,Declined
+Female,18,Class 11,4.6,Medium,Declined
+Male,21,MTech,5.8,Medium,Declined
+Other,22,BSc,5.2,Medium,Declined
+Female,20,BTech,4.8,Medium,Declined
+Female,17,Class 10,8,Medium,Same
+Male,24,MSc,8.8,High,Same
+Female,19,Class 12,4.6,High,Same
+Female,24,MTech,7.4,Low,Same
+Male,24,MTech,8.6,Medium,Improved
+Male,15,Class 9,8.3,Low,Same
+Female,22,BSc,6.7,Medium,Improved
+Male,22,MSc,4.3,High,Improved
+Male,20,BSc,7.1,High,Improved
+Male,15,Class 8,5.8,Low,Improved
+Female,19,BSc,5.9,Low,Improved
+Male,22,BSc,4.4,High,Same
+Female,26,MTech,6.9,High,Same
+Male,16,Class 10,4.1,Medium,Improved
+Female,17,Class 11,8.4,Low,Improved
+Male,21,BSc,6.3,Medium,Declined
+Female,17,Class 10,7,Medium,Same
+Male,18,Class 12,8,Medium,Same
+Male,15,Class 9,5.1,Medium,Improved
+Male,25,MTech,4.9,Medium,Same
+Female,16,Class 10,6.1,Low,Declined
+Male,23,MTech,6.6,Medium,Same
+Female,25,MTech,8,Low,Declined
+Male,24,MA,6.3,Low,Declined
+Female,18,Class 11,6.6,Medium,Improved
+Male,23,MA,4.2,Medium,Improved
+Male,22,BSc,4.6,Low,Same
+Female,22,MTech,6.6,High,Same
+Female,24,MTech,5,Medium,Same
+Male,20,BA,6,High,Same
+Male,16,Class 10,7.3,Medium,Same
+Male,18,Class 11,5.8,Medium,Improved
+Male,25,MA,4.6,Medium,Declined
+Male,19,BSc,5.2,Medium,Improved
+Female,19,BTech,6.7,High,Same
+Female,15,Class 8,4.3,Medium,Declined
+Male,24,MSc,6.9,Low,Improved
+Female,24,MTech,7.5,Medium,Improved
+Male,16,Class 10,6,Medium,Same
+Female,19,BTech,8.2,Low,Improved
+Male,19,Class 12,7.3,Medium,Declined
+Female,21,MTech,4,Medium,Improved
+Female,21,MSc,6.1,Low,Declined
+Male,25,MA,7.4,Low,Same
+Male,24,MSc,6.1,Medium,Same
+Male,15,Class 9,6.2,High,Declined
+Male,24,MTech,5.1,Low,Same
+Male,15,Class 8,8,Low,Declined
+Male,17,Class 11,8.3,Medium,Same
+Male,24,MSc,8.6,Medium,Declined
+Male,26,MTech,6.5,Medium,Same
+Female,18,Class 12,8.9,Low,Improved
+Male,23,MSc,7.1,Low,Declined
+Female,24,MA,5,Medium,Declined
+Female,23,MA,6.6,Medium,Improved
+Male,22,MA,8.8,Medium,Same
+Male,17,Class 10,5.6,Low,Same
+Female,21,BA,4.8,High,Improved
+Male,18,Class 12,5.2,Low,Same
+Female,15,Class 8,5.2,Medium,Same
+Male,23,MSc,7.2,Low,Improved
+Male,19,Class 12,5.4,Medium,Same
+Other,19,BTech,6.3,Medium,Declined
+Other,20,BTech,5.6,Medium,Declined
+Female,26,MTech,7,Low,Improved
+Other,15,Class 8,6.5,Medium,Declined
+Female,22,BSc,4.1,Medium,Declined
+Female,25,MA,5.6,Medium,Improved
+Male,17,Class 10,5.1,Medium,Same
+Male,19,Class 12,8.7,Medium,Same
+Male,26,MSc,5.9,High,Improved
+Other,22,MA,6,High,Improved
+Male,21,MSc,4.1,Medium,Same
+Female,25,MA,5.5,Medium,Same
+Male,17,Class 11,7.5,Medium,Improved
+Male,17,Class 10,7.7,Medium,Same
+Male,21,BSc,7.2,Low,Same
+Male,23,MSc,5.6,Medium,Declined
+Male,21,BA,4.4,Medium,Improved
+Male,23,MTech,5.6,Medium,Improved
+Male,24,MTech,5.5,High,Same
+Female,24,MSc,7,Low,Same
+Other,19,Class 12,6,Low,Declined
+Male,16,Class 9,8.5,Low,Declined
+Male,15,Class 8,7.3,Low,Same
+Female,20,BSc,8.3,Medium,Same
+Female,26,MTech,6.2,Low,Same
+Male,24,MTech,8,High,Same
+Male,17,Class 11,7.6,Medium,Declined
+Male,17,Class 10,6.7,Medium,Same
+Male,22,BSc,4.3,Low,Same
+Male,23,MTech,5.9,Medium,Declined
+Male,25,MSc,4.1,Medium,Improved
+Male,15,Class 9,6.8,Low,Declined
+Male,26,MTech,7,Low,Improved
+Male,19,BSc,4.4,High,Declined
+Female,26,MSc,6.3,Low,Same
+Male,15,Class 8,5.5,Low,Improved
+Male,22,BSc,4.4,Medium,Same
+Female,22,BSc,8.9,Medium,Same
+Female,15,Class 8,5.9,Medium,Same
+Female,15,Class 8,6.3,Medium,Improved
+Female,25,MA,6.2,High,Same
+Male,24,MTech,7.5,Medium,Declined
+Female,26,MTech,6.4,Low,Same
+Male,23,MTech,5.7,Medium,Declined
+Female,21,BTech,8.8,Low,Same
+Female,21,BSc,8.7,Medium,Declined
+Female,22,BSc,6.5,Low,Improved
+Other,25,MA,8.8,Medium,Same
+Male,15,Class 9,4.1,Medium,Same
+Male,24,MSc,5.5,Medium,Same
+Female,24,MSc,7.1,Medium,Same
+Male,25,MA,6.7,Medium,Improved
+Male,16,Class 9,5.1,Medium,Same
+Male,18,Class 11,5.7,Medium,Improved
+Female,16,Class 9,6.9,Low,Improved
+Female,22,BSc,7.1,Low,Same
+Female,25,MTech,4.4,Medium,Same
+Male,19,Class 12,4.5,Low,Same
+Male,24,MA,5.7,Medium,Declined
+Male,26,MSc,5.9,Medium,Same
+Female,21,MTech,7,Low,Same
+Female,17,Class 10,4.1,Medium,Declined
+Male,26,MTech,6.9,Medium,Declined
+Male,21,BSc,4.3,Medium,Same
+Female,26,MA,5.6,Low,Same
+Male,16,Class 9,8.5,Low,Declined
+Female,18,Class 11,5.1,Medium,Improved
+Female,26,MTech,8.4,High,Same
+Female,23,MA,6.5,Medium,Same
+Male,22,MTech,5.6,Medium,Declined
+Female,15,Class 8,7.5,Medium,Improved
+Male,25,MSc,6.6,Medium,Same
+Female,19,BA,7.4,Low,Improved
+Male,15,Class 9,8.2,Medium,Improved
+Female,20,BTech,6.4,Medium,Improved
+Male,22,MSc,7.6,Medium,Same
+Male,16,Class 9,8.4,Medium,Improved
+Female,25,MA,8.8,Low,Same
+Male,18,Class 12,6.8,Low,Same
+Female,19,BTech,4.6,High,Declined
+Male,23,MA,8.2,Low,Improved
+Female,20,BA,5.2,Medium,Improved
+Female,24,MTech,8.6,Low,Declined
+Female,22,MTech,8.2,Medium,Improved
+Other,16,Class 10,8.9,High,Same
+Female,17,Class 10,8.2,Low,Same
+Female,19,BTech,6.7,Medium,Same
+Female,24,MSc,6.3,Medium,Improved
+Other,16,Class 10,4.3,Medium,Improved
+Male,22,MTech,7,Medium,Improved
+Female,21,BTech,6.2,Medium,Same
+Female,15,Class 8,6.9,Medium,Same
+Female,16,Class 10,5.3,Low,Same
+Male,20,BTech,4.2,Low,Declined
+Female,24,MA,7,High,Improved
+Female,24,MSc,8.4,Low,Same
+Male,23,MA,7.8,Low,Same
+Male,26,MTech,7.5,Medium,Same
+Other,20,BSc,6.4,Medium,Declined
+Male,15,Class 9,5.6,Low,Same
+Female,24,MA,5.3,Medium,Improved
+Female,26,MTech,6.6,Medium,Same
+Male,19,BA,6.7,Low,Declined
+Female,24,MA,8,High,Same
+Female,22,MTech,4.4,High,Improved
+Male,23,MA,6.9,Medium,Declined
+Other,23,MA,8.4,High,Same
+Female,19,BTech,6.8,Low,Declined
+Female,22,MSc,4.6,Medium,Improved
+Male,25,MA,5.1,Medium,Declined
+Female,26,MA,4.2,Medium,Declined
+Female,17,Class 11,5.7,Low,Improved
+Female,26,MSc,4.9,Medium,Improved
+Female,17,Class 10,5.3,Medium,Same
+Male,25,MSc,6.5,Low,Improved
+Female,16,Class 10,6.7,Medium,Declined
+Male,16,Class 10,4.5,Medium,Declined
+Male,22,BSc,5.3,Low,Improved
+Female,21,MTech,4,Low,Improved
+Female,18,Class 11,5.9,Low,Improved
+Female,26,MA,7.1,Medium,Improved
+Male,21,MA,4.2,High,Improved
+Male,21,BSc,5.8,Medium,Same
+Male,20,BTech,4.5,Medium,Declined
+Female,17,Class 11,9,Medium,Improved
+Female,17,Class 11,8.3,Low,Declined
+Female,22,MSc,4.9,Medium,Same
+Female,18,Class 12,4.3,Low,Same
+Other,22,BTech,5.8,Low,Same
+Male,19,BTech,4.7,High,Declined
+Female,21,BA,8,High,Improved
+Male,23,MA,7.5,High,Same
+Male,15,Class 9,8.8,Medium,Improved
+Female,15,Class 9,5.2,Medium,Improved
+Male,23,MA,8.2,Low,Declined
+Male,15,Class 9,8.7,Medium,Same
+Male,19,BTech,6.7,Low,Declined
+Male,24,MA,6.1,Low,Declined
+Female,18,Class 12,8.2,Medium,Improved
+Female,18,Class 12,7.9,Medium,Improved
+Male,17,Class 10,5.8,Low,Declined
+Female,16,Class 10,6.6,Medium,Same
+Female,22,MSc,5.9,High,Same
+Female,26,MSc,5,Medium,Declined
+Male,26,MTech,6.4,Low,Same
+Male,16,Class 10,7.8,Medium,Declined
+Male,19,BA,7.9,Medium,Declined
+Female,19,BSc,7.2,Medium,Improved
+Female,20,BA,8.6,Medium,Same
+Female,25,MTech,8,Medium,Declined
+Female,24,MA,4,Medium,Same
+Male,15,Class 9,5.8,Medium,Improved
+Female,17,Class 10,5.6,Medium,Declined
+Female,21,BSc,8.9,Medium,Improved
+Female,20,BSc,5.8,Medium,Improved
+Female,25,MSc,7.6,Low,Same
+Male,17,Class 11,7.1,Medium,Declined
+Male,21,MA,5.4,Low,Improved
+Male,22,MTech,6.7,Medium,Improved
+Male,19,BTech,6,Low,Improved
+Other,26,MA,8,Low,Same
+Male,21,BSc,7.9,Medium,Same
+Female,18,Class 12,7,Low,Improved
+Female,23,MA,5.6,Low,Same
+Male,16,Class 10,6.3,Medium,Declined
+Other,22,BTech,4.1,Low,Declined
+Female,18,Class 12,7.9,Medium,Improved
+Female,21,MA,4.1,Low,Same
+Female,16,Class 10,5.4,Low,Declined
+Male,24,MA,6.8,Low,Improved
+Female,18,Class 11,6.1,Medium,Declined
+Female,17,Class 11,5.5,Medium,Same
+Male,15,Class 9,6.4,Medium,Declined
+Male,26,MTech,7.9,High,Improved
+Male,20,BSc,4.9,Low,Declined
+Male,21,BA,4.3,Low,Same
+Male,24,MA,4,Low,Improved
+Female,25,MTech,5.4,Medium,Improved
+Female,23,MSc,5.8,Low,Improved
+Other,19,BSc,6.9,Medium,Declined
+Male,22,BSc,6.6,Low,Declined
+Female,25,MTech,6.7,Medium,Declined
+Female,23,MSc,8.9,High,Same
+Female,21,MA,7.6,Low,Same
+Male,21,MTech,8.3,Low,Improved
+Female,21,MSc,8.9,Low,Same
+Male,15,Class 9,7.9,Medium,Improved
+Female,21,MA,4.9,Medium,Declined
+Female,25,MA,6.1,High,Declined
+Female,18,Class 11,4.2,Medium,Same
+Male,18,Class 11,4.7,Low,Improved
+Male,20,BTech,4,Low,Same
+Female,22,MA,5.1,Low,Same
+Other,21,BTech,8.2,Low,Same
+Male,16,Class 10,5,Medium,Same
+Female,22,BSc,7.3,High,Improved
+Female,20,BSc,7.8,Medium,Same
+Female,18,Class 12,4.8,Medium,Same
+Female,16,Class 10,5.8,Medium,Declined
+Female,23,MTech,5.7,Low,Improved
+Male,17,Class 10,4.4,Low,Improved
+Male,15,Class 9,4.9,High,Improved
+Female,21,BA,8.6,Medium,Declined
+Female,20,BA,7.1,High,Declined
+Male,21,BSc,7.4,Medium,Improved
+Male,25,MA,5.8,Low,Improved
+Male,24,MTech,4.7,High,Same
+Other,26,MSc,6.2,High,Same
+Other,15,Class 9,4.2,High,Improved
+Male,21,BTech,6.4,Medium,Same
+Female,18,Class 12,5.9,Medium,Declined
+Male,16,Class 9,7,Low,Declined
+Male,26,MA,5.5,Low,Improved
+Male,21,BA,7.4,High,Improved
+Male,26,MA,8.5,Low,Declined
+Male,21,MTech,6.8,Medium,Same
+Female,23,MA,7.6,Medium,Improved
+Male,20,BA,6.1,Low,Declined
+Female,25,MSc,4.4,Low,Declined
+Female,17,Class 10,6.9,Medium,Declined
+Female,26,MA,6.9,Medium,Same
+Female,21,MA,4.4,Medium,Improved
+Female,17,Class 11,4.5,Low,Same
+Female,18,Class 12,5.6,Medium,Improved
+Male,24,MTech,4.6,Medium,Improved
+Male,17,Class 10,7.3,Medium,Same
+Male,23,MTech,4.8,Low,Improved
+Female,19,BA,8.7,Medium,Same
+Male,16,Class 9,7,Low,Declined
+Male,15,Class 8,6.8,Low,Improved
+Female,26,MSc,8.9,Medium,Declined
+Male,19,BSc,5.4,Medium,Declined
+Male,23,MA,8.1,High,Same
+Other,20,BA,5.4,High,Improved
+Female,22,MTech,5.1,Low,Declined
+Male,26,MSc,5.9,Medium,Improved
+Other,20,BTech,5.6,High,Same
+Male,23,MA,5.2,Medium,Same
+Female,17,Class 11,8.9,Low,Declined
+Male,25,MA,5.2,Medium,Improved
+Female,21,MSc,4.7,Low,Same
+Female,24,MA,4.3,Medium,Improved
+Female,24,MSc,8.1,Low,Improved
+Female,17,Class 11,4.6,Medium,Same
+Male,20,BA,6.3,Medium,Same
+Male,20,BTech,7.2,High,Improved
+Female,19,BA,4,Medium,Declined
+Female,16,Class 9,5.6,Medium,Same
+Female,26,MTech,7.5,Medium,Same
+Female,23,MA,5.6,Medium,Same
+Male,17,Class 10,5.8,Medium,Declined
+Female,25,MTech,6,Low,Improved
+Female,18,Class 11,6.5,Low,Declined
+Male,21,MA,4.7,Medium,Improved
+Male,15,Class 8,8.9,High,Same
+Female,19,BA,7.6,High,Improved
+Female,16,Class 10,8.8,Medium,Improved
+Male,20,BSc,7.1,Medium,Declined
+Female,16,Class 10,7.6,Medium,Same
+Female,26,MSc,4.3,High,Improved
+Male,15,Class 9,7.5,Medium,Improved
+Male,22,BSc,6.5,Medium,Improved
+Female,17,Class 10,6.5,Medium,Declined
+Female,19,BSc,7,Low,Same
+Male,25,MTech,4.4,Low,Declined
+Other,22,BSc,6.3,Medium,Declined
+Female,21,MA,5.2,Medium,Same
+Other,16,Class 10,8.8,Low,Same
+Female,19,BTech,5.5,Low,Same
+Male,15,Class 8,6.3,Medium,Declined
+Female,17,Class 11,7.7,High,Declined
+Other,16,Class 9,7.9,High,Same
+Female,25,MA,8.3,Low,Declined
+Female,18,Class 11,4.3,Medium,Declined
+Male,16,Class 9,7.6,High,Improved
+Female,16,Class 9,4.2,Medium,Same
+Male,25,MSc,6.8,Medium,Improved
+Female,26,MA,7.1,Medium,Same
+Male,20,BA,4.1,Low,Improved
+Male,23,MA,6,High,Declined
+Female,19,BTech,5.3,High,Improved
+Male,15,Class 9,6.1,Low,Improved
+Male,25,MSc,4.6,Low,Same
+Female,24,MSc,7.4,High,Same
+Male,21,MSc,7.7,Medium,Declined
+Male,17,Class 11,8.4,High,Declined
+Male,16,Class 10,7.9,High,Declined
+Female,17,Class 11,5.1,Medium,Same
+Male,26,MA,6.6,Low,Declined
+Other,17,Class 11,5.1,Low,Same
+Female,15,Class 8,5.7,Medium,Same
+Male,24,MSc,8.2,Low,Improved
+Female,19,BA,6.4,High,Same
+Female,20,BA,8.2,Medium,Declined
+Female,23,MA,7.9,Low,Declined
+Male,22,MTech,8.2,Medium,Declined
+Female,18,Class 12,7,Low,Declined
+Female,20,BTech,9,High,Same
+Male,22,MA,7.9,Medium,Improved
+Female,16,Class 9,7.2,Medium,Improved
+Female,21,MTech,4.6,High,Improved
+Male,20,BSc,8.2,Medium,Improved
+Male,17,Class 11,6,Low,Declined
+Female,16,Class 10,4.4,Low,Same
+Male,18,Class 11,9,Medium,Improved
+Male,16,Class 10,5.4,Low,Same
+Female,17,Class 10,4.1,High,Improved
+Male,17,Class 11,4.2,Medium,Declined
+Female,17,Class 11,4.3,Low,Same
+Other,17,Class 10,5.1,Low,Same
+Male,25,MSc,6.1,Medium,Same
+Male,23,MTech,4.6,Medium,Declined
+Male,19,BTech,4.8,High,Improved
+Male,18,Class 11,4.1,Low,Declined
+Female,15,Class 8,6.5,Medium,Declined
+Female,23,MTech,4.7,Medium,Same
+Female,23,MSc,6.6,Medium,Improved
+Female,26,MSc,7.7,Low,Improved
+Male,26,MA,7.9,Medium,Declined
+Female,19,BA,4.8,Medium,Same
+Male,17,Class 11,4.6,High,Declined
+Male,16,Class 10,7.1,Medium,Same
+Male,17,Class 10,8.2,Medium,Declined
+Male,25,MTech,4.6,High,Same
+Male,17,Class 11,8.3,Medium,Improved
+Male,23,MTech,5.6,Medium,Improved
+Male,17,Class 11,5,Medium,Declined
+Female,19,BA,8.9,High,Improved
+Male,15,Class 9,4.8,Low,Improved
+Female,25,MTech,4.6,Medium,Declined
+Female,21,BSc,4.6,Medium,Improved
+Male,19,BSc,8,Medium,Improved
+Female,19,BTech,4.1,High,Same
+Male,15,Class 9,7.2,Low,Same
+Female,17,Class 11,6.1,Medium,Same
+Female,16,Class 10,8,High,Declined
+Male,17,Class 10,7.3,Medium,Same
+Other,20,BA,7.1,Medium,Same
+Male,15,Class 9,6.4,Medium,Same
+Male,23,MA,7.2,Low,Same
+Male,21,BA,8.5,Medium,Declined
+Female,22,MTech,4.2,Low,Declined
+Female,19,BTech,7.7,High,Declined
+Female,26,MTech,4.3,Medium,Same
+Female,15,Class 8,4.2,Medium,Declined
+Female,24,MSc,4.6,High,Same
+Female,20,BA,5.5,High,Improved
+Female,18,Class 12,6.6,Low,Same
+Female,24,MTech,7.6,Medium,Declined
+Male,17,Class 11,6.2,High,Same
+Male,20,BSc,8.5,Medium,Same
+Female,24,MTech,6.1,Medium,Same
+Female,15,Class 9,4.9,Medium,Same
+Male,19,BTech,8.7,Medium,Declined
+Male,22,MA,4.4,Medium,Declined
+Male,22,MSc,8.9,Medium,Declined
+Female,26,MTech,5.9,Medium,Declined
+Female,16,Class 9,8.6,Medium,Declined
+Female,18,Class 12,4.8,Medium,Improved
+Female,20,BA,7.4,Low,Same
+Female,16,Class 9,6.7,Low,Declined
+Other,21,BSc,8.8,Medium,Same
+Male,15,Class 8,8.9,High,Same
+Male,21,BA,6.5,High,Improved
+Female,16,Class 9,9,Low,Improved
+Female,21,MA,6.5,Low,Declined
+Female,25,MA,4.6,High,Improved
+Female,23,MA,4.3,Low,Same
+Female,16,Class 9,6.1,Medium,Same
+Female,21,MTech,5.3,Medium,Same
+Male,24,MTech,6.4,Low,Improved
+Male,22,BTech,6.4,Low,Improved
+Female,16,Class 10,8.6,Low,Same
+Male,25,MSc,7.2,Medium,Same
+Male,16,Class 9,9,Medium,Same
+Male,24,MTech,8.3,High,Same
+Female,21,MTech,4.6,Medium,Declined
+Male,24,MTech,7.5,Medium,Improved
+Female,25,MSc,8.2,High,Declined
+Female,15,Class 8,4.9,High,Declined
+Female,23,MTech,5.4,Medium,Same
+Female,23,MSc,8.1,Medium,Same
+Male,17,Class 10,7.9,High,Same
+Female,23,MSc,8.9,Low,Improved
+Female,15,Class 8,8.1,Low,Declined
+Male,20,BA,8.8,Medium,Same
+Male,26,MSc,7,Low,Improved
+Male,18,Class 11,4.7,Medium,Declined
+Female,19,BTech,6.7,Medium,Declined
+Female,26,MA,6.9,Low,Same
+Male,25,MA,7.5,Low,Improved
+Male,21,BSc,8,Low,Improved
+Male,20,BSc,4.8,Medium,Improved
+Female,15,Class 8,6.2,High,Declined
+Female,18,Class 11,8.7,Medium,Improved
+Female,22,MTech,8.6,Medium,Declined
+Male,22,MA,4.6,Medium,Improved
+Male,15,Class 8,5.8,High,Declined
+Male,25,MSc,8,Medium,Same
+Male,25,MA,4.2,Medium,Same
+Female,19,BTech,7.3,Medium,Same
+Female,15,Class 8,6.9,Low,Same
+Male,26,MSc,5.3,High,Improved
+Male,24,MSc,7.2,Medium,Same
+Female,16,Class 10,7.4,Medium,Same
+Female,19,BSc,7.4,Medium,Declined
+Male,26,MSc,7.7,Low,Same
+Female,20,BTech,6.9,Low,Improved
+Other,20,BSc,6.6,High,Same
+Male,19,BA,5,Medium,Improved
+Female,26,MTech,7.7,Medium,Improved
+Female,24,MTech,4.5,Medium,Improved
+Female,21,BTech,6.6,Medium,Improved
+Male,23,MSc,7.3,High,Same
+Male,19,BTech,7.5,High,Same
+Female,24,MSc,4.8,Low,Improved
+Female,21,MA,8,High,Same
+Female,19,BTech,4.8,Medium,Improved
+Other,15,Class 9,7.4,High,Declined
+Male,16,Class 9,8.2,Low,Declined
+Male,17,Class 10,8,Low,Declined
+Male,21,MSc,5.5,Medium,Same
+Male,17,Class 10,6.6,Low,Same
+Female,21,MTech,7.6,Medium,Same
+Male,24,MTech,4.9,Low,Same
+Female,25,MSc,5.7,Low,Declined
+Male,23,MSc,7.6,Low,Declined
+Male,24,MSc,8.2,High,Improved
+Male,20,BTech,4.1,Low,Same
+Male,26,MA,5.3,Medium,Improved
+Other,25,MA,7.2,Medium,Improved
+Female,22,MSc,6.6,Medium,Improved
+Female,23,MA,8.5,Low,Same
+Other,17,Class 10,6.5,Medium,Same
+Male,19,BA,7.1,High,Improved
+Female,21,BSc,5,Low,Improved
+Male,23,MTech,4.2,Low,Same
+Female,15,Class 9,6,Medium,Same
+Female,20,BA,7.4,Medium,Declined
+Male,18,Class 12,6.9,High,Same
+Female,20,BA,4.3,Low,Declined
+Male,17,Class 11,8.2,Low,Same
+Male,21,BTech,4.8,Medium,Improved
+Male,16,Class 9,8,Medium,Declined
+Male,20,BTech,8.5,Low,Improved
+Other,25,MSc,6.6,Low,Declined
+Female,20,BA,7.4,High,Declined
+Male,22,MTech,4.1,Low,Improved
+Female,22,BSc,5.4,High,Same
+Male,25,MA,8.9,Low,Same
+Male,16,Class 10,4.1,High,Declined
+Female,24,MSc,7.4,Low,Improved
+Female,24,MSc,7.6,Medium,Declined
+Female,15,Class 9,8.7,Low,Declined
+Female,22,MSc,7,Medium,Declined
+Male,25,MTech,7.1,Medium,Declined
+Female,15,Class 8,8.2,Low,Same
+Male,26,MA,5.4,High,Same
+Male,20,BTech,6,High,Declined
+Female,26,MA,7.7,High,Declined
+Female,22,MSc,7,High,Same
+Male,18,Class 11,7.4,High,Declined
+Male,24,MA,6.1,High,Improved
+Male,21,MTech,8.9,Low,Improved
+Female,25,MA,6.8,Medium,Declined
+Male,23,MA,6.5,Low,Same
+Female,17,Class 11,4.1,Medium,Improved
+Female,17,Class 11,9,High,Improved
+Female,25,MSc,7.2,Medium,Improved
+Male,24,MTech,8,Medium,Declined
+Male,17,Class 11,8.2,Medium,Same
+Female,21,BA,7,Medium,Improved
+Male,18,Class 11,4.9,Medium,Declined
+Male,25,MA,6.5,Low,Improved
+Male,23,MTech,5.8,Medium,Same
+Female,16,Class 9,5.4,Medium,Improved
+Female,25,MTech,6.8,High,Declined
+Male,23,MTech,7.3,Low,Declined
+Female,19,BA,6.5,Medium,Same
+Male,23,MSc,6.8,Medium,Improved
+Male,16,Class 10,4.5,High,Same
+Other,23,MA,6.3,Medium,Declined
+Male,23,MA,6.7,Medium,Declined
+Male,21,BA,5.3,Medium,Same
+Male,21,BSc,7.5,Low,Improved
+Female,23,MTech,6.2,Low,Same
+Male,19,BA,8,High,Declined
+Female,25,MTech,4.5,Medium,Improved
+Female,21,MA,6.5,High,Same
+Other,23,MSc,8.8,Medium,Improved
+Male,20,BA,4.1,Low,Same
+Female,21,BTech,5.5,Medium,Improved
+Male,26,MSc,8,High,Improved
+Female,22,MTech,5.2,High,Declined
+Female,24,MA,4.9,Medium,Improved
+Male,25,MSc,6.7,Medium,Declined
+Female,26,MTech,8.7,High,Declined
+Female,16,Class 9,6.5,Medium,Same
+Female,21,MSc,4.2,Medium,Declined
+Female,19,BA,7.1,Medium,Improved
+Female,19,BSc,4.2,Low,Declined
+Female,15,Class 9,8.3,Medium,Same
+Female,15,Class 8,5.7,Medium,Same
+Male,21,MA,4.1,Low,Same
+Female,19,BSc,6.1,Medium,Same
+Female,18,Class 11,6,Low,Same
+Female,24,MSc,4.7,Medium,Declined
+Male,16,Class 9,8.8,Low,Same
+Male,17,Class 11,7.3,Medium,Same
+Male,17,Class 10,5.8,Low,Declined
+Female,25,MTech,6.2,High,Same
+Male,16,Class 9,8.3,Medium,Declined
+Female,19,BA,4.8,Low,Improved
+Female,22,MSc,4.2,Medium,Same
+Female,23,MA,6.7,Medium,Declined
+Male,25,MTech,6.4,Medium,Improved
+Male,20,BTech,4.3,Medium,Same
+Other,18,Class 11,6,Medium,Improved
+Male,15,Class 8,4.3,Medium,Same
+Female,18,Class 11,5.4,High,Declined
+Male,17,Class 11,5,Medium,Improved
+Female,17,Class 11,8.1,High,Same
+Male,16,Class 9,4.8,High,Declined
+Female,19,Class 12,4.2,Low,Same
+Male,21,BTech,4.1,Medium,Declined
+Other,18,Class 12,4.7,High,Declined
+Other,19,BTech,7.7,High,Improved
+Male,25,MSc,4.4,Low,Declined
+Female,26,MTech,5.8,Medium,Same
+Male,23,MSc,5.8,Medium,Improved
+Male,17,Class 11,8.7,Medium,Declined
+Male,23,MSc,5.4,Medium,Same
+Male,17,Class 11,4.5,Medium,Same
+Male,23,MSc,7.9,Medium,Same
+Male,17,Class 11,5.6,High,Declined
+Female,24,MSc,6,Medium,Improved
+Female,20,BTech,6,Medium,Same
+Male,16,Class 9,6.5,Low,Same
+Male,18,Class 11,6.2,Medium,Same
+Female,19,Class 12,8.8,High,Same
+Female,17,Class 11,7.1,Low,Same
+Male,15,Class 9,8.7,Low,Same
+Female,23,MA,8.6,Low,Same
+Female,17,Class 11,7.4,Low,Same
+Female,19,BTech,7.8,Medium,Declined
+Male,17,Class 10,8.4,Low,Same
+Male,26,MTech,8,Low,Improved
+Male,15,Class 8,7.8,Low,Same
+Female,22,MSc,4.3,Medium,Declined
+Female,16,Class 10,7.2,High,Same
+Male,25,MSc,4.2,Low,Same
+Female,24,MA,8.5,Low,Improved
+Male,17,Class 11,5.2,Medium,Same
+Male,15,Class 9,4,Medium,Improved
+Female,20,BSc,4.7,High,Same
+Male,18,Class 11,8.5,Medium,Declined
+Female,21,MA,7.1,High,Improved
+Female,15,Class 8,4.7,Medium,Improved
+Female,22,BTech,7.3,Medium,Same
+Male,20,BTech,7.3,Medium,Same
+Female,21,BTech,4.3,Low,Same
+Female,22,MSc,4.5,High,Same
+Male,23,MSc,6.3,Low,Same
+Female,20,BA,8.5,Medium,Same
+Male,16,Class 10,4.6,Low,Same
+Female,16,Class 9,4.8,Low,Declined
+Male,23,MTech,5.9,Medium,Same
+Other,17,Class 11,8.1,Low,Improved
+Male,21,BTech,6.2,Low,Declined
+Male,16,Class 10,5.3,Medium,Improved
+Female,20,BSc,9,High,Declined
+Female,17,Class 11,6.1,High,Declined
+Other,26,MSc,5.1,Low,Declined
+Female,18,Class 12,5.9,Low,Same
+Female,22,MTech,6.3,Low,Same
+Male,19,BA,4.2,Medium,Same
+Male,16,Class 9,4.3,Medium,Same
+Male,22,MSc,6.4,Low,Improved
+Male,20,BTech,8.7,Medium,Declined
+Female,20,BSc,6.4,High,Declined
+Female,19,BTech,8,Low,Improved
+Female,22,BTech,8.1,Medium,Declined
+Male,25,MA,5.6,Low,Same
+Female,19,BTech,4.4,Low,Same
+Male,26,MTech,8.6,High,Same
+Male,25,MA,4.3,High,Improved
+Male,21,BSc,5.9,Low,Improved
+Female,19,Class 12,6.7,High,Same
+Male,23,MSc,4.1,Medium,Same
+Female,22,MSc,5,Medium,Same
+Male,17,Class 10,6.6,High,Same
+Female,26,MA,6.8,Medium,Same
+Male,20,BTech,6.7,Low,Same
+Female,15,Class 9,4.1,Low,Declined
+Female,20,BA,7.5,Medium,Improved
+Male,23,MA,7.7,Low,Improved
