@@ -1,11 +1,20 @@
+enum AcademicStatus {
+  freshman
+  sophomore
+  junior
+  senior
+}
+
 model Student {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  studentNumber String?  @unique
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  studentNumber String?        @unique
   program       String
   year          String
-  person        Person   @relation(fields: [personId], references: [id])
-  personId      String   @db.ObjectId
-  isDeleted     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status        AcademicStatus @default(freshman)
+  person        Person         @relation(fields: [personId], references: [id])
+  personId      String         @db.ObjectId
+  consent       Consent?
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }

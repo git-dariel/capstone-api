@@ -200,6 +200,7 @@ export const controller = (prisma: PrismaClient) => {
 			studentNumber,
 			program,
 			year,
+			status,
 			personId,
 			firstName,
 			lastName,
@@ -217,15 +218,6 @@ export const controller = (prisma: PrismaClient) => {
 			...otherData
 		} = req.body;
 
-		// Validate required fields
-		// if (!studentNumber) {
-		// 	studentLogger.error(config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED);
-		// 	res.status(400).json({
-		// 		error: config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED,
-		// 	});
-		// 	return;
-		// }
-
 		if (!program) {
 			studentLogger.error(config.ERROR.STUDENT.PROGRAM_REQUIRED);
 			res.status(400).json({
@@ -238,6 +230,15 @@ export const controller = (prisma: PrismaClient) => {
 			studentLogger.error(config.ERROR.STUDENT.YEAR_REQUIRED);
 			res.status(400).json({
 				error: config.ERROR.STUDENT.YEAR_REQUIRED,
+			});
+			return;
+		}
+
+		// Validate status if provided
+		if (status && !["freshman", "sophomore", "junior", "senior"].includes(status)) {
+			studentLogger.error(`Invalid academic status: ${status}`);
+			res.status(400).json({
+				error: "Status must be one of: freshman, sophomore, junior, senior",
 			});
 			return;
 		}
@@ -366,6 +367,7 @@ export const controller = (prisma: PrismaClient) => {
 						studentNumber,
 						program,
 						year,
+						...(status && { status }),
 						person: {
 							connect: {
 								id: person.id,
@@ -393,7 +395,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const update = async (req: Request, res: Response, next: NextFunction) => {
 		const { id } = req.params;
-		const { studentNumber, program, year, person } = req.body;
+		const { studentNumber, program, year, status, person } = req.body;
 
 		if (!id) {
 			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
@@ -410,6 +412,15 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		studentLogger.info(`Updating student: ${id}`);
+
+		// Validate status if provided
+		if (status && !["freshman", "sophomore", "junior", "senior"].includes(status)) {
+			studentLogger.error(`Invalid academic status: ${status}`);
+			res.status(400).json({
+				error: "Status must be one of: freshman, sophomore, junior, senior",
+			});
+			return;
+		}
 
 		try {
 			const existingStudent = await prisma.student.findFirst({
@@ -457,13 +468,14 @@ export const controller = (prisma: PrismaClient) => {
 
 			await prisma.$transaction(async (tx) => {
 				// Update student fields
-				if (studentNumber || program || year) {
+				if (studentNumber || program || year || status) {
 					await tx.student.update({
 						where: { id },
 						data: {
 							...(studentNumber && { studentNumber }),
 							...(program && { program }),
 							...(year && { year }),
+							...(status && { status }),
 						},
 					});
 				}

@@ -30,6 +30,13 @@ type Address {
   type     AddressType @default(current)
 }
 
+type Guardian {
+  firstName  String?
+  lastName   String?
+  middleName String?
+  address    Address?
+}
+
 model Person {
   id            String       @id @default(auto()) @map("_id") @db.ObjectId
   firstName     String?
@@ -45,6 +52,7 @@ model Person {
   religion      String?
   civilStatus   CivilStatus? @default(single)
   address       Address?
+  guardian      Guardian?
   users         User[] // One person can have multiple user accounts
   students      Student[] // One person can be associated with multiple student records
   isDeleted     Boolean      @default(false)

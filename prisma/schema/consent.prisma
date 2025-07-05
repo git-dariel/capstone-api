@@ -1,0 +1,115 @@
+enum Referred {
+  self
+  family
+  friend
+  faculty
+  administrative_staff
+  others
+}
+
+enum Live {
+  alone
+  spouse
+  partner
+  roommates
+  children
+  guardians
+}
+
+enum Financial {
+  always_stressful
+  often_stressful
+  never_stressful
+  sometimes_stressful
+  rarely_stressful
+}
+
+enum PhysicalProblem {
+  yes
+  no
+}
+
+enum PhysicalSymptoms {
+  shortness_of_breath
+  racing_heart
+  headaches
+  insomnia
+  teeth_clenching
+  cold_hands_and_feet
+  high_blood_pressure
+  muscle_tension
+  diarrhea
+  stomach_discomfort
+}
+
+enum LevelOfImportance {
+  not_applicable
+  leat_important
+  somewhat_important
+  important
+  very_important
+  most_important
+}
+
+enum Services {
+  general_information
+  one_or_two_session_problem_solving
+  stress_management
+  group_counseling
+  substance_abuse_services
+  career_exploration
+  individual_counseling
+  referral_for_university
+}
+
+enum StressLevel {
+  low
+  medium
+  high
+}
+
+enum PerformanceChange {
+  same
+  improved
+  declined
+}
+
+type PresentConcerns {
+  personal_growth                   LevelOfImportance
+  depression                        LevelOfImportance
+  suicidal_thoughts                 LevelOfImportance
+  study_skills                      LevelOfImportance
+  family_concerns                   LevelOfImportance
+  sexual_concerns                   LevelOfImportance
+  educational_concerns              LevelOfImportance
+  anxiety                           LevelOfImportance
+  drug_use                          LevelOfImportance
+  physical_concerns                 LevelOfImportance
+  self_concept                      LevelOfImportance
+  decision_making_about_leaving_pup LevelOfImportance
+  financial_concerns                LevelOfImportance
+  relationship_with_others          LevelOfImportance
+  spirituality                      LevelOfImportance
+  weight_eating_issues              LevelOfImportance
+  career                            LevelOfImportance
+}
+
+model Consent {
+  id                          String            @id @default(auto()) @map("_id") @db.ObjectId
+  student                     Student           @relation(fields: [studentId], references: [id])
+  studentId                   String            @unique @db.ObjectId
+  referred                    Referred          @default(self)
+  with_whom_do_you_live       Live              @default(guardians)
+  financial_status            Financial
+  what_brings_you_to_guidance String?
+  physical_problem            PhysicalProblem
+  physical_symptoms           PhysicalSymptoms
+  concerns                    PresentConcerns
+  services                    Services
+  sleep_duration              String
+  stress_level                StressLevel
+  academic_performance_change PerformanceChange
+  isDeleted                   Boolean           @default(false)
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+}
