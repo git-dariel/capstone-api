@@ -101,6 +101,51 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                   type:
 	 *                     type: string
 	 *                     example: "Home"
+	 *               guardian:
+	 *                 type: object
+	 *                 properties:
+	 *                   firstName:
+	 *                     type: string
+	 *                     example: "Jane"
+	 *                   lastName:
+	 *                     type: string
+	 *                     example: "Doe"
+	 *                   middleName:
+	 *                     type: string
+	 *                     example: "Smith"
+	 *                   contactNumber:
+	 *                     type: string
+	 *                     example: "+1234567890"
+	 *                   relationship:
+	 *                     type: string
+	 *                     example: "Mother"
+	 *                   address:
+	 *                     type: object
+	 *                     properties:
+	 *                       street:
+	 *                         type: string
+	 *                         example: "456 Guardian St"
+	 *                       city:
+	 *                         type: string
+	 *                         example: "New York"
+	 *                       houseNo:
+	 *                         type: string
+	 *                         example: "456"
+	 *                       province:
+	 *                         type: string
+	 *                         example: "New York"
+	 *                       barangay:
+	 *                         type: string
+	 *                         example: "Downtown"
+	 *                       zipCode:
+	 *                         type: string
+	 *                         example: "10001"
+	 *                       country:
+	 *                         type: string
+	 *                         example: "USA"
+	 *                       type:
+	 *                         type: string
+	 *                         example: "Home"
 	 *               role:
 	 *                 type: string
 	 *                 enum: [user, admin]

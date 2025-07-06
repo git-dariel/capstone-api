@@ -31,10 +31,12 @@ type Address {
 }
 
 type Guardian {
-  firstName  String?
-  lastName   String?
-  middleName String?
-  address    Address?
+  firstName     String?
+  lastName      String?
+  middleName    String?
+  contactNumber String?
+  relationship  String?
+  address       Address?
 }
 
 model Person {

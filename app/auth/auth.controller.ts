@@ -32,6 +32,7 @@ export const controller = (prisma: PrismaClient) => {
 			religion,
 			civilStatus,
 			address,
+			guardian,
 			studentNumber,
 			program,
 			year,
@@ -123,6 +124,47 @@ export const controller = (prisma: PrismaClient) => {
 										}),
 										...(address.country && { country: address.country }),
 										...(address.type && { type: address.type }),
+									},
+								}
+							: {}),
+						...(guardian
+							? {
+									guardian: {
+										firstName: guardian.firstName,
+										lastName: guardian.lastName,
+										...(guardian.middleName && {
+											middleName: guardian.middleName,
+										}),
+										...(guardian.contactNumber && {
+											contactNumber: guardian.contactNumber,
+										}),
+										...(guardian.relationship && {
+											relationship: guardian.relationship,
+										}),
+										...(guardian.address && {
+											address: {
+												street: guardian.address.street,
+												city: guardian.address.city,
+												...(guardian.address.houseNo && {
+													houseNo: parseInt(guardian.address.houseNo),
+												}),
+												...(guardian.address.province && {
+													province: guardian.address.province,
+												}),
+												...(guardian.address.barangay && {
+													barangay: guardian.address.barangay,
+												}),
+												...(guardian.address.zipCode && {
+													zipCode: parseInt(guardian.address.zipCode),
+												}),
+												...(guardian.address.country && {
+													country: guardian.address.country,
+												}),
+												...(guardian.address.type && {
+													type: guardian.address.type,
+												}),
+											},
+										}),
 									},
 								}
 							: {}),
