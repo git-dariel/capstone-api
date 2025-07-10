@@ -323,6 +323,264 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const registerAdmin = async (req: Request, res: Response, next: NextFunction) => {
+		const {
+			email,
+			userName,
+			password,
+			firstName,
+			lastName,
+			middleName,
+			suffix,
+			contactNumber,
+			gender,
+			birthDate,
+			birthPlace,
+			age,
+			religion,
+			civilStatus,
+			address,
+			guardian,
+			...otherData
+		} = req.body;
+
+		if (!email) {
+			authLogger.error("Email is required");
+			res.status(400).json({ message: "Email is required" });
+			return;
+		}
+
+		if (!password) {
+			authLogger.error("Password is required");
+			res.status(400).json({ message: "Password is required" });
+			return;
+		}
+
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		if (!emailRegex.test(email)) {
+			authLogger.error(`Invalid email format: ${email}`);
+			res.status(400).json({ message: "Invalid email format" });
+			return;
+		}
+
+		if (password.length < 6) {
+			authLogger.error("Password must be at least 6 characters long");
+			res.status(400).json({ message: "Password must be at least 6 characters long" });
+			return;
+		}
+
+		try {
+			const existingPerson = await prisma.person.findFirst({
+				where: {
+					email,
+					isDeleted: false,
+				},
+			});
+
+			if (existingPerson) {
+				authLogger.error(`Person with this email already exists: ${email}`);
+				res.status(400).json({ message: "Person with this email already exists" });
+				return;
+			}
+
+			const userNameToUse = userName || email;
+			const existingUserName = await prisma.user.findFirst({
+				where: {
+					userName: userNameToUse,
+					isDeleted: false,
+				},
+			});
+
+			if (existingUserName) {
+				authLogger.error(`Username already exists: ${userNameToUse}`);
+				res.status(400).json({
+					message: "Username already exists. Please choose a different username.",
+				});
+				return;
+			}
+
+			const result = await prisma.$transaction(async (tx) => {
+				const mockReq = {
+					body: {
+						firstName,
+						lastName,
+						...(middleName ? { middleName } : {}),
+						...(suffix ? { suffix } : {}),
+						email,
+						...(contactNumber ? { contactNumber } : {}),
+						...(gender ? { gender } : {}),
+						...(birthDate && { birthDate: new Date(birthDate) }),
+						...(birthPlace ? { birthPlace } : {}),
+						...(age ? { age } : {}),
+						...(religion ? { religion } : {}),
+						...(civilStatus ? { civilStatus } : {}),
+						...(address
+							? {
+									address: {
+										street: address.street,
+										city: address.city,
+										...(address.houseNo && {
+											houseNo: parseInt(address.houseNo),
+										}),
+										...(address.province && { province: address.province }),
+										...(address.barangay && { barangay: address.barangay }),
+										...(address.zipCode && {
+											zipCode: parseInt(address.zipCode),
+										}),
+										...(address.country && { country: address.country }),
+										...(address.type && { type: address.type }),
+									},
+								}
+							: {}),
+						...(guardian
+							? {
+									guardian: {
+										firstName: guardian.firstName,
+										lastName: guardian.lastName,
+										...(guardian.middleName && {
+											middleName: guardian.middleName,
+										}),
+										...(guardian.contactNumber && {
+											contactNumber: guardian.contactNumber,
+										}),
+										...(guardian.relationship && {
+											relationship: guardian.relationship,
+										}),
+										...(guardian.address && {
+											address: {
+												street: guardian.address.street,
+												city: guardian.address.city,
+												...(guardian.address.houseNo && {
+													houseNo: parseInt(guardian.address.houseNo),
+												}),
+												...(guardian.address.province && {
+													province: guardian.address.province,
+												}),
+												...(guardian.address.barangay && {
+													barangay: guardian.address.barangay,
+												}),
+												...(guardian.address.zipCode && {
+													zipCode: parseInt(guardian.address.zipCode),
+												}),
+												...(guardian.address.country && {
+													country: guardian.address.country,
+												}),
+												...(guardian.address.type && {
+													type: guardian.address.type,
+												}),
+											},
+										}),
+									},
+								}
+							: {}),
+						...otherData,
+					},
+				} as Request;
+
+				const mockRes = {
+					statusCode: 0,
+					data: null,
+					status: function (code: number) {
+						this.statusCode = code;
+						return this;
+					},
+					json: function (data: any) {
+						this.data = data;
+						return this;
+					},
+				} as any;
+
+				await personCtrl.create(mockReq, mockRes, next);
+
+				if (mockRes.statusCode !== 201) {
+					throw new Error("Failed to create person");
+				}
+
+				const person = mockRes.data;
+
+				const existingUser = await tx.user.findFirst({
+					where: {
+						personId: person.id,
+						isDeleted: false,
+					},
+					include: {
+						person: true,
+					},
+				});
+
+				if (existingUser) {
+					return { user: existingUser };
+				}
+
+				// Hash the password before storing
+				const hashedPassword = await bcrypt.hash(password, 10);
+
+				// Create admin user with admin role and guidance type
+				const user = await tx.user.create({
+					data: {
+						userName: userNameToUse,
+						password: hashedPassword,
+						role: "admin" as Role, // Force admin role
+						type: "guidance" as Type, // Default to guidance type for admins
+						loginMethod: "email",
+						person: {
+							connect: {
+								id: person.id,
+							},
+						},
+					},
+				});
+
+				const completeUser = await tx.user.findUnique({
+					where: { id: user.id },
+					include: {
+						person: true,
+					},
+				});
+
+				if (!completeUser) {
+					throw new Error("Failed to fetch user data");
+				}
+
+				return { user: completeUser };
+			});
+
+			const token = jwt.sign(
+				{
+					userId: result.user.id,
+					role: result.user.role,
+					type: result.user.type,
+					firstName: result.user.person?.firstName,
+					lastName: result.user.person?.lastName,
+				},
+				process.env.JWT_SECRET || "",
+				{
+					expiresIn: "1h",
+				},
+			);
+
+			authLogger.info(
+				`Admin user registered successfully: ${result.user.id} (${result.user.role})`,
+			);
+			res.cookie("token", token, {
+				httpOnly: true,
+				secure: process.env.NODE_ENV === "production",
+				maxAge: 1 * 24 * 60 * 60 * 1000,
+			});
+
+			const responseData = {
+				message: "Admin registration successful",
+				user: result.user,
+				token: token,
+			};
+
+			res.status(201).json(responseData);
+		} catch (error) {
+			authLogger.error(`Error during admin registration: ${error}`);
+			res.status(500).json({ message: "Error during admin registration" });
+		}
+	};
+
 	const login = async (req: Request, res: Response, _next: NextFunction) => {
 		const { email, password, type } = req.body;
 
@@ -449,6 +707,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	return {
 		register,
+		registerAdmin,
 		login,
 	};
 };

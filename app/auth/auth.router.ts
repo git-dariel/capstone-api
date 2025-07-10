@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 
 interface IController {
 	register(req: Request, res: Response, next: NextFunction): Promise<void>;
+	registerAdmin(req: Request, res: Response, next: NextFunction): Promise<void>;
 	login(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
@@ -202,6 +203,180 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.post("/register", controller.register);
+
+	/**
+	 * @openapi
+	 * /api/auth/register-admin:
+	 *   post:
+	 *     summary: Register a new admin user
+	 *     description: Register a new admin user with email and password. Creates both user and person records with admin role and guidance type.
+	 *     tags: [Auth]
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - email
+	 *               - password
+	 *               - firstName
+	 *               - lastName
+	 *             properties:
+	 *               email:
+	 *                 type: string
+	 *                 format: email
+	 *                 example: "admin@example.com"
+	 *               password:
+	 *                 type: string
+	 *                 minLength: 6
+	 *                 example: "adminPassword123"
+	 *               userName:
+	 *                 type: string
+	 *                 example: "admin"
+	 *                 description: "Optional - defaults to email if not provided"
+	 *               firstName:
+	 *                 type: string
+	 *                 example: "Admin"
+	 *               lastName:
+	 *                 type: string
+	 *                 example: "User"
+	 *               middleName:
+	 *                 type: string
+	 *                 example: "System"
+	 *               suffix:
+	 *                 type: string
+	 *                 example: "Sr."
+	 *               contactNumber:
+	 *                 type: string
+	 *                 example: "+1234567890"
+	 *               gender:
+	 *                 type: string
+	 *                 example: "Male"
+	 *               birthDate:
+	 *                 type: string
+	 *                 format: date
+	 *                 example: "1980-01-01"
+	 *               birthPlace:
+	 *                 type: string
+	 *                 example: "Admin City"
+	 *               age:
+	 *                 type: integer
+	 *                 example: 40
+	 *               religion:
+	 *                 type: string
+	 *                 example: "Christian"
+	 *               civilStatus:
+	 *                 type: string
+	 *                 example: "Married"
+	 *               address:
+	 *                 type: object
+	 *                 properties:
+	 *                   street:
+	 *                     type: string
+	 *                     example: "456 Admin St"
+	 *                   city:
+	 *                     type: string
+	 *                     example: "Admin City"
+	 *                   houseNo:
+	 *                     type: string
+	 *                     example: "456"
+	 *                   province:
+	 *                     type: string
+	 *                     example: "Admin Province"
+	 *                   barangay:
+	 *                     type: string
+	 *                     example: "Admin Barangay"
+	 *                   zipCode:
+	 *                     type: string
+	 *                     example: "20001"
+	 *                   country:
+	 *                     type: string
+	 *                     example: "USA"
+	 *                   type:
+	 *                     type: string
+	 *                     example: "Office"
+	 *               guardian:
+	 *                 type: object
+	 *                 properties:
+	 *                   firstName:
+	 *                     type: string
+	 *                     example: "Guardian"
+	 *                   lastName:
+	 *                     type: string
+	 *                     example: "Name"
+	 *                   middleName:
+	 *                     type: string
+	 *                     example: "Middle"
+	 *                   contactNumber:
+	 *                     type: string
+	 *                     example: "+1234567890"
+	 *                   relationship:
+	 *                     type: string
+	 *                     example: "Spouse"
+	 *                   address:
+	 *                     type: object
+	 *                     properties:
+	 *                       street:
+	 *                         type: string
+	 *                         example: "789 Guardian St"
+	 *                       city:
+	 *                         type: string
+	 *                         example: "Guardian City"
+	 *                       houseNo:
+	 *                         type: string
+	 *                         example: "789"
+	 *                       province:
+	 *                         type: string
+	 *                         example: "Guardian Province"
+	 *                       barangay:
+	 *                         type: string
+	 *                         example: "Guardian Barangay"
+	 *                       zipCode:
+	 *                         type: string
+	 *                         example: "30001"
+	 *                       country:
+	 *                         type: string
+	 *                         example: "USA"
+	 *                       type:
+	 *                         type: string
+	 *                         example: "Home"
+	 *     responses:
+	 *       201:
+	 *         description: Admin user registered successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Admin registration successful"
+	 *                 user:
+	 *                   $ref: '#/components/schemas/User'
+	 *                 token:
+	 *                   type: string
+	 *                   example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+	 *       400:
+	 *         description: Bad request (validation errors)
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Email is required"
+	 *                     - "Password is required"
+	 *                     - "Invalid email format"
+	 *                     - "Password must be at least 6 characters long"
+	 *                     - "Person with this email already exists"
+	 *                     - "Username already exists. Please choose a different username."
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.post("/register-admin", controller.registerAdmin);
 
 	/**
 	 * @openapi

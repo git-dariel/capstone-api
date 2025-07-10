@@ -65,6 +65,11 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				query.select = fieldSelections;
+			} else {
+				// Default include person when no specific fields are requested
+				query.include = {
+					person: true,
+				};
 			}
 
 			const user = await prisma.user.findFirst(query);
@@ -185,6 +190,11 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				findManyQuery.select = fieldSelections;
+			} else {
+				// Default include person when no specific fields are requested
+				findManyQuery.include = {
+					person: true,
+				};
 			}
 
 			const [users, total] = await Promise.all([
@@ -236,8 +246,19 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		if (personData.contactNumber) {
-			const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-			if (!phoneRegex.test(personData.contactNumber)) {
+			// More flexible phone regex that allows:
+			// - Optional + at start
+			// - Digits 0-9 (including leading zeros for local formats)
+			// - 7-15 digits total (standard phone number length range)
+			// - Optional spaces, dashes, parentheses for formatting
+			const phoneRegex = /^\+?[\d\s\-\(\)]{7,20}$/;
+			const cleanedPhone = personData.contactNumber.replace(/[\s\-\(\)]/g, "");
+
+			if (
+				!phoneRegex.test(personData.contactNumber) ||
+				cleanedPhone.length < 7 ||
+				cleanedPhone.length > 15
+			) {
 				userLogger.error(`${config.ERROR.USER.INVALID_PHONE}: ${personData.contactNumber}`);
 				res.status(400).json({ error: config.ERROR.USER.INVALID_PHONE });
 				return;
