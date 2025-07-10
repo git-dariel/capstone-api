@@ -27,6 +27,7 @@ model User {
   anxietyAssessments    AnxietyAssessment[] // One user can have multiple anxiety assessments
   stressAssessments     StressAssessment[] // One user can have multiple stress assessments
   depressionAssessments DepressionAssessment[] // One user can have multiple depression assessments
+  suicideAssessments    SuicideAssessment[] // One user can have multiple suicide assessments
   isDeleted             Boolean                @default(false)
   lastLogin             DateTime?
   loginMethod           String?

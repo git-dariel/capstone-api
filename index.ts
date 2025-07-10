@@ -24,6 +24,8 @@ const anxiety = require("./app/anxiety")(prisma);
 const stress = require("./app/stress")(prisma);
 const depression = require("./app/depression")(prisma);
 const consent = require("./app/consent")(prisma);
+const suicide = require("./app/suicide")(prisma);
+const metrics = require("./app/metrics")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -59,6 +61,8 @@ app.use(config.baseApiPath, anxiety);
 app.use(config.baseApiPath, stress);
 app.use(config.baseApiPath, depression);
 app.use(config.baseApiPath, consent);
+app.use(config.baseApiPath, suicide);
+app.use(config.baseApiPath, metrics);
 
 const server = createServer(app);
 const io = new Server(server);
