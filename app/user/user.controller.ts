@@ -1,10 +1,10 @@
-import { Request, Response, NextFunction } from "express";
-import { PrismaClient, Prisma, Role } from "../../generated/prisma";
-import { getLogger } from "../../helper/logger";
-import { config } from "../../config/error.config";
-import { AuthRequest } from "../../middleware/verifyToken";
-import { requireAnyRole, requireAdmin, requireSuperAdmin } from "../../middleware/rbac";
 import bcrypt from "bcrypt";
+import { NextFunction, Response } from "express";
+import { config } from "../../config/error.config";
+import { Prisma, PrismaClient, Role } from "../../generated/prisma";
+import { getLogger } from "../../helper/logger";
+import { requireAdmin, requireAnyRole } from "../../middleware/rbac";
+import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const userLogger = logger.child({ module: "user" });
@@ -336,49 +336,47 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const remove = requireSuperAdmin(
-		async (req: AuthRequest, res: Response, _next: NextFunction) => {
-			const { id } = req.params;
+	const remove = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
 
-			if (!id) {
-				userLogger.error(config.ERROR.USER.MISSING_ID);
-				res.status(400).json({ error: config.ERROR.USER.USER_ID_REQUIRED });
+		if (!id) {
+			userLogger.error(config.ERROR.USER.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.USER.USER_ID_REQUIRED });
+			return;
+		}
+
+		userLogger.info(`${config.SUCCESS.USER.SOFT_DELETING}: ${id}`);
+
+		try {
+			const existingUser = await prisma.user.findUnique({
+				where: { id },
+				include: { person: true },
+			});
+
+			if (!existingUser) {
+				userLogger.error(`${config.ERROR.USER.NOT_FOUND}: ${id}`);
+				res.status(404).json({ error: config.ERROR.USER.NOT_FOUND });
 				return;
 			}
 
-			userLogger.info(`${config.SUCCESS.USER.SOFT_DELETING}: ${id}`);
-
-			try {
-				const existingUser = await prisma.user.findUnique({
+			await prisma.$transaction([
+				prisma.user.update({
 					where: { id },
-					include: { person: true },
-				});
+					data: { isDeleted: true },
+				}),
+				prisma.person.update({
+					where: { id: existingUser.person?.id },
+					data: { isDeleted: true },
+				}),
+			]);
 
-				if (!existingUser) {
-					userLogger.error(`${config.ERROR.USER.NOT_FOUND}: ${id}`);
-					res.status(404).json({ error: config.ERROR.USER.NOT_FOUND });
-					return;
-				}
-
-				await prisma.$transaction([
-					prisma.user.update({
-						where: { id },
-						data: { isDeleted: true },
-					}),
-					prisma.person.update({
-						where: { id: existingUser.person?.id },
-						data: { isDeleted: true },
-					}),
-				]);
-
-				userLogger.info(`${config.SUCCESS.USER.DELETED}: ${id}`);
-				res.status(200).json({ message: config.SUCCESS.USER.DELETED });
-			} catch (error) {
-				userLogger.error(`${config.ERROR.USER.ERROR_DELETING_USER}: ${error}`);
-				res.status(500).json({ error: config.ERROR.USER.INTERNAL_SERVER_ERROR });
-			}
-		},
-	);
+			userLogger.info(`${config.SUCCESS.USER.DELETED}: ${id}`);
+			res.status(200).json({ message: config.SUCCESS.USER.DELETED });
+		} catch (error) {
+			userLogger.error(`${config.ERROR.USER.ERROR_DELETING_USER}: ${error}`);
+			res.status(500).json({ error: config.ERROR.USER.INTERNAL_SERVER_ERROR });
+		}
+	});
 
 	return {
 		getById,
