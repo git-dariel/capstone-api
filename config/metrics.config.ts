@@ -35,17 +35,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth(); // 0-indexed
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -59,21 +52,34 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				});
 			},
 
+			availableYears: async () => {
+				const assessments = await prisma.anxietyAssessment.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						assessmentDate: true,
+					},
+				});
+
+				const years = new Set<number>();
+				assessments.forEach((assessment) => {
+					if (assessment.assessmentDate) {
+						years.add(assessment.assessmentDate.getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
 			totalAnxietyByProgram: async () => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -114,9 +120,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			},
 
 			totalAnxietyByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
 				const anxietyWithYear = await prisma.anxietyAssessment.findMany({
 					where: {
 						isDeleted: false,
+						...dateFilter,
 						user: filter.userFilter || {},
 					},
 					include: {
@@ -152,17 +170,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -199,17 +210,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -223,21 +227,34 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				});
 			},
 
+			availableYears: async () => {
+				const assessments = await prisma.stressAssessment.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						assessmentDate: true,
+					},
+				});
+
+				const years = new Set<number>();
+				assessments.forEach((assessment) => {
+					if (assessment.assessmentDate) {
+						years.add(assessment.assessmentDate.getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
 			totalStressByProgram: async () => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -278,9 +295,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			},
 
 			totalStressByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
 				const stressWithYear = await prisma.stressAssessment.findMany({
 					where: {
 						isDeleted: false,
+						...dateFilter,
 						user: filter.userFilter || {},
 					},
 					include: {
@@ -316,17 +345,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -363,17 +385,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -387,21 +402,34 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				});
 			},
 
+			availableYears: async () => {
+				const assessments = await prisma.depressionAssessment.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						assessmentDate: true,
+					},
+				});
+
+				const years = new Set<number>();
+				assessments.forEach((assessment) => {
+					if (assessment.assessmentDate) {
+						years.add(assessment.assessmentDate.getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
 			totalDepressionByProgram: async () => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
@@ -442,9 +470,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			},
 
 			totalDepressionByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
 				const depressionWithYear = await prisma.depressionAssessment.findMany({
 					where: {
 						isDeleted: false,
+						...dateFilter,
 						user: filter.userFilter || {},
 					},
 					include: {
@@ -480,17 +520,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
-					const date = new Date(filter.startDate);
-					const year = date.getFullYear();
-					const month = date.getMonth();
-
-					const startOfMonth = new Date(year, month, 1);
-					const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
 					dateFilter = {
 						assessmentDate: {
-							gte: startOfMonth,
-							lte: endOfMonth,
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
 						},
 					};
 				}
