@@ -3,6 +3,7 @@ import { NextFunction, Response } from "express";
 import { config } from "../../config/error.config";
 import { Prisma, PrismaClient, Role } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import { exportStudentDataCsv } from "../../helper/csv.helper";
 import { requireAdmin, requireAnyRole } from "../../middleware/rbac";
 import { AuthRequest } from "../../middleware/verifyToken";
 
@@ -378,10 +379,32 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	});
 
+	const exportCsv = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		userLogger.info("CSV export requested");
+
+		try {
+			const csvContent = await exportStudentDataCsv(prisma);
+
+			// Set headers for CSV download
+			res.setHeader("Content-Type", "text/csv");
+			res.setHeader(
+				"Content-Disposition",
+				'attachment; filename="student_mental_health_data.csv"',
+			);
+
+			userLogger.info("CSV export completed successfully");
+			res.status(200).send(csvContent);
+		} catch (error) {
+			userLogger.error(`Error exporting CSV: ${error}`);
+			res.status(500).json({ error: "Failed to export CSV data" });
+		}
+	});
+
 	return {
 		getById,
 		getAll,
 		update,
 		remove,
+		exportCsv,
 	};
 };

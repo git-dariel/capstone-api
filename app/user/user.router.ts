@@ -5,11 +5,36 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
+	exportCsv(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
 	const routes = Router();
 	const path = "/user";
+
+	/**
+	 * @openapi
+	 * /api/user/export/csv:
+	 *   get:
+	 *     summary: Export student data to CSV
+	 *     description: Export all student data with their mental health assessments (anxiety, depression, stress, suicide) to CSV format
+	 *     tags: [User]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: Returns CSV file with student data
+	 *         content:
+	 *           text/csv:
+	 *             schema:
+	 *               type: string
+	 *               format: binary
+	 *       401:
+	 *         description: Unauthorized - Admin access required
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.get("/export/csv", controller.exportCsv);
 
 	/**
 	 * @openapi

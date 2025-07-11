@@ -35,21 +35,31 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
 					dateFilter = {
 						assessmentDate: {
-							gte: new Date(filter.startDate),
-							...(filter.endDate && { lte: new Date(filter.endDate) }),
+							gte: startDate,
+							...(endDate && { lte: endDate }),
 						},
 					};
+
+					console.log(`🔍 API: Anxiety date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				return prisma.anxietyAssessment.count({
+				const count = await prisma.anxietyAssessment.count({
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
 				});
+
+				console.log(`📊 Anxiety count result: ${count}`);
+				return count;
 			},
 
 			availableYears: async () => {
@@ -76,12 +86,19 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
 					dateFilter = {
 						assessmentDate: {
-							gte: new Date(filter.startDate),
-							...(filter.endDate && { lte: new Date(filter.endDate) }),
+							gte: startDate,
+							...(endDate && { lte: endDate }),
 						},
 					};
+
+					console.log(`🔍 API: Anxiety by program date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
 				const anxietyWithProgram = await prisma.anxietyAssessment.findMany({
@@ -105,6 +122,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
+				console.log(
+					`📊 Found ${anxietyWithProgram.length} anxiety assessments with program data`,
+				);
+
 				const programCounts: Record<string, number> = {};
 				anxietyWithProgram.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
@@ -113,10 +134,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Object.entries(programCounts).map(([program, count]) => ({
+				const result = Object.entries(programCounts).map(([program, count]) => ({
 					program,
 					count,
 				}));
+
+				console.log(`📊 Anxiety by program result:`, result);
+				return result;
 			},
 
 			totalAnxietyByYear: async () => {
@@ -210,21 +234,31 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
 					dateFilter = {
 						assessmentDate: {
-							gte: new Date(filter.startDate),
-							...(filter.endDate && { lte: new Date(filter.endDate) }),
+							gte: startDate,
+							...(endDate && { lte: endDate }),
 						},
 					};
+
+					console.log(`🔍 API: Stress date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				return prisma.stressAssessment.count({
+				const count = await prisma.stressAssessment.count({
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
 				});
+
+				console.log(`📊 Stress count result: ${count}`);
+				return count;
 			},
 
 			availableYears: async () => {
@@ -385,21 +419,31 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				let dateFilter = {};
 
 				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
 					dateFilter = {
 						assessmentDate: {
-							gte: new Date(filter.startDate),
-							...(filter.endDate && { lte: new Date(filter.endDate) }),
+							gte: startDate,
+							...(endDate && { lte: endDate }),
 						},
 					};
+
+					console.log(`🔍 API: Depression date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				return prisma.depressionAssessment.count({
+				const count = await prisma.depressionAssessment.count({
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
 				});
+
+				console.log(`📊 Depression count result: ${count}`);
+				return count;
 			},
 
 			availableYears: async () => {
