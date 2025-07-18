@@ -29,6 +29,7 @@ model StressAssessment {
   totalScore                           Int                 @default(0) // Sum of all responses (0-40)
   severityLevel                        StressSeverityLevel @default(low)
   assessmentDate                       DateTime            @default(now())
+  cooldownActive                       Boolean             @default(true)
   createdAt                            DateTime            @default(now())
   updatedAt                            DateTime            @updatedAt
   isDeleted                            Boolean             @default(false)
