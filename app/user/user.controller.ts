@@ -2,8 +2,8 @@ import bcrypt from "bcrypt";
 import { NextFunction, Response } from "express";
 import { config } from "../../config/error.config";
 import { Prisma, PrismaClient, Role } from "../../generated/prisma";
-import { getLogger } from "../../helper/logger";
 import { exportStudentDataCsv } from "../../helper/csv.helper";
+import { getLogger } from "../../helper/logger";
 import { requireAdmin, requireAnyRole } from "../../middleware/rbac";
 import { AuthRequest } from "../../middleware/verifyToken";
 
@@ -89,8 +89,10 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	});
 
-	const getAll = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const { page = 1, limit = 10, sort, fields, query, order = "desc" } = req.query;
+	const getAll = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const { page = 1, limit = 10, sort, fields, query, order = "desc", userId } = req.query;
+		const userRole = req.role;
+		const requestingUserId = req.userId;
 
 		if (isNaN(Number(page)) || Number(page) < 1) {
 			userLogger.error(`${config.ERROR.USER.INVALID_PAGE}: ${page}`);
@@ -133,7 +135,7 @@ export const controller = (prisma: PrismaClient) => {
 		const skip = (Number(page) - 1) * Number(limit);
 
 		userLogger.info(
-			`${config.SUCCESS.USER.GETTING_ALL_USERS}, page: ${page}, limit: ${limit}, query: ${query}, order: ${order}`,
+			`${config.SUCCESS.USER.GETTING_ALL_USERS}, page: ${page}, limit: ${limit}, query: ${query}, order: ${order}, requestingUser: ${requestingUserId}, role: ${userRole}`,
 		);
 
 		try {
@@ -156,6 +158,17 @@ export const controller = (prisma: PrismaClient) => {
 						}
 					: {}),
 			};
+
+			// Role-based access control
+			if (userRole === Role.user) {
+				// Regular users can only see their own data
+				whereClause.id = requestingUserId;
+			} else if (userRole === Role.admin || userRole === Role.super_admin) {
+				// Admins can see all users, but can also filter by specific userId if provided
+				if (userId) {
+					whereClause.id = String(userId);
+				}
+			}
 
 			const findManyQuery: Prisma.UserFindManyArgs = {
 				where: whereClause,
@@ -214,7 +227,7 @@ export const controller = (prisma: PrismaClient) => {
 			userLogger.error(`${config.ERROR.USER.ERROR_GETTING_USER}: ${error}`);
 			res.status(500).json({ error: config.ERROR.USER.INTERNAL_SERVER_ERROR });
 		}
-	});
+	};
 
 	const update = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;

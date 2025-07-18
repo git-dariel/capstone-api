@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 
 interface IController {
 	search(req: Request, res: Response, next: NextFunction): Promise<void>;
+	dashboard(req: Request, res: Response, next: NextFunction): Promise<void>;
 	generateMLGraphs(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDecisionTreeGraph(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getRandomForestGraph(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -67,6 +68,52 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Server error
 	 */
 	routes.post("/", controller.search);
+
+	/**
+	 * @openapi
+	 * /api/metrics/dashboard:
+	 *   post:
+	 *     summary: Get user dashboard data
+	 *     description: Get personal dashboard statistics for the authenticated user including assessment counts, history, trends, and statistics
+	 *     tags: [Metrics, Dashboard]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               data:
+	 *                 type: array
+	 *                 items:
+	 *                   type: string
+	 *                   enum: [personalSummary, assessmentHistory, assessmentTrends, assessmentStats]
+	 *                 description: Array of dashboard methods to execute
+	 *                 example: ["personalSummary", "assessmentStats"]
+	 *             required:
+	 *               - data
+	 *     responses:
+	 *       200:
+	 *         description: Dashboard data for authenticated user
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 data:
+	 *                   type: array
+	 *                   items:
+	 *                     type: object
+	 *       401:
+	 *         description: Unauthorized - User must be authenticated
+	 *       400:
+	 *         description: Bad request - Invalid data array
+	 *       500:
+	 *         description: Server error
+	 */
+	routes.post("/student/dashboard", controller.dashboard);
 
 	/**
 	 * @openapi
