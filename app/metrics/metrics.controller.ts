@@ -3,6 +3,8 @@ import { PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { METRIC } from "../../config/metrics.config";
+import { AuthRequest } from "../../middleware/verifyToken";
+import { requireAnyRole } from "../../middleware/rbac";
 import {
 	mentalHealthPredictor,
 	generateMLVisualizationDemo,
@@ -119,6 +121,43 @@ export const controller = (prisma: PrismaClient) => {
 			});
 		}
 	};
+
+	const dashboard = requireAnyRole(
+		async (req: AuthRequest, res: Response, _next: NextFunction): Promise<void> => {
+			try {
+				const { data } = req.body;
+
+				if (!Array.isArray(data)) {
+					metricsLogger.error("❌ Invalid input for dashboard request", { data });
+					res.status(400).json({ error: "data[] array is required" });
+					return;
+				}
+
+				// Create filter with authenticated user context
+				const filter = {
+					userFilter: { id: req.userId },
+				};
+
+				metricsLogger.info(
+					`📊 Dashboard request for user: ${req.userId}, methods: ${data.join(", ")}`,
+				);
+
+				const result = await searchMetrics(prisma, "UserDashboard", data, filter);
+				res.status(200).json({ data: result });
+			} catch (error: any) {
+				const status = (error.status || 500) as keyof typeof config;
+				metricsLogger.error("❌ Error in dashboard controller", {
+					status,
+					message: error.message,
+					userId: req.userId,
+				});
+				res.status(Number(status)).json({
+					error: config[status] || "Internal Server Error",
+					details: error.message,
+				});
+			}
+		},
+	);
 
 	const generateMLGraphs = async (
 		req: Request,
@@ -510,6 +549,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	return {
 		search,
+		dashboard,
 		generateMLGraphs,
 		getDecisionTreeGraph,
 		getRandomForestGraph,
