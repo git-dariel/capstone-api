@@ -37,6 +37,7 @@ model DepressionAssessment {
   severityLevel                             DepressionSeverityLevel    @default(minimal)
   assessmentDate                            DateTime                   @default(now())
   difficulty_level                          DepressionDifficultyLevel? @default(not_difficult_at_all)
+  cooldownActive                            Boolean                    @default(true)
   createdAt                                 DateTime                   @default(now())
   updatedAt                                 DateTime                   @updatedAt
   isDeleted                                 Boolean                    @default(false)

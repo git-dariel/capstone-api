@@ -1,4 +1,19 @@
-import { AnxietyLevel, SeverityLevel, DifficultyLevel } from "../generated/prisma";
+import { AnxietyLevel, SeverityLevel } from "../generated/prisma";
+
+// Philippines timezone utility functions
+export const getPhilippinesTime = (): Date => {
+	// Philippines is UTC+8
+	const now = new Date();
+	const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+	const philippinesTime = new Date(utc + 8 * 3600000); // UTC+8
+	return philippinesTime;
+};
+
+export const toPhilippinesTime = (date: Date): Date => {
+	const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+	const philippinesTime = new Date(utc + 8 * 3600000); // UTC+8
+	return philippinesTime;
+};
 
 // GAD-7 scoring helper functions
 export const getAnxietyLevelScore = (level: AnxietyLevel): number => {
@@ -127,4 +142,96 @@ export const createDetailedAnalysisResult = (
 			),
 		},
 	};
+};
+
+// Cooldown period helper functions (with Philippines timezone support)
+export const getCooldownDays = (severityLevel: SeverityLevel): number => {
+	switch (severityLevel) {
+		case "minimal":
+			return 30;
+		case "mild":
+			return 25;
+		case "moderate":
+			return 14;
+		case "severe":
+			return 2;
+		default:
+			return 30;
+	}
+};
+
+export const calculateNextAssessmentDate = (
+	lastAssessmentDate: Date,
+	severityLevel: SeverityLevel,
+): Date => {
+	const cooldownDays = getCooldownDays(severityLevel);
+	const nextDate = new Date(lastAssessmentDate);
+	nextDate.setDate(nextDate.getDate() + cooldownDays);
+	return nextDate;
+};
+
+export const isCooldownActive = (
+	lastAssessmentDate: Date,
+	severityLevel: SeverityLevel,
+): boolean => {
+	const nextAllowedDate = calculateNextAssessmentDate(lastAssessmentDate, severityLevel);
+	const now = getPhilippinesTime(); // Use Philippines time instead of system time
+	return now < nextAllowedDate;
+};
+
+export const getCooldownStatus = (
+	lastAssessmentDate: Date,
+	severityLevel: SeverityLevel,
+): {
+	isActive: boolean;
+	daysRemaining: number;
+	nextAvailableDate: Date;
+	cooldownPeriodDays: number;
+	currentPhilippinesTime: Date;
+	debugInfo: {
+		lastAssessmentPhTime: Date;
+		nextAvailablePhTime: Date;
+		timeDifferenceMs: number;
+	};
+} => {
+	const nextAvailableDate = calculateNextAssessmentDate(lastAssessmentDate, severityLevel);
+	const now = getPhilippinesTime(); // Use Philippines time
+	const isActive = now < nextAvailableDate;
+	const timeDifferenceMs = nextAvailableDate.getTime() - now.getTime();
+	const daysRemaining = isActive ? Math.ceil(timeDifferenceMs / (1000 * 60 * 60 * 24)) : 0;
+
+	return {
+		isActive,
+		daysRemaining,
+		nextAvailableDate,
+		cooldownPeriodDays: getCooldownDays(severityLevel),
+		currentPhilippinesTime: now,
+		debugInfo: {
+			lastAssessmentPhTime: toPhilippinesTime(lastAssessmentDate),
+			nextAvailablePhTime: toPhilippinesTime(nextAvailableDate),
+			timeDifferenceMs,
+		},
+	};
+};
+
+export const formatCooldownMessage = (
+	severityLevel: SeverityLevel,
+	daysRemaining: number,
+	nextAvailableDate: Date,
+): string => {
+	const severityText = severityLevel.charAt(0).toUpperCase() + severityLevel.slice(1);
+	// Format date in Philippines timezone
+	const phDate = toPhilippinesTime(nextAvailableDate);
+	const dateStr = phDate.toLocaleDateString("en-PH", {
+		timeZone: "Asia/Manila",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	});
+
+	return `${severityText} anxiety level requires a ${getCooldownDays(
+		severityLevel,
+	)}-day cooldown period. You can take your next assessment in ${daysRemaining} day${
+		daysRemaining !== 1 ? "s" : ""
+	} (${dateStr}).`;
 };

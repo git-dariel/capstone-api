@@ -9,6 +9,9 @@ import {
 	validateDepressionFrequency,
 	validateDifficultyLevel,
 	checkSuicidalIdeation,
+	getCooldownStatus,
+	formatCooldownMessage,
+	getPhilippinesTime,
 } from "../../helper/depression.helper";
 import { getLogger } from "../../helper/logger";
 import { AuthRequest } from "../../middleware/verifyToken";
@@ -295,6 +298,80 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Check for existing assessments and cooldown period
+			const mostRecentAssessment = await prisma.depressionAssessment.findFirst({
+				where: {
+					userId,
+					isDeleted: false,
+				},
+				orderBy: {
+					assessmentDate: "desc",
+				},
+			});
+
+			if (mostRecentAssessment) {
+				const cooldownStatus = getCooldownStatus(
+					mostRecentAssessment.assessmentDate,
+					mostRecentAssessment.severityLevel,
+				);
+
+				// Log timezone debug information
+				const currentPhTime = getPhilippinesTime();
+				depressionLogger.info(
+					`${config.SUCCESS.DEPRESSION.COOLDOWN_CHECKED} for user: ${userId}`,
+					{
+						lastAssessmentDate: mostRecentAssessment.assessmentDate,
+						currentPhilippinesTime: currentPhTime,
+						nextAvailableDate: cooldownStatus.nextAvailableDate,
+						daysRemaining: cooldownStatus.daysRemaining,
+						isActive: cooldownStatus.isActive,
+						debugInfo: cooldownStatus.debugInfo,
+					},
+				);
+
+				// Check both time-based cooldown AND manual cooldown flag
+				const isCooldownActive =
+					mostRecentAssessment.cooldownActive && cooldownStatus.isActive;
+
+				if (isCooldownActive) {
+					const cooldownMessage = formatCooldownMessage(
+						mostRecentAssessment.severityLevel,
+						cooldownStatus.daysRemaining,
+						cooldownStatus.nextAvailableDate,
+					);
+
+					depressionLogger.error(
+						`${config.ERROR.DEPRESSION.COOLDOWN_ACTIVE}: ${userId} - ${cooldownStatus.daysRemaining} days remaining`,
+					);
+					res.status(429).json({
+						error: config.ERROR.DEPRESSION.COOLDOWN_ACTIVE,
+						message: cooldownMessage,
+						cooldownInfo: {
+							isActive: true,
+							daysRemaining: cooldownStatus.daysRemaining,
+							nextAvailableDate: cooldownStatus.nextAvailableDate,
+							lastAssessmentDate: mostRecentAssessment.assessmentDate,
+							lastSeverityLevel: mostRecentAssessment.severityLevel,
+							cooldownPeriodDays: cooldownStatus.cooldownPeriodDays,
+							manuallyDeactivated: !mostRecentAssessment.cooldownActive,
+							currentPhilippinesTime: cooldownStatus.currentPhilippinesTime,
+							debugInfo: cooldownStatus.debugInfo,
+						},
+					});
+					return;
+				} else {
+					if (!mostRecentAssessment.cooldownActive) {
+						depressionLogger.info(
+							`${config.SUCCESS.DEPRESSION.COOLDOWN_DEACTIVATED_BY_ADMIN} for user: ${userId}`,
+						);
+					} else {
+						depressionLogger.info(
+							`${config.SUCCESS.DEPRESSION.COOLDOWN_EXPIRED} for user: ${userId}`,
+						);
+					}
+				}
+			}
+
 			// Calculate score and severity
 			const responses = {
 				little_interest_pleasure_doing_things,
@@ -344,6 +421,7 @@ export const controller = (prisma: PrismaClient) => {
 					severityLevel,
 					...(difficulty_level !== undefined && { difficulty_level }),
 					assessmentDate: assessmentDate ? new Date(assessmentDate) : new Date(),
+					cooldownActive: true, // New assessments start with cooldown active
 					isDeleted: false,
 				},
 				include: {
@@ -362,10 +440,25 @@ export const controller = (prisma: PrismaClient) => {
 				severityLevel,
 			);
 
+			// Add cooldown information to response
+			const cooldownStatus = getCooldownStatus(
+				newAssessment.assessmentDate,
+				newAssessment.severityLevel,
+			);
+
 			depressionLogger.info(`${config.SUCCESS.DEPRESSION.CREATED}: ${newAssessment.id}`);
 			res.status(201).json({
 				...newAssessment,
 				analysis: analysisResult,
+				cooldownInfo: {
+					isActive: true, // New assessments always start with active cooldown
+					daysRemaining: cooldownStatus.daysRemaining,
+					nextAvailableDate: cooldownStatus.nextAvailableDate,
+					cooldownPeriodDays: cooldownStatus.cooldownPeriodDays,
+					manuallyDeactivated: false,
+					currentPhilippinesTime: cooldownStatus.currentPhilippinesTime,
+					debugInfo: cooldownStatus.debugInfo,
+				},
 			});
 		} catch (error) {
 			depressionLogger.error(`${config.ERROR.DEPRESSION.ERROR_GETTING_ASSESSMENT}: ${error}`);
@@ -387,6 +480,7 @@ export const controller = (prisma: PrismaClient) => {
 			thoughts_better_off_dead_hurting_yourself,
 			difficulty_level,
 			assessmentDate,
+			cooldownActive,
 		} = req.body;
 		const userRole = req.role;
 		const requestingUserId = req.userId;
@@ -428,6 +522,27 @@ export const controller = (prisma: PrismaClient) => {
 		if (difficulty_level && !validateDifficultyLevel(difficulty_level)) {
 			depressionLogger.error(config.ERROR.DEPRESSION.INVALID_DIFFICULTY_LEVEL);
 			res.status(400).json({ error: config.ERROR.DEPRESSION.INVALID_DIFFICULTY_LEVEL });
+			return;
+		}
+
+		// Validate cooldown update permissions - only admins can modify cooldown status
+		if (cooldownActive !== undefined && userRole === Role.user) {
+			depressionLogger.error(
+				`User ${requestingUserId} attempted to modify cooldown status without admin privileges`,
+			);
+			res.status(403).json({
+				error: "Insufficient permissions to modify cooldown status",
+				message: "Only admin and guidance personnel can modify assessment cooldown periods",
+			});
+			return;
+		}
+
+		// Validate cooldownActive value if provided
+		if (cooldownActive !== undefined && typeof cooldownActive !== "boolean") {
+			depressionLogger.error(`Invalid cooldownActive value: ${cooldownActive}`);
+			res.status(400).json({
+				error: "Invalid cooldownActive value - must be true or false",
+			});
 			return;
 		}
 
@@ -482,6 +597,7 @@ export const controller = (prisma: PrismaClient) => {
 					thoughts_better_off_dead_hurting_yourself;
 			if (difficulty_level !== undefined) updateData.difficulty_level = difficulty_level;
 			if (assessmentDate !== undefined) updateData.assessmentDate = new Date(assessmentDate);
+			if (cooldownActive !== undefined) updateData.cooldownActive = cooldownActive;
 
 			// Recalculate score if any PHQ-9 responses were updated
 			const hasPhq9Updates = [
@@ -551,6 +667,17 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			// Log cooldown status changes
+			if (
+				cooldownActive !== undefined &&
+				cooldownActive !== existingAssessment.cooldownActive
+			) {
+				const action = cooldownActive ? "activated" : "deactivated";
+				depressionLogger.info(
+					`Cooldown ${action} for assessment ${id} by ${userRole} user ${requestingUserId}`,
+				);
+			}
+
 			const updatedAssessment = await prisma.depressionAssessment.update({
 				where: { id },
 				data: updateData,
@@ -569,10 +696,28 @@ export const controller = (prisma: PrismaClient) => {
 				updatedAssessment.severityLevel,
 			);
 
+			// Add cooldown information to response
+			const cooldownStatus = getCooldownStatus(
+				updatedAssessment.assessmentDate,
+				updatedAssessment.severityLevel,
+			);
+
 			depressionLogger.info(`${config.SUCCESS.DEPRESSION.UPDATE}: ${updatedAssessment.id}`);
 			res.status(200).json({
 				...updatedAssessment,
 				analysis: analysisResult,
+				cooldownInfo: {
+					isActive: updatedAssessment.cooldownActive && cooldownStatus.isActive,
+					daysRemaining: updatedAssessment.cooldownActive
+						? cooldownStatus.daysRemaining
+						: 0,
+					nextAvailableDate: cooldownStatus.nextAvailableDate,
+					cooldownPeriodDays: cooldownStatus.cooldownPeriodDays,
+					manuallyDeactivated:
+						!updatedAssessment.cooldownActive && cooldownStatus.isActive,
+					currentPhilippinesTime: cooldownStatus.currentPhilippinesTime,
+					debugInfo: cooldownStatus.debugInfo,
+				},
 			});
 		} catch (error) {
 			depressionLogger.error(
