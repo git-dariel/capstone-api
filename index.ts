@@ -26,6 +26,7 @@ const depression = require("./app/depression")(prisma);
 const consent = require("./app/consent")(prisma);
 const suicide = require("./app/suicide")(prisma);
 const metrics = require("./app/metrics")(prisma);
+const retakeRequest = require("./app/retake-request")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -63,6 +64,7 @@ app.use(config.baseApiPath, depression);
 app.use(config.baseApiPath, consent);
 app.use(config.baseApiPath, suicide);
 app.use(config.baseApiPath, metrics);
+app.use(config.baseApiPath, retakeRequest);
 
 const server = createServer(app);
 const io = new Server(server);

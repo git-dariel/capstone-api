@@ -28,6 +28,8 @@ model User {
   stressAssessments     StressAssessment[] // One user can have multiple stress assessments
   depressionAssessments DepressionAssessment[] // One user can have multiple depression assessments
   suicideAssessments    SuicideAssessment[] // One user can have multiple suicide assessments
+  retakeRequests        RetakeRequest[] // One user can have multiple retake requests
+  reviewedRequests      RetakeRequest[]        @relation("ReviewedRequests") // Requests reviewed by this user
   isDeleted             Boolean                @default(false)
   lastLogin             DateTime?
   loginMethod           String?
