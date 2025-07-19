@@ -1024,5 +1024,152 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				return stats;
 			},
 		},
+		RetakeRequest: {
+			totalPendingRequests: async () => {
+				const count = await prisma.retakeRequest.count({
+					where: {
+						isDeleted: false,
+						status: "pending",
+						...(filter.userFilter || {}),
+					},
+				});
+
+				console.log(`📊 Pending retake requests count result: ${count}`);
+				return count;
+			},
+
+			totalApprovedThisWeek: async () => {
+				// Calculate start of current week (Sunday)
+				const now = new Date();
+				const startOfWeek = new Date(now);
+				startOfWeek.setDate(now.getDate() - now.getDay());
+				startOfWeek.setHours(0, 0, 0, 0);
+
+				const count = await prisma.retakeRequest.count({
+					where: {
+						isDeleted: false,
+						status: "approved",
+						reviewedAt: {
+							gte: startOfWeek,
+						},
+						...(filter.userFilter || {}),
+					},
+				});
+
+				console.log(`📊 Approved this week retake requests count result: ${count}`);
+				return count;
+			},
+
+			totalRequests: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+
+					console.log(`🔍 API: RetakeRequest date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
+				}
+
+				const count = await prisma.retakeRequest.count({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						...(filter.userFilter || {}),
+					},
+				});
+
+				console.log(`📊 Total retake requests count result: ${count}`);
+				return count;
+			},
+
+			availableYears: async () => {
+				const requests = await prisma.retakeRequest.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						createdAt: true,
+					},
+				});
+
+				const years = new Set<number>();
+				requests.forEach((request) => {
+					if (request.createdAt) {
+						years.add(request.createdAt.getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
+			totalRequestsByStatus: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						createdAt: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const requestsByStatus = await prisma.retakeRequest.groupBy({
+					by: ["status"],
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						...(filter.userFilter || {}),
+					},
+					_count: {
+						status: true,
+					},
+				});
+
+				return requestsByStatus.map((group) => ({
+					status: group.status,
+					count: group._count.status,
+				}));
+			},
+
+			totalRequestsByAssessmentType: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						createdAt: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const requestsByType = await prisma.retakeRequest.groupBy({
+					by: ["assessmentType"],
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						...(filter.userFilter || {}),
+					},
+					_count: {
+						assessmentType: true,
+					},
+				});
+
+				return requestsByType.map((group) => ({
+					assessmentType: group.assessmentType,
+					count: group._count.assessmentType,
+				}));
+			},
+		},
 	};
 };
