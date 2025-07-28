@@ -201,6 +201,7 @@ export const controller = (prisma: PrismaClient) => {
 			program,
 			year,
 			status,
+			notes,
 			personId,
 			firstName,
 			lastName,
@@ -241,6 +242,43 @@ export const controller = (prisma: PrismaClient) => {
 				error: "Status must be one of: freshman, sophomore, junior, senior",
 			});
 			return;
+		}
+
+		// Validate notes array if provided
+		if (notes && !Array.isArray(notes)) {
+			studentLogger.error(`Invalid notes format: ${notes}`);
+			res.status(400).json({
+				error: "Notes must be an array",
+			});
+			return;
+		}
+
+		if (notes && Array.isArray(notes)) {
+			for (const note of notes) {
+				if (typeof note !== "object" || note === null) {
+					studentLogger.error(`Invalid note format: ${note}`);
+					res.status(400).json({
+						error: "Each note must be an object",
+					});
+					return;
+				}
+
+				if (note.title && typeof note.title !== "string") {
+					studentLogger.error(`Invalid note title: ${note.title}`);
+					res.status(400).json({
+						error: "Note title must be a string",
+					});
+					return;
+				}
+
+				if (note.content && typeof note.content !== "string") {
+					studentLogger.error(`Invalid note content: ${note.content}`);
+					res.status(400).json({
+						error: "Note content must be a string",
+					});
+					return;
+				}
+			}
 		}
 
 		// Only require firstName and lastName if we're creating a new person
@@ -368,6 +406,7 @@ export const controller = (prisma: PrismaClient) => {
 						program,
 						year,
 						...(status && { status }),
+						...(notes && Array.isArray(notes) && { notes }),
 						person: {
 							connect: {
 								id: person.id,
@@ -395,7 +434,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const update = async (req: Request, res: Response, next: NextFunction) => {
 		const { id } = req.params;
-		const { studentNumber, program, year, status, person } = req.body;
+		const { studentNumber, program, year, status, notes, person } = req.body;
 
 		if (!id) {
 			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
@@ -420,6 +459,43 @@ export const controller = (prisma: PrismaClient) => {
 				error: "Status must be one of: freshman, sophomore, junior, senior",
 			});
 			return;
+		}
+
+		// Validate notes array if provided
+		if (notes && !Array.isArray(notes)) {
+			studentLogger.error(`Invalid notes format: ${notes}`);
+			res.status(400).json({
+				error: "Notes must be an array",
+			});
+			return;
+		}
+
+		if (notes && Array.isArray(notes)) {
+			for (const note of notes) {
+				if (typeof note !== "object" || note === null) {
+					studentLogger.error(`Invalid note format: ${note}`);
+					res.status(400).json({
+						error: "Each note must be an object",
+					});
+					return;
+				}
+
+				if (note.title && typeof note.title !== "string") {
+					studentLogger.error(`Invalid note title: ${note.title}`);
+					res.status(400).json({
+						error: "Note title must be a string",
+					});
+					return;
+				}
+
+				if (note.content && typeof note.content !== "string") {
+					studentLogger.error(`Invalid note content: ${note.content}`);
+					res.status(400).json({
+						error: "Note content must be a string",
+					});
+					return;
+				}
+			}
 		}
 
 		try {
@@ -468,7 +544,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			await prisma.$transaction(async (tx) => {
 				// Update student fields
-				if (studentNumber || program || year || status) {
+				if (studentNumber || program || year || status || notes) {
 					await tx.student.update({
 						where: { id },
 						data: {
@@ -476,6 +552,7 @@ export const controller = (prisma: PrismaClient) => {
 							...(program && { program }),
 							...(year && { year }),
 							...(status && { status }),
+							...(notes && Array.isArray(notes) && { notes }),
 						},
 					});
 				}

@@ -5,12 +5,18 @@ enum AcademicStatus {
   senior
 }
 
+type Notes {
+  title   String?
+  content String?
+}
+
 model Student {
   id            String         @id @default(auto()) @map("_id") @db.ObjectId
   studentNumber String?        @unique
   program       String
   year          String
   status        AcademicStatus @default(freshman)
+  notes         Notes[]
   person        Person         @relation(fields: [personId], references: [id])
   personId      String         @db.ObjectId
   consent       Consent?
