@@ -1,0 +1,18 @@
+type MessageAttachment {
+  name String?
+  url  String?
+}
+
+model Message {
+  id          String              @id @default(auto()) @map("_id") @db.ObjectId
+  sender      User                @relation("SentMessages", fields: [senderId], references: [id])
+  senderId    String              @db.ObjectId
+  receiver    User                @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  receiverId  String              @db.ObjectId
+  title       String?
+  content     String?
+  attachments MessageAttachment[]
+  read        Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  isDeleted   Boolean             @default(false)
+}
