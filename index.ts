@@ -33,6 +33,50 @@ app.use(express.json());
 app.use(cookieParser());
 corsMiddleware(app);
 
+const server = createServer(app);
+const io = new Server(server, {
+	cors: {
+		origin: process.env.CLIENT_URL || ["http://localhost:5173", "http://localhost:3001"],
+		methods: ["GET", "POST", "PUT", "DELETE"],
+		credentials: true,
+	},
+});
+
+// Enhanced socket connection handling with logging
+io.on("connection", (socket) => {
+	console.log("Socket client connected:", socket.id);
+
+	// Handle user room joining
+	socket.on("join_user_room", (userId: string) => {
+		console.log(`User ${userId} joining room: user_${userId}`);
+		socket.join(`user_${userId}`);
+
+		// Confirm room joined
+		socket.emit("room_joined", { room: `user_${userId}`, userId });
+		console.log(`User ${userId} successfully joined room: user_${userId}`);
+	});
+
+	// Handle disconnection
+	socket.on("disconnect", (reason) => {
+		console.log("Socket client disconnected:", socket.id, "Reason:", reason);
+	});
+
+	// Handle errors
+	socket.on("error", (error) => {
+		console.error("Socket error:", error);
+	});
+
+	// Keep connection alive with ping/pong
+	socket.on("ping", () => {
+		socket.emit("pong");
+	});
+});
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+	(req as any).io = io;
+	next();
+});
+
 // Set up routes that don't need authentication
 if (process.env.NODE_ENV !== "production") {
 	app.use(`${config.baseApiPath}/docs`, swaggerUi.serve, swaggerUi.setup(openApiSpecs()));
@@ -68,17 +112,9 @@ app.use(config.baseApiPath, metrics);
 app.use(config.baseApiPath, retakeRequest);
 app.use(config.baseApiPath, message);
 
-const server = createServer(app);
-const io = new Server(server);
-
-app.use((req: Request, res: Response, next: NextFunction) => {
-	(req as any).io = io;
-	next();
-});
-
 server.listen(config.port, async () => {
 	await connectDb();
-	console.log(`Server is running on port ${config.port}`);
+	console.log(`Server is running on port ${config.port}. Socket.IO server initialized.`);
 });
 
 // Graceful shutdown
