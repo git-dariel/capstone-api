@@ -9,6 +9,7 @@ export const config = {
 	baseApiPath: "/api",
 	betterStackSourceToken: process.env.BETTER_STACK_SOURCE_TOKEN || "",
 	betterStackHost: process.env.BETTER_STACK_HOST || "",
+	JWT_SECRET: process.env.JWT_SECRET || "capstone-dev",
 
 	// Email configuration
 	email: {

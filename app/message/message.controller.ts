@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { config } from "../../config/error.config";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import { emitToUser } from "../../helper/socket.helper";
 
 const logger = getLogger();
 const messageLogger = logger.child({ module: "message" });
@@ -80,6 +81,16 @@ export const controller = (prisma: PrismaClient) => {
 					where: { id },
 					data: { read: true },
 				});
+
+				// Emit read status using socket.io
+				const io = (req as any).io;
+				if (io) {
+					emitToUser(io, message.senderId, "message_read", {
+						messageId: id,
+						readBy: userId,
+						readAt: new Date(),
+					});
+				}
 			}
 
 			messageLogger.info(`Retrieved message: ${message.id}`);
@@ -91,7 +102,22 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const getAll = async (req: Request, res: Response, _next: NextFunction) => {
-		const { page = 1, limit = 10, sort, fields, query, order = "desc" } = req.query;
+		const {
+			page = 1,
+			limit = 10,
+			sort,
+			fields,
+			query,
+			order = "desc",
+			conversationWith,
+		} = req.query;
+		const userId = (req as any).user?.id || (req as any).userId;
+
+		if (!userId) {
+			messageLogger.error("Authentication required");
+			res.status(401).json({ error: "Authentication required" });
+			return;
+		}
 
 		if (isNaN(Number(page)) || Number(page) < 1) {
 			messageLogger.error(`Invalid page: ${page}`);
@@ -120,21 +146,39 @@ export const controller = (prisma: PrismaClient) => {
 		const skip = (Number(page) - 1) * Number(limit);
 
 		messageLogger.info(
-			`Getting all messages, page: ${page}, limit: ${limit}, query: ${query}, order: ${order}`,
+			`Getting messages for user: ${userId}, page: ${page}, limit: ${limit}, query: ${query}, conversationWith: ${conversationWith}, order: ${order}`,
 		);
 
 		try {
-			const whereClause: Prisma.MessageWhereInput = {
+			// Base filter: only messages involving the authenticated user
+			const baseWhereClause: Prisma.MessageWhereInput = {
 				isDeleted: false,
-				...(query
-					? {
-							OR: [
-								{ content: { contains: String(query) } },
-								{ title: { contains: String(query) } },
-							],
-						}
-					: {}),
+				OR: [{ senderId: userId }, { receiverId: userId }],
 			};
+
+			// If conversationWith is specified, get messages between current user and that specific user
+			const whereClause: Prisma.MessageWhereInput = conversationWith
+				? {
+						isDeleted: false,
+						OR: [
+							{ senderId: userId, receiverId: String(conversationWith) },
+							{ senderId: String(conversationWith), receiverId: userId },
+						],
+					}
+				: baseWhereClause;
+
+			// Add search query if provided
+			if (query) {
+				whereClause.AND = [
+					whereClause,
+					{
+						OR: [
+							{ content: { contains: String(query) } },
+							{ title: { contains: String(query) } },
+						],
+					},
+				];
+			}
 
 			const findManyQuery: Prisma.MessageFindManyArgs = {
 				where: whereClause,
@@ -145,6 +189,32 @@ export const controller = (prisma: PrismaClient) => {
 						? { [sort as string]: order }
 						: JSON.parse(sort as string)
 					: { createdAt: order as Prisma.SortOrder },
+				include: {
+					sender: {
+						select: {
+							id: true,
+							userName: true,
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
+								},
+							},
+						},
+					},
+					receiver: {
+						select: {
+							id: true,
+							userName: true,
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
+								},
+							},
+						},
+					},
+				},
 			};
 
 			if (fields) {
@@ -169,6 +239,8 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
+				// Override include with select when fields are specified
+				delete findManyQuery.include;
 				findManyQuery.select = fieldSelections;
 			}
 
@@ -177,12 +249,13 @@ export const controller = (prisma: PrismaClient) => {
 				prisma.message.count({ where: whereClause }),
 			]);
 
-			messageLogger.info(`Retrieved ${messages.length} messages`);
+			messageLogger.info(`Retrieved ${messages.length} messages for user: ${userId}`);
 			res.status(200).json({
 				messages,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
+				conversationWith: conversationWith ? String(conversationWith) : null,
 			});
 		} catch (error) {
 			messageLogger.error(`Error getting messages: ${error}`);
@@ -277,7 +350,56 @@ export const controller = (prisma: PrismaClient) => {
 					read: false,
 					isDeleted: false,
 				},
+				include: {
+					sender: {
+						select: {
+							id: true,
+							userName: true,
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
+								},
+							},
+						},
+					},
+					receiver: {
+						select: {
+							id: true,
+							userName: true,
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
+								},
+							},
+						},
+					},
+				},
 			});
+
+			const io = (req as any).io;
+			if (io) {
+				console.log(`Emitting new_message to user_${receiverId}:`, newMessage.title);
+
+				// Notify the receiver about the new message
+				emitToUser(io, receiverId, "new_message", {
+					message: newMessage,
+					from: newMessage.senderId,
+					timestamp: new Date(),
+				});
+
+				console.log(`Emitting message_sent to user_${senderId}`);
+
+				// Notify the sender that the message was sent
+				emitToUser(io, senderId, "message_sent", {
+					message: newMessage,
+					to: newMessage.receiverId,
+					timestamp: new Date(),
+				});
+			} else {
+				console.error("Socket.IO instance not available");
+			}
 
 			messageLogger.info(`Created message: ${newMessage.id}`);
 			res.status(201).json(newMessage);
@@ -357,6 +479,19 @@ export const controller = (prisma: PrismaClient) => {
 				data: updateData,
 			});
 
+			const io = (req as any).io;
+			if (io) {
+				const updateEvent = {
+					messageId: id,
+					updatedFields: Object.keys(req.body),
+					message: updatedMessage,
+					timestamp: new Date(),
+				};
+
+				emitToUser(io, updatedMessage.senderId, "message_updated", updateEvent);
+				emitToUser(io, updatedMessage.receiverId, "message_updated", updateEvent);
+			}
+
 			messageLogger.info(`Updated message: ${updatedMessage.id}`);
 			res.status(200).json(updatedMessage);
 		} catch (error) {
@@ -393,6 +528,17 @@ export const controller = (prisma: PrismaClient) => {
 					isDeleted: true,
 				},
 			});
+
+			const io = (req as any).io;
+			if (io) {
+				const deleteEvent = {
+					messageId: id,
+					timestamp: new Date(),
+				};
+
+				emitToUser(io, existingMessage.senderId, "message_deleted", deleteEvent);
+				emitToUser(io, existingMessage.receiverId, "message_deleted", deleteEvent);
+			}
 
 			messageLogger.info(`Deleted message: ${id}`);
 			res.status(200).json({ message: "Message deleted successfully" });
