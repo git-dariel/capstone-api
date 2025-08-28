@@ -2,12 +2,14 @@ import { NextFunction, Response } from "express";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { AuthRequest } from "../../middleware/verifyToken";
+import { requireAnyRole } from "../../middleware/rbac";
+import { getPhilippinesStartOfDay } from "../../helper/date.helper";
 
 const logger = getLogger();
 const scheduleLogger = logger.child({ module: "schedule" });
 
 export const controller = (prisma: PrismaClient) => {
-	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+	const getById = requireAnyRole(async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
 
@@ -72,9 +74,9 @@ export const controller = (prisma: PrismaClient) => {
 			scheduleLogger.error(`Error getting schedule: ${error}`);
 			res.status(500).json({ error: "Internal server error" });
 		}
-	};
+	});
 
-	const getAll = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+	const getAll = requireAnyRole(async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const {
 			page = 1,
 			limit = 10,
@@ -239,7 +241,7 @@ export const controller = (prisma: PrismaClient) => {
 			scheduleLogger.error(`Error getting schedules: ${error}`);
 			res.status(500).json({ error: "Internal server error" });
 		}
-	};
+	});
 
 	const create = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const {
@@ -520,62 +522,67 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const getAvailable = async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const { counselorId, from, to } = req.query;
+	const getAvailable = requireAnyRole(
+		async (req: AuthRequest, res: Response, _next: NextFunction) => {
+			const { counselorId, from, to } = req.query;
 
-		try {
-			const whereClause: Prisma.ScheduleWhereInput = {
-				status: "available",
-				isDeleted: false,
-				startTime: { gte: new Date() }, // Only future schedules
-			};
+			try {
+				// Use Philippines timezone for date comparison
+				const philippinesToday = getPhilippinesStartOfDay();
 
-			if (counselorId && typeof counselorId === "string") {
-				whereClause.counselorId = counselorId;
-			}
+				const whereClause: Prisma.ScheduleWhereInput = {
+					status: "available",
+					isDeleted: false,
+					startTime: { gte: philippinesToday }, // Only schedules from today onwards (Philippines time)
+				};
 
-			if (from || to) {
-				whereClause.AND = [];
-				if (from && typeof from === "string") {
-					whereClause.AND.push({ startTime: { gte: new Date(from) } });
+				if (counselorId && typeof counselorId === "string") {
+					whereClause.counselorId = counselorId;
 				}
-				if (to && typeof to === "string") {
-					whereClause.AND.push({ endTime: { lte: new Date(to) } });
-				}
-			}
 
-			const schedules = await prisma.schedule.findMany({
-				where: whereClause,
-				include: {
-					counselor: {
-						select: {
-							id: true,
-							person: {
-								select: {
-									firstName: true,
-									lastName: true,
-									email: true,
+				if (from || to) {
+					whereClause.AND = [];
+					if (from && typeof from === "string") {
+						whereClause.AND.push({ startTime: { gte: new Date(from) } });
+					}
+					if (to && typeof to === "string") {
+						whereClause.AND.push({ endTime: { lte: new Date(to) } });
+					}
+				}
+
+				const schedules = await prisma.schedule.findMany({
+					where: whereClause,
+					include: {
+						counselor: {
+							select: {
+								id: true,
+								person: {
+									select: {
+										firstName: true,
+										lastName: true,
+										email: true,
+									},
 								},
 							},
 						},
 					},
-				},
-				orderBy: { startTime: "asc" },
-			});
+					orderBy: { startTime: "asc" },
+				});
 
-			// Filter out fully booked schedules (bookedSlots >= maxSlots)
-			const available = schedules.filter(
-				(s: any) => (s.bookedSlots ?? 0) < (s.maxSlots ?? 0),
-			);
+				// Filter out fully booked schedules (bookedSlots >= maxSlots)
+				const available = schedules.filter(
+					(s: any) => (s.bookedSlots ?? 0) < (s.maxSlots ?? 0),
+				);
 
-			scheduleLogger.info(`Retrieved ${available.length} available schedules`);
-			// Return an array to match frontend expectations
-			res.status(200).json(available);
-		} catch (error) {
-			scheduleLogger.error(`Error getting available schedules: ${error}`);
-			res.status(500).json({ error: "Internal server error" });
-		}
-	};
+				scheduleLogger.info(`Retrieved ${available.length} available schedules`);
+				// Return an array to match frontend expectations
+				res.status(200).json(available);
+			} catch (error) {
+				scheduleLogger.error(`Error getting available schedules: ${error}`);
+				res.status(500).json({ error: "Internal server error" });
+			}
+		},
+	);
 
 	return {
 		getById,

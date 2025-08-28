@@ -58,8 +58,8 @@ model Appointment {
   studentId        String            @db.ObjectId
   counselor        User              @relation("CounselorAppointments", fields: [counselorId], references: [id])
   counselorId      String            @db.ObjectId
-  schedule         Schedule          @relation(fields: [scheduleId], references: [id])
-  scheduleId       String            @db.ObjectId
+  schedule         Schedule?         @relation(fields: [scheduleId], references: [id])
+  scheduleId       String?           @db.ObjectId
   title            String?           // Subject/title of the appointment
   description      String?           // Student's description of what they want to discuss
   appointmentType  AppointmentType   @default(consultation)

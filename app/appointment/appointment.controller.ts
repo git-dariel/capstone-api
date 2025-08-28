@@ -258,16 +258,17 @@ export const controller = (prisma: PrismaClient) => {
 			description,
 			appointmentType,
 			requestedDate,
+			status,
 			priority,
 			location,
 			duration,
 			attachments,
 		} = req.body;
 
-		if (!studentId || !counselorId || !scheduleId || !requestedDate) {
+		if (!studentId || !counselorId || !requestedDate) {
 			appointmentLogger.error("Missing required fields");
 			res.status(400).json({
-				error: "Student ID, Counselor ID, Schedule ID, and Requested Date are required",
+				error: "Student ID, Counselor ID, and Requested Date are required",
 			});
 			return;
 		}
@@ -305,37 +306,40 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Verify schedule exists and is available
-			const schedule = await prisma.schedule.findFirst({
-				where: {
-					id: scheduleId,
-					counselorId,
-					status: "available",
-					isDeleted: false,
-				},
-			});
-
-			if (!schedule) {
-				appointmentLogger.error(`Schedule not available: ${scheduleId}`);
-				res.status(404).json({ error: "Schedule not found or not available" });
-				return;
-			}
-
-			// Check if schedule has available slots
-			if (schedule.bookedSlots >= schedule.maxSlots) {
-				appointmentLogger.error(`Schedule is fully booked: ${scheduleId}`);
-				res.status(400).json({ error: "Schedule is fully booked" });
-				return;
-			}
-
-			// Check if requested date is within schedule time range
-			const requestDate = new Date(requestedDate);
-			if (requestDate < schedule.startTime || requestDate > schedule.endTime) {
-				appointmentLogger.error(`Requested date outside schedule range`);
-				res.status(400).json({
-					error: "Requested date must be within the schedule time range",
+			// Verify schedule exists and is available (only if scheduleId is provided)
+			let schedule = null;
+			if (scheduleId) {
+				schedule = await prisma.schedule.findFirst({
+					where: {
+						id: scheduleId,
+						counselorId,
+						status: "available",
+						isDeleted: false,
+					},
 				});
-				return;
+
+				if (!schedule) {
+					appointmentLogger.error(`Schedule not available: ${scheduleId}`);
+					res.status(404).json({ error: "Schedule not found or not available" });
+					return;
+				}
+
+				// Check if schedule has available slots
+				if (schedule.bookedSlots >= schedule.maxSlots) {
+					appointmentLogger.error(`Schedule is fully booked: ${scheduleId}`);
+					res.status(400).json({ error: "Schedule is fully booked" });
+					return;
+				}
+
+				// Check if requested date is within schedule time range
+				const requestDate = new Date(requestedDate);
+				if (requestDate < schedule.startTime || requestDate > schedule.endTime) {
+					appointmentLogger.error(`Requested date outside schedule range`);
+					res.status(400).json({
+						error: "Requested date must be within the schedule time range",
+					});
+					return;
+				}
 			}
 
 			const result = await prisma.$transaction(async (tx) => {
@@ -344,13 +348,14 @@ export const controller = (prisma: PrismaClient) => {
 					data: {
 						studentId,
 						counselorId,
-						scheduleId,
+						...(scheduleId && { scheduleId }),
 						title,
 						description,
 						appointmentType: appointmentType || "consultation",
 						requestedDate: new Date(requestedDate),
+						status: status || "pending", // Use provided status or default to pending
 						priority: priority || "normal",
-						location: location || schedule.location,
+						location: location || schedule?.location,
 						duration: duration || 60,
 						attachments: attachments || [],
 					},
@@ -369,19 +374,21 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				});
 
-				// Update schedule booked slots
-				await tx.schedule.update({
-					where: { id: scheduleId },
-					data: {
-						bookedSlots: {
-							increment: 1,
+				// Update schedule booked slots (only if scheduleId is provided)
+				if (scheduleId && schedule) {
+					await tx.schedule.update({
+						where: { id: scheduleId },
+						data: {
+							bookedSlots: {
+								increment: 1,
+							},
+							// If fully booked, change status
+							...(schedule.bookedSlots + 1 >= schedule.maxSlots && {
+								status: "booked",
+							}),
 						},
-						// If fully booked, change status
-						...(schedule.bookedSlots + 1 >= schedule.maxSlots && {
-							status: "booked",
-						}),
-					},
-				});
+					});
+				}
 
 				return appointment;
 			});
@@ -453,9 +460,13 @@ export const controller = (prisma: PrismaClient) => {
 				// Handle status change logic
 				if (status && status !== existingAppointment.status) {
 					// If cancelling or marking as no_show, free up the schedule slot
+					// This should work for any active appointment status (pending, confirmed)
+					// Only if the appointment has a scheduleId
 					if (
 						(status === "cancelled" || status === "no_show") &&
-						existingAppointment.status === "confirmed"
+						(existingAppointment.status === "pending" ||
+							existingAppointment.status === "confirmed") &&
+						existingAppointment.scheduleId
 					) {
 						await tx.schedule.update({
 							where: { id: existingAppointment.scheduleId },
@@ -540,8 +551,13 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			await prisma.$transaction(async (tx) => {
-				// Free up schedule slot if appointment was confirmed
-				if (existingAppointment.status === "confirmed") {
+				// Free up schedule slot if appointment was active (pending or confirmed)
+				// Only if the appointment has a scheduleId
+				if (
+					(existingAppointment.status === "pending" ||
+						existingAppointment.status === "confirmed") &&
+					existingAppointment.scheduleId
+				) {
 					await tx.schedule.update({
 						where: { id: existingAppointment.scheduleId },
 						data: {
