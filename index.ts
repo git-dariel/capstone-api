@@ -28,6 +28,8 @@ const suicide = require("./app/suicide")(prisma);
 const metrics = require("./app/metrics")(prisma);
 const retakeRequest = require("./app/retake-request")(prisma);
 const message = require("./app/message")(prisma);
+const appointment = require("./app/appointment")(prisma);
+const schedule = require("./app/schedule")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -111,6 +113,8 @@ app.use(config.baseApiPath, suicide);
 app.use(config.baseApiPath, metrics);
 app.use(config.baseApiPath, retakeRequest);
 app.use(config.baseApiPath, message);
+app.use(config.baseApiPath, appointment);
+app.use(config.baseApiPath, schedule);
 
 server.listen(config.port, async () => {
 	await connectDb();

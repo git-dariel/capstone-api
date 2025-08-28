@@ -32,6 +32,10 @@ model User {
   reviewedRequests      RetakeRequest[]        @relation("ReviewedRequests")
   sentMessages          Message[]              @relation("SentMessages")
   receivedMessages      Message[]              @relation("ReceivedMessages")
+  // Appointment system relations
+  counselorSchedules    Schedule[]             @relation("CounselorSchedules")
+  studentAppointments   Appointment[]          @relation("StudentAppointments")
+  counselorAppointments Appointment[]          @relation("CounselorAppointments")
   isDeleted             Boolean                @default(false)
   lastLogin             DateTime?
   loginMethod           String?

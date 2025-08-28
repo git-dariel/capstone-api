@@ -89,8 +89,17 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	});
 
-	const getAll = async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const { page = 1, limit = 10, sort, fields, query, order = "desc", userId } = req.query;
+	const getAll = requireAnyRole(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const {
+			page = 1,
+			limit = 10,
+			sort,
+			fields,
+			query,
+			order = "desc",
+			userId,
+			type,
+		} = req.query;
 		const userRole = req.role;
 		const requestingUserId = req.userId;
 
@@ -118,6 +127,12 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		if (type && !["student", "guidance"].includes(String(type))) {
+			userLogger.error(`Invalid user type filter: ${type}`);
+			res.status(400).json({ error: "Type must be either 'student' or 'guidance'" });
+			return;
+		}
+
 		if (sort) {
 			if (typeof sort === "string" && sort.startsWith("{")) {
 				try {
@@ -135,12 +150,13 @@ export const controller = (prisma: PrismaClient) => {
 		const skip = (Number(page) - 1) * Number(limit);
 
 		userLogger.info(
-			`${config.SUCCESS.USER.GETTING_ALL_USERS}, page: ${page}, limit: ${limit}, query: ${query}, order: ${order}, requestingUser: ${requestingUserId}, role: ${userRole}`,
+			`${config.SUCCESS.USER.GETTING_ALL_USERS}, page: ${page}, limit: ${limit}, query: ${query}, type: ${type}, order: ${order}, requestingUser: ${requestingUserId}, role: ${userRole}`,
 		);
 
 		try {
 			const whereClause: Prisma.UserWhereInput = {
 				isDeleted: false,
+				...(type && { type: String(type) as any }), // Filter by user type (student, guidance)
 				...(query
 					? {
 							OR: [
@@ -161,8 +177,14 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Role-based access control
 			if (userRole === Role.user) {
-				// Regular users can only see their own data
-				whereClause.id = requestingUserId;
+				// Regular users can see their own data OR guidance counselors (for booking appointments)
+				if (type === "guidance") {
+					// Allow students to view guidance counselors for appointment booking
+					// The type filter is already applied above, so no additional restriction needed
+				} else {
+					// For other queries, users can only see their own data
+					whereClause.id = requestingUserId;
+				}
 			} else if (userRole === Role.admin || userRole === Role.super_admin) {
 				// Admins can see all users, but can also filter by specific userId if provided
 				if (userId) {
@@ -227,7 +249,7 @@ export const controller = (prisma: PrismaClient) => {
 			userLogger.error(`${config.ERROR.USER.ERROR_GETTING_USER}: ${error}`);
 			res.status(500).json({ error: config.ERROR.USER.INTERNAL_SERVER_ERROR });
 		}
-	};
+	});
 
 	const update = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
