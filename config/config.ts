@@ -27,13 +27,13 @@ export const config = {
 			wildCardOrigin(origin, callback, "http://localhost:5173");
 		},
 		DEV_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://pup-bloom.vercel.app");
+			wildCardOrigin(origin, callback, "https://pup-guidance-center.vercel.app");
 		},
 		TEST_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://pup-bloom.vercel.app");
+			wildCardOrigin(origin, callback, "https://pup-guidance-center.vercel.app");
 		},
 		PROD_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://pup-bloom.vercel.app");
+			wildCardOrigin(origin, callback, "https://pup-guidance-center.vercel.app");
 		},
 		LOCAL_API: function (origin: string, callback: CallbackFunction) {
 			wildCardOrigin(origin, callback, "http://localhost:5000");
