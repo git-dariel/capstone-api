@@ -258,10 +258,94 @@ export const controller = (prisma: PrismaClient) => {
 		_next: NextFunction,
 	): Promise<void> => {
 		try {
-			metricsLogger.info("📊 Generating chart data for frontend");
+			metricsLogger.info("📊 Generating chart data for frontend dashboard");
 
-			// Generate chart-ready data
-			const chartData = await generateChartData();
+			// Get dashboard chart data using real metrics
+			const metrics = METRIC(prisma);
+
+			// Get assessment counts for breakdown
+			const [anxietyTotal, depressionTotal, stressTotal] = await Promise.all([
+				metrics.Anxiety.totalAnxiety(),
+				metrics.Depression.totalDepression(),
+				metrics.Stress.totalStress(),
+			]);
+
+			// Get specialized dashboard data
+			const [trendsData, severityData, monthlyData] = await Promise.all([
+				metrics.Dashboard.getRecentTrends(7), // Last 7 days
+				metrics.Dashboard.getSeverityDistribution(),
+				metrics.Dashboard.getMonthlyStats(6), // Last 6 months
+			]);
+
+			// Get program-wise breakdowns for additional insights
+			const [anxietyByProgram, depressionByProgram, stressByProgram] = await Promise.all([
+				metrics.Anxiety.totalAnxietyByProgram(),
+				metrics.Depression.totalDepressionByProgram(),
+				metrics.Stress.totalStressByProgram(),
+			]);
+
+			// Format data for charts
+			const chartData = {
+				// Recent trends for line chart (last 7 days)
+				trendsData,
+
+				// Assessment breakdown for donut chart
+				assessmentBreakdown: [
+					{
+						name: "Anxiety",
+						value: anxietyTotal,
+						color: "#f59e0b",
+						percentage:
+							Math.round(
+								(anxietyTotal / (anxietyTotal + depressionTotal + stressTotal)) *
+									100,
+							) || 0,
+					},
+					{
+						name: "Depression",
+						value: depressionTotal,
+						color: "#8b5cf6",
+						percentage:
+							Math.round(
+								(depressionTotal / (anxietyTotal + depressionTotal + stressTotal)) *
+									100,
+							) || 0,
+					},
+					{
+						name: "Stress",
+						value: stressTotal,
+						color: "#ef4444",
+						percentage:
+							Math.round(
+								(stressTotal / (anxietyTotal + depressionTotal + stressTotal)) *
+									100,
+							) || 0,
+					},
+				],
+
+				// Severity distribution for bar chart
+				severityData,
+
+				// Monthly trends for additional line chart
+				monthlyTrends: monthlyData,
+
+				// Program distribution for insights
+				programDistribution: anxietyByProgram.map((item) => ({
+					program: item.program,
+					anxiety: item.count,
+					depression:
+						depressionByProgram.find((d) => d.program === item.program)?.count || 0,
+					stress: stressByProgram.find((s) => s.program === item.program)?.count || 0,
+				})),
+
+				// Summary stats
+				totalStats: {
+					anxiety: anxietyTotal,
+					depression: depressionTotal,
+					stress: stressTotal,
+					total: anxietyTotal + depressionTotal + stressTotal,
+				},
+			};
 
 			res.status(200).json({
 				success: true,

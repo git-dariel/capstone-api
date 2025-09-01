@@ -1171,5 +1171,259 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				}));
 			},
 		},
+		Dashboard: {
+			getRecentTrends: async (days: number = 30) => {
+				const startDate = new Date();
+				startDate.setDate(startDate.getDate() - days);
+
+				const dateFilter = {
+					assessmentDate: {
+						gte: startDate,
+					},
+				};
+
+				// Get assessments grouped by day
+				const [anxietyByDay, depressionByDay, stressByDay] = await Promise.all([
+					prisma.anxietyAssessment.groupBy({
+						by: ["assessmentDate"],
+						where: {
+							isDeleted: false,
+							...dateFilter,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							id: true,
+						},
+						orderBy: {
+							assessmentDate: "asc",
+						},
+					}),
+					prisma.depressionAssessment.groupBy({
+						by: ["assessmentDate"],
+						where: {
+							isDeleted: false,
+							...dateFilter,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							id: true,
+						},
+						orderBy: {
+							assessmentDate: "asc",
+						},
+					}),
+					prisma.stressAssessment.groupBy({
+						by: ["assessmentDate"],
+						where: {
+							isDeleted: false,
+							...dateFilter,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							id: true,
+						},
+						orderBy: {
+							assessmentDate: "asc",
+						},
+					}),
+				]);
+
+				// Generate last 7 days array
+				const last7Days = [];
+				for (let i = 6; i >= 0; i--) {
+					const date = new Date();
+					date.setDate(date.getDate() - i);
+					const dateStr = date.toISOString().split("T")[0];
+					last7Days.push(dateStr);
+				}
+
+				// Map data to consistent format
+				const trendsData = last7Days.map((dateStr) => {
+					const anxiety =
+						anxietyByDay.find(
+							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
+						)?._count.id || 0;
+
+					const depression =
+						depressionByDay.find(
+							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
+						)?._count.id || 0;
+
+					const stress =
+						stressByDay.find(
+							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
+						)?._count.id || 0;
+
+					return {
+						date: new Date(dateStr).toLocaleDateString("en-US", {
+							month: "short",
+							day: "numeric",
+						}),
+						anxiety,
+						depression,
+						stress,
+					};
+				});
+
+				return trendsData;
+			},
+
+			getSeverityDistribution: async () => {
+				const [anxietySeverity, depressionSeverity, stressSeverity] = await Promise.all([
+					prisma.anxietyAssessment.groupBy({
+						by: ["severityLevel"],
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							severityLevel: true,
+						},
+					}),
+					prisma.depressionAssessment.groupBy({
+						by: ["severityLevel"],
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							severityLevel: true,
+						},
+					}),
+					prisma.stressAssessment.groupBy({
+						by: ["severityLevel"],
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							severityLevel: true,
+						},
+					}),
+				]);
+
+				// Map severity levels to standardized format
+				const severityMap: Record<
+					string,
+					{ anxiety: number; depression: number; stress: number }
+				> = {
+					Minimal: { anxiety: 0, depression: 0, stress: 0 },
+					Mild: { anxiety: 0, depression: 0, stress: 0 },
+					Moderate: { anxiety: 0, depression: 0, stress: 0 },
+					Severe: { anxiety: 0, depression: 0, stress: 0 },
+				};
+
+				// Map anxiety severity data
+				anxietySeverity.forEach((item) => {
+					const level = item.severityLevel || "Unknown";
+					if (level in severityMap) {
+						severityMap[level].anxiety = item._count.severityLevel;
+					}
+				});
+
+				// Map depression severity data
+				depressionSeverity.forEach((item) => {
+					const level = item.severityLevel || "Unknown";
+					if (level in severityMap) {
+						severityMap[level].depression = item._count.severityLevel;
+					}
+				});
+
+				// Map stress severity data
+				stressSeverity.forEach((item) => {
+					const level = item.severityLevel || "Unknown";
+					if (level in severityMap) {
+						severityMap[level].stress = item._count.severityLevel;
+					}
+				});
+
+				// Convert to array format
+				return Object.entries(severityMap).map(([severity, counts]) => ({
+					severity,
+					...counts,
+				}));
+			},
+
+			getMonthlyStats: async (months: number = 6) => {
+				const startDate = new Date();
+				startDate.setMonth(startDate.getMonth() - months);
+
+				const [anxietyMonthly, depressionMonthly, stressMonthly] = await Promise.all([
+					prisma.anxietyAssessment.findMany({
+						where: {
+							isDeleted: false,
+							assessmentDate: { gte: startDate },
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						select: {
+							assessmentDate: true,
+						},
+					}),
+					prisma.depressionAssessment.findMany({
+						where: {
+							isDeleted: false,
+							assessmentDate: { gte: startDate },
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						select: {
+							assessmentDate: true,
+						},
+					}),
+					prisma.stressAssessment.findMany({
+						where: {
+							isDeleted: false,
+							assessmentDate: { gte: startDate },
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						select: {
+							assessmentDate: true,
+						},
+					}),
+				]);
+
+				// Generate last 6 months array
+				const monthsArray = [];
+				for (let i = months - 1; i >= 0; i--) {
+					const date = new Date();
+					date.setMonth(date.getMonth() - i);
+					monthsArray.push({
+						year: date.getFullYear(),
+						month: date.getMonth() + 1,
+						label: date.toLocaleDateString("en-US", {
+							month: "short",
+							year: "numeric",
+						}),
+					});
+				}
+
+				// Map data to consistent format
+				return monthsArray.map((monthInfo) => {
+					const anxiety = anxietyMonthly.filter(
+						(item) =>
+							item.assessmentDate.getFullYear() === monthInfo.year &&
+							item.assessmentDate.getMonth() + 1 === monthInfo.month,
+					).length;
+
+					const depression = depressionMonthly.filter(
+						(item) =>
+							item.assessmentDate.getFullYear() === monthInfo.year &&
+							item.assessmentDate.getMonth() + 1 === monthInfo.month,
+					).length;
+
+					const stress = stressMonthly.filter(
+						(item) =>
+							item.assessmentDate.getFullYear() === monthInfo.year &&
+							item.assessmentDate.getMonth() + 1 === monthInfo.month,
+					).length;
+
+					return {
+						month: monthInfo.label,
+						anxiety,
+						depression,
+						stress,
+					};
+				});
+			},
+		},
 	};
 };
