@@ -42,6 +42,9 @@ export const controller = (prisma: PrismaClient) => {
 				where: {
 					id,
 					isDeleted: false,
+					student: {
+						isDeleted: false,
+					},
 				},
 			};
 
@@ -68,6 +71,15 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				query.select = fieldSelections;
+			} else {
+				// Default include student with person when no specific fields are requested
+				query.include = {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				};
 			}
 
 			const consent = await prisma.consent.findFirst(query);
@@ -109,6 +121,9 @@ export const controller = (prisma: PrismaClient) => {
 				where: {
 					studentId,
 					isDeleted: false,
+					student: {
+						isDeleted: false,
+					},
 				},
 			};
 
@@ -135,6 +150,15 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				query.select = fieldSelections;
+			} else {
+				// Default include student with person when no specific fields are requested
+				query.include = {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				};
 			}
 
 			const consent = await prisma.consent.findFirst(query);
@@ -189,6 +213,9 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const whereClause: Prisma.ConsentWhereInput = {
 				isDeleted: false,
+				student: {
+					isDeleted: false,
+				},
 				...(query
 					? {
 							OR: [
@@ -236,6 +263,15 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				findManyQuery.select = fieldSelections;
+			} else {
+				// Default include student with person when no specific fields are requested
+				findManyQuery.include = {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				};
 			}
 
 			const [consents, total] = await Promise.all([
