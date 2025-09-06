@@ -10,6 +10,7 @@ import verifyToken from "./middleware/verifyToken";
 import verifyRole from "./middleware/verifyRole";
 import { connectDb, getPrismaClient } from "./config/database";
 import { corsMiddleware } from "./config/cors.config";
+import { time } from "console";
 
 const app = express();
 const prisma = getPrismaClient();
@@ -83,6 +84,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 if (process.env.NODE_ENV !== "production") {
 	app.use(`${config.baseApiPath}/docs`, swaggerUi.serve, swaggerUi.setup(openApiSpecs()));
 }
+
+app.get(`${config.baseApiPath}/`, (_req: Request, res: Response) => {
+	res.json({ message: "Welcome to the API.", version: "1.0.0", time: new Date().toISOString() });
+});
 
 // Auth routes should be public (login/register)
 app.use(config.baseApiPath, auth);
