@@ -75,6 +75,76 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getByStudentId = async (req: Request, res: Response, _next: NextFunction) => {
+		const { studentId } = req.params;
+		const { fields } = req.query;
+
+		if (!studentId) {
+			inventoryLogger.error("Student ID is required");
+			res.status(400).json({ error: "Student ID is required" });
+			return;
+		}
+
+		if (fields && typeof fields !== "string") {
+			inventoryLogger.error(`Invalid fields: ${fields}`);
+			res.status(400).json({ error: config.ERROR.INVENTORY.POPULATE_MUST_BE_STRING });
+			return;
+		}
+
+		inventoryLogger.info(`Getting inventory by student ID: ${studentId}`);
+
+		try {
+			const query: Prisma.IndividualInventoryFindFirstArgs = {
+				where: {
+					studentId,
+					isDeleted: false,
+					student: {
+						isDeleted: false,
+					},
+				},
+			};
+
+			if (fields) {
+				const fieldSelections = fields.split(",").reduce(
+					(acc, field) => {
+						const parts = field.trim().split(".");
+						if (parts.length > 1) {
+							const [parent, ...children] = parts;
+							acc[parent] = acc[parent] || { select: {} };
+
+							let current = acc[parent].select;
+							for (let i = 0; i < children.length - 1; i++) {
+								current[children[i]] = current[children[i]] || { select: {} };
+								current = current[children[i]].select;
+							}
+							current[children[children.length - 1]] = true;
+						} else {
+							acc[parts[0]] = true;
+						}
+						return acc;
+					},
+					{ id: true } as Record<string, any>,
+				);
+
+				query.select = fieldSelections;
+			}
+
+			const inventory = await prisma.individualInventory.findFirst(query);
+
+			if (!inventory) {
+				inventoryLogger.info(`No inventory found for student ID: ${studentId}`);
+				res.status(404).json({ error: "Individual inventory not found for this student" });
+				return;
+			}
+
+			inventoryLogger.info(`Inventory retrieved for student: ${inventory.id}`);
+			res.status(200).json(inventory);
+		} catch (error) {
+			inventoryLogger.error(`Error getting inventory by student ID: ${error}`);
+			res.status(500).json({ error: config.ERROR.INVENTORY.INTERNAL_SERVER_ERROR });
+		}
+	};
+
 	const getAll = async (req: Request, res: Response, _next: NextFunction) => {
 		const { page = 1, limit = 10, sort, fields, query, order = "desc" } = req.query;
 
@@ -337,24 +407,74 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Sanitize data to handle empty strings for DateTime fields
+			const sanitizedData = {
+				height,
+				weight,
+				coplexion,
+				person_to_be_contacted_in_case_of_accident_or_illness,
+				educational_background: {
+					...educational_background,
+					dates_of_attendance: educational_background?.dates_of_attendance || new Date(),
+				},
+				nature_of_schooling,
+				home_and_family_background,
+				health: health
+					? {
+							...health,
+							psychological: health.psychological
+								? {
+										...health.psychological,
+										when:
+											health.psychological.when === ""
+												? null
+												: health.psychological.when,
+									}
+								: health.psychological,
+						}
+					: health,
+				interest_and_hobbies,
+				// Optional composite: test_results
+				...(test_results &&
+					(test_results.name_of_test ||
+						test_results.rs ||
+						test_results.pr ||
+						test_results.description ||
+						test_results.date) && {
+						test_results: {
+							set: {
+								...test_results,
+								date: test_results.date === "" ? null : (test_results.date ?? null),
+							},
+						},
+					}),
+				// Optional composite: significant_notes_councilor_only
+				...(significant_notes_councilor_only &&
+					(significant_notes_councilor_only.incident ||
+						significant_notes_councilor_only.remarks ||
+						significant_notes_councilor_only.date) && {
+						significant_notes_councilor_only: {
+							set: {
+								...significant_notes_councilor_only,
+								date:
+									significant_notes_councilor_only.date === ""
+										? null
+										: (significant_notes_councilor_only.date ?? null),
+							},
+						},
+					}),
+				sleep_duration,
+				stress_level,
+				academic_performance_change,
+				student_signature,
+			};
+
 			const inventory = await prisma.individualInventory.create({
 				data: {
-					studentId,
-					height,
-					weight,
-					coplexion,
-					person_to_be_contacted_in_case_of_accident_or_illness,
-					educational_background,
-					nature_of_schooling,
-					home_and_family_background,
-					health,
-					interest_and_hobbies,
-					test_results,
-					significant_notes_councilor_only,
-					sleep_duration,
-					stress_level,
-					academic_performance_change,
-					student_signature,
+					...sanitizedData,
+					student: {
+						connect: { id: studentId },
+					},
 				},
 				include: {
 					student: {
@@ -542,13 +662,60 @@ export const controller = (prisma: PrismaClient) => {
 					...(person_to_be_contacted_in_case_of_accident_or_illness && {
 						person_to_be_contacted_in_case_of_accident_or_illness,
 					}),
-					...(educational_background && { educational_background }),
+					...(educational_background && {
+						educational_background: {
+							...educational_background,
+							dates_of_attendance:
+								educational_background.dates_of_attendance || new Date(),
+						},
+					}),
 					...(nature_of_schooling && { nature_of_schooling }),
 					...(home_and_family_background && { home_and_family_background }),
-					...(health && { health }),
+					...(health && {
+						health: {
+							...health,
+							psychological: health.psychological
+								? {
+										...health.psychological,
+										when:
+											health.psychological.when === ""
+												? null
+												: health.psychological.when,
+									}
+								: health.psychological,
+						},
+					}),
 					...(interest_and_hobbies && { interest_and_hobbies }),
-					...(test_results && { test_results }),
-					...(significant_notes_councilor_only && { significant_notes_councilor_only }),
+					...(test_results &&
+						(test_results.name_of_test ||
+							test_results.rs ||
+							test_results.pr ||
+							test_results.description ||
+							test_results.date) && {
+							test_results: {
+								set: {
+									...test_results,
+									date:
+										test_results.date === ""
+											? null
+											: (test_results.date ?? null),
+								},
+							},
+						}),
+					...(significant_notes_councilor_only &&
+						(significant_notes_councilor_only.incident ||
+							significant_notes_councilor_only.remarks ||
+							significant_notes_councilor_only.date) && {
+							significant_notes_councilor_only: {
+								set: {
+									...significant_notes_councilor_only,
+									date:
+										significant_notes_councilor_only.date === ""
+											? null
+											: (significant_notes_councilor_only.date ?? null),
+								},
+							},
+						}),
 					...(student_signature && { student_signature }),
 					...(sleep_duration && { sleep_duration }),
 					...(stress_level && { stress_level }),
@@ -812,6 +979,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	return {
 		getById,
+		getByStudentId,
 		getAll,
 		create,
 		update,

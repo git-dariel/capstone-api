@@ -144,14 +144,14 @@ type PersonToBeContacted {
   firstName    String
   lastName     String
   middleName   String?
-  address      PersonAddress
+  address      PersonAddress?
   relationship Relationship
 }
 
 type EducationBackground {
   level               Level
   school_graduation   String
-  school_address      PersonAddress
+  school_address      PersonAddress?
   status              SchoolStatus
   dates_of_attendance DateTime
   honors_received     String
@@ -200,34 +200,34 @@ type FamilyBackground {
   status                 ParentStatus
   educational_attainment EducationalAttainment
   occupation             String
-  employer               Employer
+  employer               Employer?
 }
 
 type Employer {
-  firstName  String
-  lastName   String
+  firstName  String?
+  lastName   String?
   middleName String?
-  address    PersonAddress
+  address    PersonAddress?
 }
 
 type Physical {
-  your_vision           Boolean
-  your_hearing          Boolean
-  your_speech           Boolean
-  your_general_health   Boolean
-  if_yes_please_specify String
+  your_vision           Boolean?
+  your_hearing          Boolean?
+  your_speech           Boolean?
+  your_general_health   Boolean?
+  if_yes_please_specify String?
 }
 
 type Psychological {
   consulted Doctors
   status    PleaseCheck
-  when      DateTime
-  for_what  String
+  when      DateTime?
+  for_what  String?
 }
 
 type Health {
-  physical      Physical
-  psychological Psychological
+  physical      Physical?
+  psychological Psychological?
 }
 
 type InterestAndHobbies {
@@ -240,11 +240,11 @@ type InterestAndHobbies {
 }
 
 type TestResults {
-  date         DateTime
-  name_of_test String
-  rs           String
-  pr           String
-  description  String
+  date         DateTime?
+  name_of_test String?
+  rs           String?
+  pr           String?
+  description  String?
 }
 
 type SignificantNotesGuidanceOnly {
@@ -264,9 +264,9 @@ model IndividualInventory {
   educational_background                                EducationBackground
   nature_of_schooling                                   NatureOfSchooling
   home_and_family_background                            HomeAndFamilyBackground
-  health                                                Health
+  health                                                Health?
   interest_and_hobbies                                  InterestAndHobbies
-  test_results                                          TestResults
+  test_results                                          TestResults?
   significant_notes_councilor_only                      SignificantNotesGuidanceOnly?
   sleep_duration                                        String
   stress_level                                          StressLevel

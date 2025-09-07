@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getByStudentId(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -66,6 +67,60 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.get("/:id", controller.getById);
+
+	/**
+	 * @openapi
+	 * /api/inventory/student/{studentId}:
+	 *   get:
+	 *     summary: Get inventory by student ID
+	 *     description: Get inventory data for a specific student with optional field selection
+	 *     tags: [Inventory]
+	 *     parameters:
+	 *       - in: path
+	 *         name: studentId
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Student ID
+	 *       - in: query
+	 *         name: fields
+	 *         schema:
+	 *           type: string
+	 *         description: Comma-separated list of fields to include (supports dot notation for nested fields like "student.person.firstName")
+	 *         example: "id,height,weight,student.studentNumber,student.person.firstName"
+	 *     responses:
+	 *       200:
+	 *         description: Returns inventory data for the student
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: '#/components/schemas/IndividualInventory'
+	 *       400:
+	 *         description: Missing student ID or invalid fields parameter
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Student ID is required"
+	 *                     - "Populate parameter must be a comma-separated string"
+	 *       404:
+	 *         description: Inventory not found for this student
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Individual inventory not found for this student"
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.get("/student/:studentId", controller.getByStudentId);
 
 	/**
 	 * @openapi
