@@ -14,6 +14,9 @@ export interface StudentData {
 	sleepDuration: number;
 	stressLevel: string;
 	academicPerformanceChange?: string;
+	parentsMaritalRelationship?: string;
+	whoFinancesYourSchooling?: string;
+	parentsTotalMonthlyIncome?: string;
 }
 
 export interface PredictionResult {
@@ -99,7 +102,16 @@ export class MentalHealthPredictor {
 	private labelEncoder: { [key: string]: number } = {};
 	private labelDecoder: { [key: number]: string } = {};
 	private confusionMatrix: ConfusionMatrix | null = null;
-	private featureNames = ["Gender", "Age", "Education Level", "Sleep Duration", "Stress Level"];
+	private featureNames = [
+		"Gender",
+		"Age",
+		"Education Level",
+		"Sleep Duration",
+		"Stress Level",
+		"Parents Marital Relationship",
+		"Who finances your schooling?",
+		"Parents Total Monthly Income",
+	];
 
 	constructor() {}
 
@@ -136,6 +148,9 @@ export class MentalHealthPredictor {
 				sleepDuration: Number(record["Sleep Duration (hrs)"]),
 				stressLevel: record["Stress Level"],
 				academicPerformanceChange: record["Academic Performance Change"],
+				parentsMaritalRelationship: record["Parents Marital Relationship"],
+				whoFinancesYourSchooling: record["Who finances your schooling?"],
+				parentsTotalMonthlyIncome: record["Parents Total Monthly Income"],
 			}));
 
 			console.log(`Loaded ${studentData.length} student records from CSV`);
@@ -474,7 +489,55 @@ export class MentalHealthPredictor {
 		const stressMap: { [key: string]: number } = { Low: 0, Medium: 1, High: 2 };
 		const stressEncoded = stressMap[student.stressLevel] ?? 1;
 
-		return [genderEncoded, student.age, educationEncoded, student.sleepDuration, stressEncoded];
+		// Parents marital relationship encoding
+		const maritalMap: { [key: string]: number } = {
+			single_parent: 0,
+			married_and_staying_together: 1,
+			married_but_separated: 2,
+			not_married_but_living_together: 3,
+			others: 4,
+		};
+		const maritalEncoded = maritalMap[student.parentsMaritalRelationship || "others"] ?? 4;
+
+		// Who finances schooling encoding
+		const financingMap: { [key: string]: number } = {
+			parents: 0,
+			spouse: 1,
+			relatives: 2,
+			brother: 3,
+			sister: 4,
+			scholarship: 5,
+			self_supporting: 6,
+		};
+		const financingEncoded = financingMap[student.whoFinancesYourSchooling || "parents"] ?? 0;
+
+		// Parents total income encoding (ordered by income level)
+		const incomeMap: { [key: string]: number } = {
+			below_five_thousand: 0,
+			five_thousand_to_ten_thousand: 1,
+			ten_thousand_to_fifteen_thousand: 2,
+			fifteen_thousand_to_twenty_thousand: 3,
+			twenty_thousand_to_twenty_five_thousand: 4,
+			twenty_five_thousand_to_thirty_thousand: 5,
+			thirty_thousand_to_thirty_five_thousand: 6,
+			thirty_five_thousand_to_forty_thousand: 7,
+			forty_thousand_to_forty_five_thousand: 8,
+			forty_five_thousand_to_fifty_thousand: 9,
+			above_fifty_thousand: 10,
+		};
+		const incomeEncoded =
+			incomeMap[student.parentsTotalMonthlyIncome || "below_five_thousand"] ?? 0;
+
+		return [
+			genderEncoded,
+			student.age,
+			educationEncoded,
+			student.sleepDuration,
+			stressEncoded,
+			maritalEncoded,
+			financingEncoded,
+			incomeEncoded,
+		];
 	}
 
 	/**
@@ -487,6 +550,9 @@ export class MentalHealthPredictor {
 			educationLevel: student.educationLevel || "BA",
 			sleepDuration: student.sleepDuration || 7,
 			stressLevel: student.stressLevel || "Medium",
+			parentsMaritalRelationship: student.parentsMaritalRelationship || "others",
+			whoFinancesYourSchooling: student.whoFinancesYourSchooling || "parents",
+			parentsTotalMonthlyIncome: student.parentsTotalMonthlyIncome || "below_five_thousand",
 		};
 	}
 
@@ -507,7 +573,21 @@ export class MentalHealthPredictor {
 			let distance = 0;
 			for (let i = 0; i < inputFeatures.length; i++) {
 				const diff = Math.abs(inputFeatures[i] - trainingFeatures[i]);
-				const normalizedDiff = i === 1 ? diff / 30 : i === 3 ? diff / 10 : diff / 3; // Normalize by feature range
+				// Normalize by feature range: age(30), sleep(10), others(3-10)
+				let normalizedDiff;
+				if (i === 1) {
+					// Age
+					normalizedDiff = diff / 30;
+				} else if (i === 3) {
+					// Sleep duration
+					normalizedDiff = diff / 10;
+				} else if (i === 7) {
+					// Income (0-10 range)
+					normalizedDiff = diff / 10;
+				} else {
+					// Other categorical features
+					normalizedDiff = diff / 5;
+				}
 				distance += normalizedDiff;
 			}
 

@@ -7,7 +7,6 @@ interface IController {
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
-	predictMentalHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -453,107 +452,6 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       - The isDeleted field is set to true
 	 */
 	routes.put("/:id", controller.remove);
-
-	/**
-	 * @openapi
-	 * /api/consent/predict/{studentId}:
-	 *   post:
-	 *     summary: Predict mental health risk for a student
-	 *     description: Use machine learning algorithms (Decision Tree and Random Forest) to predict mental health risk based on student data
-	 *     tags: [Consent]
-	 *     parameters:
-	 *       - in: path
-	 *         name: studentId
-	 *         required: true
-	 *         schema:
-	 *           type: string
-	 *         description: The ID of the student for mental health prediction
-	 *     requestBody:
-	 *       required: false
-	 *       content:
-	 *         application/json:
-	 *           schema:
-	 *             type: object
-	 *             properties:
-	 *               gender:
-	 *                 type: string
-	 *                 enum: [Male, Female, Other]
-	 *                 description: Student's gender
-	 *               age:
-	 *                 type: number
-	 *                 minimum: 10
-	 *                 maximum: 100
-	 *                 description: Student's age
-	 *               educationLevel:
-	 *                 type: string
-	 *                 enum: [Class 8, Class 9, Class 10, Class 11, Class 12, BA, BSc, BTech, MA, MSc, MTech]
-	 *                 description: Student's education level
-	 *               sleepDuration:
-	 *                 type: number
-	 *                 minimum: 0
-	 *                 maximum: 24
-	 *                 description: Average sleep duration in hours
-	 *               stressLevel:
-	 *                 type: string
-	 *                 enum: [Low, Medium, High]
-	 *                 description: Student's stress level
-	 *           example:
-	 *             gender: "Female"
-	 *             age: 20
-	 *             educationLevel: "BTech"
-	 *             sleepDuration: 6.5
-	 *             stressLevel: "Medium"
-	 *     responses:
-	 *       200:
-	 *         description: Mental health prediction completed successfully
-	 *         content:
-	 *           application/json:
-	 *             schema:
-	 *               type: object
-	 *               properties:
-	 *                 message:
-	 *                   type: string
-	 *                 studentId:
-	 *                   type: string
-	 *                 prediction:
-	 *                   type: object
-	 *                   properties:
-	 *                     academicPerformanceOutlook:
-	 *                       type: string
-	 *                       enum: [Improved, Same, Declined]
-	 *                     confidence:
-	 *                       type: string
-	 *                       description: Prediction confidence percentage
-	 *                     modelAccuracy:
-	 *                       type: object
-	 *                       properties:
-	 *                         decisionTree:
-	 *                           type: string
-	 *                         randomForest:
-	 *                           type: string
-	 *                     riskFactors:
-	 *                       type: array
-	 *                       items:
-	 *                         type: string
-	 *                     inputData:
-	 *                       type: object
-	 *                     recommendations:
-	 *                       type: array
-	 *                       items:
-	 *                         type: string
-	 *       400:
-	 *         description: Invalid input data or missing student ID
-	 *       404:
-	 *         description: Student not found or consent not found
-	 *       500:
-	 *         description: Internal server error during prediction
-	 *     notes:
-	 *       - If optional body parameters are not provided, defaults will be used from student records
-	 *       - The prediction uses trained Decision Tree and Random Forest models
-	 *       - Model accuracy is calculated from training data split (80% train, 20% test)
-	 *       - Requires existing consent record for the student
-	 */
-	routes.post("/predict/:studentId", controller.predictMentalHealth);
 
 	route.use(path, routes);
 

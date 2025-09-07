@@ -31,6 +31,7 @@ const retakeRequest = require("./app/retake-request")(prisma);
 const message = require("./app/message")(prisma);
 const appointment = require("./app/appointment")(prisma);
 const schedule = require("./app/schedule")(prisma);
+const inventory = require("./app/inventory")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -120,6 +121,7 @@ app.use(config.baseApiPath, retakeRequest);
 app.use(config.baseApiPath, message);
 app.use(config.baseApiPath, appointment);
 app.use(config.baseApiPath, schedule);
+app.use(config.baseApiPath, inventory);
 
 server.listen(config.port, async () => {
 	await connectDb();
