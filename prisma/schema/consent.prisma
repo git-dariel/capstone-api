@@ -62,18 +62,6 @@ enum Services {
   referral_for_university
 }
 
-enum StressLevel {
-  low
-  medium
-  high
-}
-
-enum PerformanceChange {
-  same
-  improved
-  declined
-}
-
 type PresentConcerns {
   personal_growth                   LevelOfImportance
   depression                        LevelOfImportance
@@ -95,21 +83,18 @@ type PresentConcerns {
 }
 
 model Consent {
-  id                          String            @id @default(auto()) @map("_id") @db.ObjectId
-  student                     Student           @relation(fields: [studentId], references: [id])
-  studentId                   String            @unique @db.ObjectId
-  referred                    Referred          @default(self)
-  with_whom_do_you_live       Live              @default(guardians)
+  id                          String           @id @default(auto()) @map("_id") @db.ObjectId
+  student                     Student          @relation(fields: [studentId], references: [id])
+  studentId                   String           @unique @db.ObjectId
+  referred                    Referred         @default(self)
+  with_whom_do_you_live       Live             @default(guardians)
   financial_status            Financial
   what_brings_you_to_guidance String?
   physical_problem            PhysicalProblem
   physical_symptoms           PhysicalSymptoms
   concerns                    PresentConcerns
   services                    Services
-  sleep_duration              String
-  stress_level                StressLevel
-  academic_performance_change PerformanceChange
-  isDeleted                   Boolean           @default(false)
-  createdAt                   DateTime          @default(now())
-  updatedAt                   DateTime          @updatedAt
+  isDeleted                   Boolean          @default(false)
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
 }

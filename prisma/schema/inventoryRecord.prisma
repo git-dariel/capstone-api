@@ -1,0 +1,278 @@
+enum Relationship {
+  parent
+  child
+  sibling
+  spouse
+  granparent
+  cousin
+  partner
+  classmate
+}
+
+enum Level {
+  pre_elementary
+  elementary
+  high_school
+  vocational
+  college_if_any
+}
+
+enum SchoolStatus {
+  public
+  private
+}
+
+enum ParentStatus {
+  living
+  deceased
+}
+
+enum EducationalAttainment {
+  none
+  elementary
+  high_school
+  senior_high_school
+  bachelors_degree
+  vocational
+}
+
+enum ParentsMaritalRelationship {
+  single_parent
+  married_and_staying_together
+  married_but_separated
+  not_married_but_living_together
+  others
+}
+
+enum EmployedSiblingProviding {
+  family
+  your_studies
+  his__or_her_own_family
+}
+
+enum WhoFinancesYourSchooling {
+  parents
+  spouse
+  relatives
+  brother
+  sister
+  scholarship
+  self_supporting
+}
+
+enum ParentsTotalIncome {
+  below_five_thousand
+  five_thousand_to_ten_thousand
+  ten_thousand_to_fifteen_thousand
+  fifteen_thousand_to_twenty_thousand
+  twenty_thousand_to_twenty_five_thousand
+  twenty_five_thousand_to_thirty_thousand
+  thirty_thousand_to_thirty_five_thousand
+  thirty_five_thousand_to_forty_thousand
+  forty_thousand_to_forty_five_thousand
+  forty_five_thousand_to_fifty_thousand
+  above_fifty_thousand
+}
+
+enum PleaseCheck {
+  yes
+  no
+}
+
+enum NatureOfResidece {
+  family_home
+  relatives_home
+  bed_spacer
+  rented_apartment
+  house_of_married_brother_or_sister
+  dorm
+  shares_apartment_with_friends_or_relatives
+}
+
+enum Doctors {
+  psychiatrist
+  psychologist
+  councelor
+}
+
+enum AcademicHobbies {
+  match_club
+  debating_club
+  science_club
+  quizzers_club
+}
+
+enum Organizations {
+  athletics
+  dramatics
+  religous_organization
+  chess_club
+  glee_club
+  scouting
+  others
+}
+
+enum PositionInOrganization {
+  officer
+  member
+  others
+}
+
+enum StressLevel {
+  low
+  medium
+  high
+}
+
+enum PerformanceChange {
+  same
+  improved
+  declined
+}
+
+type PersonAddress {
+  houseNo  Int?
+  street   String?
+  province String?
+  city     String?
+  barangay String?
+  zipCode  Int?
+  country  String?
+}
+
+type PersonToBeContacted {
+  firstName    String
+  lastName     String
+  middleName   String?
+  address      PersonAddress?
+  relationship Relationship
+}
+
+type EducationBackground {
+  level               Level
+  school_graduation   String
+  school_address      PersonAddress?
+  status              SchoolStatus
+  dates_of_attendance DateTime
+  honors_received     String
+}
+
+type NatureOfSchooling {
+  continuous   Boolean
+  interrupted  Boolean
+  exaplain_why String?
+}
+
+type ParentsTotalIncomeObject {
+  income ParentsTotalIncome
+  others String
+}
+
+type ShareRoom {
+  status           PleaseCheck
+  if_yes_with_whom String?
+}
+
+type HomeAndFamilyBackground {
+  father                                                                     FamilyBackground
+  mother                                                                     FamilyBackground
+  guardian                                                                   FamilyBackground
+  parents_martial_relationship                                               ParentsMaritalRelationship
+  number_of_children_in_the_family_including_yourself                        Int
+  number_of_brothers                                                         Int
+  number_of_sisters                                                          Int
+  number_of_brothers_or_sisters_employed                                     Int
+  ordinal_position                                                           String // example: 1st child, 2nd child, etc.
+  is_your_brother_sister_who_is_gainfully_employed_providing_support_to_your EmployedSiblingProviding
+  who_finances_your_schooling                                                WhoFinancesYourSchooling
+  how_much_is_your_weekly_allowance                                          Int
+  parents_total_montly_income                                                ParentsTotalIncomeObject
+  do_you_have_quiet_place_to_study                                           PleaseCheck
+  do_you_share_your_room_with_anyone                                         ShareRoom
+  nature_of_residence_while_attending_school                                 NatureOfResidece
+}
+
+type FamilyBackground {
+  firstName              String
+  lastName               String
+  middleName             String?
+  age                    Int
+  status                 ParentStatus
+  educational_attainment EducationalAttainment
+  occupation             String
+  employer               Employer?
+}
+
+type Employer {
+  firstName  String?
+  lastName   String?
+  middleName String?
+  address    PersonAddress?
+}
+
+type Physical {
+  your_vision           Boolean?
+  your_hearing          Boolean?
+  your_speech           Boolean?
+  your_general_health   Boolean?
+  if_yes_please_specify String?
+}
+
+type Psychological {
+  consulted Doctors
+  status    PleaseCheck
+  when      DateTime?
+  for_what  String?
+}
+
+type Health {
+  physical      Physical?
+  psychological Psychological?
+}
+
+type InterestAndHobbies {
+  academic                           AcademicHobbies
+  favorite_subject                   String
+  favorite_least_subject             String
+  what_are_your_hobbies              String[]
+  organizations_participated         Organizations
+  occupational_position_organization PositionInOrganization
+}
+
+type TestResults {
+  date         DateTime?
+  name_of_test String?
+  rs           String?
+  pr           String?
+  description  String?
+}
+
+type SignificantNotesGuidanceOnly {
+  date     DateTime?
+  incident String?
+  remarks  String?
+}
+
+model IndividualInventory {
+  id                                                    String                        @id @default(auto()) @map("_id") @db.ObjectId
+  student                                               Student                       @relation(fields: [studentId], references: [id])
+  studentId                                             String                        @unique @db.ObjectId
+  height                                                String
+  weight                                                String
+  coplexion                                             String
+  person_to_be_contacted_in_case_of_accident_or_illness PersonToBeContacted
+  educational_background                                EducationBackground
+  nature_of_schooling                                   NatureOfSchooling
+  home_and_family_background                            HomeAndFamilyBackground
+  health                                                Health?
+  interest_and_hobbies                                  InterestAndHobbies
+  test_results                                          TestResults?
+  significant_notes_councilor_only                      SignificantNotesGuidanceOnly?
+  sleep_duration                                        String
+  stress_level                                          StressLevel
+  academic_performance_change                           PerformanceChange
+  student_signature                                     String
+  isDeleted                                             Boolean                       @default(false)
+  createdAt                                             DateTime                      @default(now())
+  updatedAt                                             DateTime                      @updatedAt
+}

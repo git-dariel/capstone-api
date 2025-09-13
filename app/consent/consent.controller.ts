@@ -3,17 +3,14 @@ import { config } from "../../config/error.config";
 import {
 	Financial,
 	Live,
-	PerformanceChange,
 	PhysicalProblem,
 	PhysicalSymptoms,
 	Prisma,
 	PrismaClient,
 	Referred,
 	Services,
-	StressLevel,
 } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
-import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
 
 const logger = getLogger();
 const consentLogger = logger.child({ module: "consent" });
@@ -223,7 +220,6 @@ export const controller = (prisma: PrismaClient) => {
 								{ student: { person: { firstName: { contains: String(query) } } } },
 								{ student: { person: { lastName: { contains: String(query) } } } },
 								{ what_brings_you_to_guidance: { contains: String(query) } },
-								{ sleep_duration: { contains: String(query) } },
 							],
 						}
 					: {}),
@@ -303,9 +299,6 @@ export const controller = (prisma: PrismaClient) => {
 			physical_symptoms,
 			concerns,
 			services,
-			sleep_duration,
-			stress_level,
-			academic_performance_change,
 		} = req.body;
 
 		if (!studentId) {
@@ -352,30 +345,6 @@ export const controller = (prisma: PrismaClient) => {
 			consentLogger.error("Services is required");
 			res.status(400).json({
 				error: "Services is required",
-			});
-			return;
-		}
-
-		if (!sleep_duration) {
-			consentLogger.error("Sleep duration is required");
-			res.status(400).json({
-				error: "Sleep duration is required",
-			});
-			return;
-		}
-
-		if (!stress_level) {
-			consentLogger.error("Stress level is required");
-			res.status(400).json({
-				error: "Stress level is required",
-			});
-			return;
-		}
-
-		if (!academic_performance_change) {
-			consentLogger.error("Academic performance change is required");
-			res.status(400).json({
-				error: "Academic performance change is required",
 			});
 			return;
 		}
@@ -433,24 +402,6 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (!Object.values(StressLevel).includes(stress_level)) {
-			consentLogger.error(`${config.ERROR.CONSENT.INVALID_STRESS_LEVEL}: ${stress_level}`);
-			res.status(400).json({
-				error: `Invalid stress level. Must be one of: ${Object.values(StressLevel).join(", ")}`,
-			});
-			return;
-		}
-
-		if (!Object.values(PerformanceChange).includes(academic_performance_change)) {
-			consentLogger.error(
-				`${config.ERROR.CONSENT.INVALID_PERFORMANCE_CHANGE}: ${academic_performance_change}`,
-			);
-			res.status(400).json({
-				error: `Invalid performance change. Must be one of: ${Object.values(PerformanceChange).join(", ")}`,
-			});
-			return;
-		}
-
 		try {
 			// Check if student exists
 			const existingStudent = await prisma.student.findFirst({
@@ -495,9 +446,6 @@ export const controller = (prisma: PrismaClient) => {
 					physical_symptoms,
 					concerns,
 					services,
-					sleep_duration,
-					stress_level,
-					academic_performance_change,
 				},
 				include: {
 					student: {
@@ -509,79 +457,10 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			consentLogger.info(`${config.SUCCESS.CONSENT.CREATED}: ${newConsent.id}`);
-
-			// Automatically run mental health prediction after consent creation
-			try {
-				// Prepare data for prediction using consent data and student info
-				const studentData: Partial<StudentData> = {
-					gender: newConsent.student?.person?.gender
-						? newConsent.student.person.gender.charAt(0).toUpperCase() +
-							newConsent.student.person.gender.slice(1)
-						: "Other",
-					age: newConsent.student?.person?.age || 20,
-					educationLevel: newConsent.student?.program || "None",
-					sleepDuration: parseFloat(sleep_duration) || 7,
-					stressLevel:
-						stress_level === StressLevel.low
-							? "Low"
-							: stress_level === StressLevel.medium
-								? "Medium"
-								: stress_level === StressLevel.high
-									? "High"
-									: "Medium",
-				};
-
-				// Call the mental health predictor
-				const prediction = await mentalHealthPredictor.predictMentalHealthRisk(studentData);
-
-				consentLogger.info(
-					`Mental health prediction for new consent ${newConsent.id}: ${prediction.prediction} (confidence: ${prediction.confidence})`,
-				);
-
-				// Return consent data with prediction results
-				res.status(201).json({
-					message: "Consent created successfully with mental health prediction",
-					disclaimer:
-						"⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
-					consent: newConsent,
-					mentalHealthPrediction: {
-						academicPerformanceOutlook: prediction.prediction,
-						confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
-						modelAccuracy: {
-							decisionTree: `${(prediction.modelAccuracy.decisionTree * 100).toFixed(1)}%`,
-							randomForest: `${(prediction.modelAccuracy.randomForest * 100).toFixed(1)}%`,
-						},
-						riskFactors: prediction.riskFactors,
-						mentalHealthRisk: {
-							level: prediction.mentalHealthRisk.level,
-							description: prediction.mentalHealthRisk.description,
-							needsAttention: prediction.mentalHealthRisk.needsAttention,
-							urgency: prediction.mentalHealthRisk.urgency,
-							assessmentSummary: prediction.mentalHealthRisk.needsAttention
-								? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
-								: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
-							disclaimer:
-								"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
-						},
-						inputData: studentData,
-						recommendations: generateRecommendations(prediction),
-					},
-				});
-			} catch (predictionError) {
-				// If prediction fails, still return successful consent creation
-				consentLogger.warn(
-					`Mental health prediction failed for consent ${newConsent.id}: ${predictionError}`,
-				);
-
-				res.status(201).json({
-					message: "Consent created successfully (mental health prediction unavailable)",
-					consent: newConsent,
-					mentalHealthPrediction: {
-						error: "Prediction service temporarily unavailable",
-						note: "Consent was created successfully, but mental health prediction could not be generated at this time.",
-					},
-				});
-			}
+			res.status(201).json({
+				message: "Consent created successfully",
+				consent: newConsent,
+			});
 		} catch (error) {
 			consentLogger.error(`${config.ERROR.CONSENT.ERROR_GETTING_CONSENT}: ${error}`);
 			res.status(500).json({ error: config.ERROR.CONSENT.INTERNAL_SERVER_ERROR });
@@ -599,9 +478,6 @@ export const controller = (prisma: PrismaClient) => {
 			physical_symptoms,
 			concerns,
 			services,
-			sleep_duration,
-			stress_level,
-			academic_performance_change,
 		} = req.body;
 
 		if (!id) {
@@ -671,27 +547,6 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (stress_level && !Object.values(StressLevel).includes(stress_level)) {
-			consentLogger.error(`${config.ERROR.CONSENT.INVALID_STRESS_LEVEL}: ${stress_level}`);
-			res.status(400).json({
-				error: `Invalid stress level. Must be one of: ${Object.values(StressLevel).join(", ")}`,
-			});
-			return;
-		}
-
-		if (
-			academic_performance_change &&
-			!Object.values(PerformanceChange).includes(academic_performance_change)
-		) {
-			consentLogger.error(
-				`${config.ERROR.CONSENT.INVALID_PERFORMANCE_CHANGE}: ${academic_performance_change}`,
-			);
-			res.status(400).json({
-				error: `Invalid performance change. Must be one of: ${Object.values(PerformanceChange).join(", ")}`,
-			});
-			return;
-		}
-
 		consentLogger.info(`Updating consent: ${id}`);
 
 		try {
@@ -722,10 +577,6 @@ export const controller = (prisma: PrismaClient) => {
 			if (physical_symptoms !== undefined) updateData.physical_symptoms = physical_symptoms;
 			if (concerns !== undefined) updateData.concerns = concerns;
 			if (services !== undefined) updateData.services = services;
-			if (sleep_duration !== undefined) updateData.sleep_duration = sleep_duration;
-			if (stress_level !== undefined) updateData.stress_level = stress_level;
-			if (academic_performance_change !== undefined)
-				updateData.academic_performance_change = academic_performance_change;
 
 			const updatedConsent = await prisma.consent.update({
 				where: { id },
@@ -788,172 +639,6 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const predictMentalHealth = async (req: Request, res: Response, _next: NextFunction) => {
-		const { studentId } = req.params;
-		const { gender, age, educationLevel, sleepDuration, stressLevel } = req.body;
-
-		if (!studentId) {
-			consentLogger.error(config.ERROR.CONSENT.STUDENT_ID_REQUIRED);
-			res.status(400).json({
-				error: config.ERROR.CONSENT.STUDENT_ID_REQUIRED,
-			});
-			return;
-		}
-
-		try {
-			// Get student information with person details to enhance prediction
-			const student = await prisma.student.findFirst({
-				where: {
-					id: studentId,
-					isDeleted: false,
-				},
-				include: {
-					person: true,
-				},
-			});
-
-			if (!student) {
-				consentLogger.error(`Student not found: ${studentId}`);
-				res.status(404).json({ error: "Student not found" });
-				return;
-			}
-
-			// Check if consent exists for this student
-			const existingConsent = await prisma.consent.findFirst({
-				where: {
-					studentId,
-					isDeleted: false,
-				},
-			});
-
-			if (!existingConsent) {
-				consentLogger.error(`${config.ERROR.CONSENT.NOT_FOUND}: ${studentId}`);
-				res.status(404).json({ error: config.ERROR.CONSENT.NOT_FOUND });
-				return;
-			}
-
-			// Prepare data for prediction using body data or defaults from student record
-			const studentData: Partial<StudentData> = {
-				gender:
-					gender ||
-					(student.person?.gender
-						? student.person.gender.charAt(0).toUpperCase() +
-							student.person.gender.slice(1)
-						: "Other"),
-				age: age || student.person?.age || 20,
-				educationLevel: educationLevel || student.program || "None",
-				sleepDuration: sleepDuration || 7,
-				stressLevel: stressLevel || "Medium",
-			};
-
-			// Validate input data
-			if (studentData.age && (studentData.age < 10 || studentData.age > 100)) {
-				consentLogger.error(`Invalid age: ${studentData.age}`);
-				res.status(400).json({ error: "Age must be between 10 and 100" });
-				return;
-			}
-
-			if (
-				studentData.sleepDuration &&
-				(studentData.sleepDuration < 0 || studentData.sleepDuration > 24)
-			) {
-				consentLogger.error(`Invalid sleep duration: ${studentData.sleepDuration}`);
-				res.status(400).json({ error: "Sleep duration must be between 0 and 24 hours" });
-				return;
-			}
-
-			const validStressLevels = ["Low", "Medium", "High"];
-			if (studentData.stressLevel && !validStressLevels.includes(studentData.stressLevel)) {
-				consentLogger.error(`Invalid stress level: ${studentData.stressLevel}`);
-				res.status(400).json({
-					error: "Stress level must be one of: Low, Medium, High",
-				});
-				return;
-			}
-
-			// Call the mental health predictor
-			const prediction = await mentalHealthPredictor.predictMentalHealthRisk(studentData);
-
-			consentLogger.info(
-				`Mental health prediction for student ${studentId}: ${prediction.prediction} (confidence: ${prediction.confidence})`,
-			);
-
-			res.status(200).json({
-				message: "Mental health prediction completed successfully",
-				disclaimer:
-					"⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
-				studentId,
-				prediction: {
-					academicPerformanceOutlook: prediction.prediction,
-					confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
-					modelAccuracy: {
-						decisionTree: `${(prediction.modelAccuracy.decisionTree * 100).toFixed(1)}%`,
-						randomForest: `${(prediction.modelAccuracy.randomForest * 100).toFixed(1)}%`,
-					},
-					riskFactors: prediction.riskFactors,
-					mentalHealthRisk: {
-						level: prediction.mentalHealthRisk.level,
-						description: prediction.mentalHealthRisk.description,
-						needsAttention: prediction.mentalHealthRisk.needsAttention,
-						urgency: prediction.mentalHealthRisk.urgency,
-						assessmentSummary: prediction.mentalHealthRisk.needsAttention
-							? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
-							: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
-						disclaimer:
-							"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
-					},
-					inputData: studentData,
-					recommendations: generateRecommendations(prediction),
-				},
-			});
-		} catch (error) {
-			consentLogger.error(
-				`Error predicting mental health for student ${studentId}: ${error}`,
-			);
-			res.status(500).json({
-				error: "An error occurred while predicting mental health. Please try again later.",
-			});
-		}
-	};
-
-	const generateRecommendations = (prediction: any): string[] => {
-		const recommendations: string[] = [];
-
-		if (prediction.prediction === "Declined") {
-			recommendations.push(
-				"Consider scheduling a consultation with a mental health professional",
-			);
-			recommendations.push(
-				"Implement stress reduction techniques such as meditation or deep breathing exercises",
-			);
-			recommendations.push("Establish a consistent sleep schedule");
-			recommendations.push("Engage in regular physical activity");
-		} else if (prediction.prediction === "Same") {
-			recommendations.push("Maintain current healthy habits");
-			recommendations.push("Monitor stress levels regularly");
-			recommendations.push("Continue with regular sleep pattern");
-		} else {
-			recommendations.push("Continue with current positive practices");
-			recommendations.push("Consider sharing successful strategies with peers");
-			recommendations.push("Maintain work-life balance");
-		}
-
-		// Add specific recommendations based on risk factors
-		if (prediction.riskFactors.some((factor: string) => factor.includes("sleep"))) {
-			recommendations.push(
-				"Focus on improving sleep hygiene and maintaining 7-9 hours of sleep per night",
-			);
-		}
-
-		if (prediction.riskFactors.some((factor: string) => factor.includes("stress"))) {
-			recommendations.push(
-				"Implement stress management techniques and consider counseling services",
-			);
-		}
-
-		return recommendations;
-	};
-
 	return {
 		getById,
 		getByStudentId,
@@ -961,6 +646,5 @@ export const controller = (prisma: PrismaClient) => {
 		create,
 		update,
 		remove,
-		predictMentalHealth,
 	};
 };
