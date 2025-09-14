@@ -4,6 +4,8 @@ interface IController {
 	register(req: Request, res: Response, next: NextFunction): Promise<void>;
 	registerAdmin(req: Request, res: Response, next: NextFunction): Promise<void>;
 	login(req: Request, res: Response, next: NextFunction): Promise<void>;
+	verifyEmail(req: Request, res: Response, next: NextFunction): Promise<void>;
+	resendOTP(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -32,7 +34,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               email:
 	 *                 type: string
 	 *                 format: email
-	 *                 example: "john.doe@example.com"
+	 *                 example: "john.doe@iskolarngbayan.pup.edu.ph"
 	 *               password:
 	 *                 type: string
 	 *                 minLength: 6
@@ -197,6 +199,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                     - "Password is required"
 	 *                     - "Invalid email format"
 	 *                     - "Password must be at least 6 characters long"
+	 *                     - "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed"
 	 *                     - "Person with this email already exists"
 	 *                     - "Username already exists. Please choose a different username."
 	 *       500:
@@ -226,7 +229,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               email:
 	 *                 type: string
 	 *                 format: email
-	 *                 example: "admin@example.com"
+	 *                 example: "admin@iskolarngbayan.pup.edu.ph"
 	 *               password:
 	 *                 type: string
 	 *                 minLength: 6
@@ -371,6 +374,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                     - "Password is required"
 	 *                     - "Invalid email format"
 	 *                     - "Password must be at least 6 characters long"
+	 *                     - "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed"
 	 *                     - "Person with this email already exists"
 	 *                     - "Username already exists. Please choose a different username."
 	 *       500:
@@ -399,7 +403,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               email:
 	 *                 type: string
 	 *                 format: email
-	 *                 example: "john.doe@example.com"
+	 *                 example: "john.doe@iskolarngbayan.pup.edu.ph"
 	 *               password:
 	 *                 type: string
 	 *                 example: "password123"
@@ -458,10 +462,153 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                     - "Email is required"
 	 *                     - "Password is required"
 	 *                     - "Type is required"
+	 *                     - "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed"
 	 *       500:
 	 *         description: Internal server error
 	 */
 	routes.post("/login", controller.login);
+
+	/**
+	 * @openapi
+	 * /api/auth/verify-email:
+	 *   post:
+	 *     summary: Verify email with OTP
+	 *     description: Verify user's email address using the 6-digit OTP code sent during registration
+	 *     tags: [Auth]
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - email
+	 *               - otp
+	 *             properties:
+	 *               email:
+	 *                 type: string
+	 *                 format: email
+	 *                 example: "john.doe@iskolarngbayan.pup.edu.ph"
+	 *               otp:
+	 *                 type: string
+	 *                 pattern: '^[0-9]{6}$'
+	 *                 example: "123456"
+	 *                 description: "6-digit verification code"
+	 *     responses:
+	 *       200:
+	 *         description: Email verified successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Email verified successfully"
+	 *                 emailVerified:
+	 *                   type: boolean
+	 *                   example: true
+	 *       400:
+	 *         description: Bad request (invalid OTP, expired, etc.)
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Email is required"
+	 *                     - "OTP is required"
+	 *                     - "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed"
+	 *                     - "Invalid verification code"
+	 *                     - "Verification code has expired. Please register again."
+	 *                     - "No verification code found. Please register again."
+	 *       404:
+	 *         description: User not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "User not found"
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.post("/verify-email", controller.verifyEmail);
+
+	/**
+	 * @openapi
+	 * /api/auth/resend-otp:
+	 *   post:
+	 *     summary: Resend OTP verification code
+	 *     description: Resend a new 6-digit OTP code to the user's email address
+	 *     tags: [Auth]
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - email
+	 *             properties:
+	 *               email:
+	 *                 type: string
+	 *                 format: email
+	 *                 example: "john.doe@iskolarngbayan.pup.edu.ph"
+	 *     responses:
+	 *       200:
+	 *         description: New OTP sent successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "New verification code sent to your email"
+	 *                 otpSent:
+	 *                   type: boolean
+	 *                   example: true
+	 *       400:
+	 *         description: Bad request
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Email is required"
+	 *                     - "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed"
+	 *       404:
+	 *         description: User not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "User not found"
+	 *       500:
+	 *         description: Internal server error or email service unavailable
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Email service not available"
+	 *                     - "Failed to send verification code"
+	 */
+	routes.post("/resend-otp", controller.resendOTP);
 
 	route.use(path, routes);
 
