@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { PrismaClient, Role, Type } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import { OTPEmailHelper, createGmailConfig } from "../../helper/email.helper";
 import { controller as personController } from "../person/person.controller";
 import { controller as studentController } from "../student/student.controller";
 
@@ -12,6 +13,20 @@ const authLogger = logger.child({ module: "auth" });
 export const controller = (prisma: PrismaClient) => {
 	const personCtrl = personController(prisma);
 	const studentCtrl = studentController(prisma);
+
+	// Initialize OTP Email Helper
+	const initOTPEmailHelper = () => {
+		const emailUser = process.env.EMAIL_USER;
+		const emailPassword = process.env.EMAIL_PASSWORD;
+
+		if (!emailUser || !emailPassword) {
+			authLogger.warn("Email credentials not configured. OTP emails will not be sent.");
+			return null;
+		}
+
+		const emailConfig = createGmailConfig(emailUser, emailPassword);
+		return new OTPEmailHelper(emailConfig);
+	};
 
 	const register = async (req: Request, res: Response, next: NextFunction) => {
 		const {
@@ -55,6 +70,15 @@ export const controller = (prisma: PrismaClient) => {
 		if (!emailRegex.test(email)) {
 			authLogger.error(`Invalid email format: ${email}`);
 			res.status(400).json({ message: "Invalid email format" });
+			return;
+		}
+
+		// Check if email is from PUP domain
+		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
+			authLogger.error(`Invalid email domain: ${email}`);
+			res.status(400).json({
+				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
+			});
 			return;
 		}
 
@@ -210,6 +234,11 @@ export const controller = (prisma: PrismaClient) => {
 				// Hash the password before storing
 				const hashedPassword = await bcrypt.hash(password, 10);
 
+				// Generate OTP for email verification
+				const otpEmailHelper = initOTPEmailHelper();
+				const otp = otpEmailHelper?.generateOTP() || "000000";
+				const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
 				const user = await tx.user.create({
 					data: {
 						userName: userNameToUse,
@@ -217,6 +246,9 @@ export const controller = (prisma: PrismaClient) => {
 						role: (role as Role) || "user",
 						type: (type as Type) || "student",
 						loginMethod: "email",
+						emailVerified: false,
+						emailOtp: otp,
+						emailOtpExpiry: otpExpiry,
 						person: {
 							connect: {
 								id: person.id,
@@ -279,8 +311,29 @@ export const controller = (prisma: PrismaClient) => {
 					});
 				}
 
-				return { user: completeUser, student: completeStudent };
+				return { user: completeUser, student: completeStudent, otp, otpEmailHelper };
 			});
+
+			// Send OTP email after successful user creation
+			if (result.otpEmailHelper && result.otp) {
+				try {
+					const emailResult = await result.otpEmailHelper.sendOTPEmail(
+						email,
+						result.otp,
+						result.user.person?.firstName || undefined,
+					);
+
+					if (emailResult.success) {
+						authLogger.info(`OTP email sent successfully to ${email}`);
+					} else {
+						authLogger.error(
+							`Failed to send OTP email to ${email}: ${emailResult.error}`,
+						);
+					}
+				} catch (emailError) {
+					authLogger.error(`Error sending OTP email to ${email}: ${emailError}`);
+				}
+			}
 
 			const token = jwt.sign(
 				{
@@ -306,9 +359,12 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			const responseData: any = {
-				message: "Registration successful",
+				message:
+					"Registration successful. Please check your email for the verification code.",
 				user: result.user,
 				token: token,
+				emailVerificationRequired: true,
+				otpSent: !!result.otpEmailHelper,
 			};
 
 			// Include student data in response if applicable
@@ -360,6 +416,15 @@ export const controller = (prisma: PrismaClient) => {
 		if (!emailRegex.test(email)) {
 			authLogger.error(`Invalid email format: ${email}`);
 			res.status(400).json({ message: "Invalid email format" });
+			return;
+		}
+
+		// Check if email is from PUP domain
+		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
+			authLogger.error(`Invalid email domain: ${email}`);
+			res.status(400).json({
+				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
+			});
 			return;
 		}
 
@@ -602,6 +667,15 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		// Check if email is from PUP domain
+		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
+			authLogger.error(`Invalid email domain: ${email}`);
+			res.status(400).json({
+				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
+			});
+			return;
+		}
+
 		try {
 			const person = await prisma.person.findFirst({
 				where: {
@@ -705,9 +779,218 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const verifyEmail = async (req: Request, res: Response, _next: NextFunction) => {
+		const { email, otp } = req.body;
+
+		if (!email) {
+			authLogger.error("Email is required for verification");
+			res.status(400).json({ message: "Email is required" });
+			return;
+		}
+
+		if (!otp) {
+			authLogger.error("OTP is required for verification");
+			res.status(400).json({ message: "OTP is required" });
+			return;
+		}
+
+		// Check if email is from PUP domain
+		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
+			authLogger.error(`Invalid email domain: ${email}`);
+			res.status(400).json({
+				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
+			});
+			return;
+		}
+
+		try {
+			const person = await prisma.person.findFirst({
+				where: {
+					email,
+					isDeleted: false,
+				},
+				include: {
+					users: {
+						where: {
+							isDeleted: false,
+						},
+						take: 1,
+					},
+				},
+			});
+
+			if (!person || person.users.length === 0) {
+				authLogger.error(`No user found with email: ${email}`);
+				res.status(404).json({ message: "User not found" });
+				return;
+			}
+
+			const user = person.users[0];
+
+			// Check if email is already verified
+			if (user.emailVerified) {
+				authLogger.info(`Email already verified for user: ${user.id}`);
+				res.status(200).json({
+					message: "Email is already verified",
+					emailVerified: true,
+				});
+				return;
+			}
+
+			// Check if OTP exists and is not expired
+			if (!user.emailOtp || !user.emailOtpExpiry) {
+				authLogger.error(`No OTP found for user: ${user.id}`);
+				res.status(400).json({
+					message: "No verification code found. Please register again.",
+				});
+				return;
+			}
+
+			// Check if OTP is expired
+			if (new Date() > user.emailOtpExpiry) {
+				authLogger.error(`OTP expired for user: ${user.id}`);
+				res.status(400).json({
+					message: "Verification code has expired. Please register again.",
+				});
+				return;
+			}
+
+			// Verify OTP
+			if (user.emailOtp !== otp) {
+				authLogger.error(`Invalid OTP for user: ${user.id}`);
+				res.status(400).json({ message: "Invalid verification code" });
+				return;
+			}
+
+			// Update user as verified and clear OTP
+			await prisma.user.update({
+				where: { id: user.id },
+				data: {
+					emailVerified: true,
+					emailOtp: null,
+					emailOtpExpiry: null,
+				},
+			});
+
+			authLogger.info(`Email verified successfully for user: ${user.id}`);
+			res.status(200).json({
+				message: "Email verified successfully",
+				emailVerified: true,
+			});
+		} catch (error) {
+			authLogger.error(`Error during email verification: ${error}`);
+			res.status(500).json({ message: "Error during email verification" });
+		}
+	};
+
+	const resendOTP = async (req: Request, res: Response, _next: NextFunction) => {
+		const { email } = req.body;
+
+		if (!email) {
+			authLogger.error("Email is required for OTP resend");
+			res.status(400).json({ message: "Email is required" });
+			return;
+		}
+
+		// Check if email is from PUP domain
+		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
+			authLogger.error(`Invalid email domain: ${email}`);
+			res.status(400).json({
+				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
+			});
+			return;
+		}
+
+		try {
+			const person = await prisma.person.findFirst({
+				where: {
+					email,
+					isDeleted: false,
+				},
+				include: {
+					users: {
+						where: {
+							isDeleted: false,
+						},
+						take: 1,
+					},
+				},
+			});
+
+			if (!person || person.users.length === 0) {
+				authLogger.error(`No user found with email: ${email}`);
+				res.status(404).json({ message: "User not found" });
+				return;
+			}
+
+			const user = person.users[0];
+
+			// Check if email is already verified
+			if (user.emailVerified) {
+				authLogger.info(`Email already verified for user: ${user.id}`);
+				res.status(200).json({
+					message: "Email is already verified",
+					emailVerified: true,
+				});
+				return;
+			}
+
+			// Generate new OTP
+			const otpEmailHelper = initOTPEmailHelper();
+
+			if (!otpEmailHelper) {
+				authLogger.error("Email service not configured");
+				res.status(500).json({ message: "Email service not available" });
+				return;
+			}
+
+			const newOtp = otpEmailHelper.generateOTP();
+			const newOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+			// Update user with new OTP
+			await prisma.user.update({
+				where: { id: user.id },
+				data: {
+					emailOtp: newOtp,
+					emailOtpExpiry: newOtpExpiry,
+				},
+			});
+
+			// Send new OTP email
+			try {
+				const emailResult = await otpEmailHelper.sendOTPEmail(
+					email,
+					newOtp,
+					person.firstName || undefined,
+				);
+
+				if (emailResult.success) {
+					authLogger.info(`New OTP email sent successfully to ${email}`);
+					res.status(200).json({
+						message: "New verification code sent to your email",
+						otpSent: true,
+					});
+				} else {
+					authLogger.error(
+						`Failed to send new OTP email to ${email}: ${emailResult.error}`,
+					);
+					res.status(500).json({ message: "Failed to send verification code" });
+				}
+			} catch (emailError) {
+				authLogger.error(`Error sending new OTP email to ${email}: ${emailError}`);
+				res.status(500).json({ message: "Failed to send verification code" });
+			}
+		} catch (error) {
+			authLogger.error(`Error during OTP resend: ${error}`);
+			res.status(500).json({ message: "Error during OTP resend" });
+		}
+	};
+
 	return {
 		register,
 		registerAdmin,
 		login,
+		verifyEmail,
+		resendOTP,
 	};
 };
