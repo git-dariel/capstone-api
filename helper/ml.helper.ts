@@ -10,13 +10,30 @@ const { RandomForestClassifier } = require("random-forest");
 export interface StudentData {
 	gender: string;
 	age: number;
-	educationLevel: string;
-	sleepDuration: number;
-	stressLevel: string;
-	academicPerformanceChange?: string;
+	// Educational Background
+	highSchoolAverage?: number;
+	natureOfSchooling?: string; // continuous or interrupted
+	// Home and Family Background
 	parentsMaritalRelationship?: string;
+	numberOfChildren?: number;
+	ordinalPosition?: string;
 	whoFinancesYourSchooling?: string;
 	parentsTotalMonthlyIncome?: string;
+	quietPlaceToStudy?: string;
+	natureOfResidence?: string;
+	// Health Status
+	visionProblems?: string;
+	hearingProblems?: string;
+	speechProblems?: string;
+	generalHealthProblems?: string;
+	psychologicalConsultation?: string;
+	// Interests and Hobbies
+	favoriteSubject?: string;
+	leastFavoriteSubject?: string;
+	academicOrganizations?: string;
+	organizationPosition?: string;
+	// Academic Performance Prediction Target
+	academicPerformanceChange?: string;
 }
 
 export interface PredictionResult {
@@ -105,15 +122,113 @@ export class MentalHealthPredictor {
 	private featureNames = [
 		"Gender",
 		"Age",
-		"Education Level",
-		"Sleep Duration",
-		"Stress Level",
+		"High School Average",
+		"Nature of Schooling",
 		"Parents Marital Relationship",
+		"Number of Children",
 		"Who finances your schooling?",
 		"Parents Total Monthly Income",
+		"Quiet Place to Study",
+		"Nature of Residence",
+		"Vision Problems",
+		"General Health Problems",
+		"Psychological Consultation",
+		"Academic Organizations",
+		"Organization Position",
 	];
 
 	constructor() {}
+
+	/**
+	 * Helper methods to map CSV data to standardized values
+	 */
+	private mapMaritalRelationship(value: string): string {
+		if (!value) return "others";
+		const cleanValue = value.toLowerCase().trim();
+		if (cleanValue.includes("married and staying together"))
+			return "married_and_staying_together";
+		if (cleanValue.includes("married but separated")) return "married_but_separated";
+		if (cleanValue.includes("single parent")) return "single_parent";
+		if (cleanValue.includes("not married but living together"))
+			return "not_married_but_living_together";
+		return "others";
+	}
+
+	private mapFinancialSupport(value: string): string {
+		if (!value) return "parents";
+		const cleanValue = value.toLowerCase().trim();
+		if (cleanValue.includes("parents")) return "parents";
+		if (cleanValue.includes("scholarship")) return "scholarship";
+		if (cleanValue.includes("brother")) return "brother";
+		if (cleanValue.includes("sister")) return "sister";
+		if (cleanValue.includes("self")) return "self_supporting";
+		if (cleanValue.includes("relatives")) return "relatives";
+		return "parents";
+	}
+
+	private mapParentIncome(value: string): string {
+		if (!value) return "below_five_thousand";
+		const cleanValue = value.toLowerCase().trim();
+		if (cleanValue.includes("below") || cleanValue.includes("5,000"))
+			return "below_five_thousand";
+		if (cleanValue.includes("5,001") && cleanValue.includes("10,000"))
+			return "five_thousand_to_ten_thousand";
+		if (cleanValue.includes("10,001") && cleanValue.includes("15,000"))
+			return "ten_thousand_to_fifteen_thousand";
+		if (cleanValue.includes("15,001") && cleanValue.includes("20,000"))
+			return "fifteen_thousand_to_twenty_thousand";
+		if (cleanValue.includes("20,001") && cleanValue.includes("25,000"))
+			return "twenty_thousand_to_twenty_five_thousand";
+		if (cleanValue.includes("25,001") && cleanValue.includes("30,000"))
+			return "twenty_five_thousand_to_thirty_thousand";
+		if (cleanValue.includes("30,001") && cleanValue.includes("35,000"))
+			return "thirty_thousand_to_thirty_five_thousand";
+		if (cleanValue.includes("35,001") && cleanValue.includes("40,000"))
+			return "thirty_five_thousand_to_forty_thousand";
+		if (cleanValue.includes("40,001") && cleanValue.includes("45,000"))
+			return "forty_thousand_to_forty_five_thousand";
+		if (cleanValue.includes("45,001") && cleanValue.includes("50,000"))
+			return "forty_five_thousand_to_fifty_thousand";
+		if (cleanValue.includes("above") || cleanValue.includes("50,000"))
+			return "above_fifty_thousand";
+		return "below_five_thousand";
+	}
+
+	private mapResidenceType(value: string): string {
+		if (!value) return "family_home";
+		const cleanValue = value.toLowerCase().trim();
+		if (cleanValue.includes("family home")) return "family_home";
+		if (cleanValue.includes("dorm")) return "dorm";
+		if (cleanValue.includes("bed spacer")) return "bed_spacer";
+		if (cleanValue.includes("relatives")) return "relatives_home";
+		if (cleanValue.includes("rented")) return "rented_apartment";
+		return "family_home";
+	}
+
+	private mapAcademicOrganizations(value: string): string {
+		if (!value) return "none";
+		const cleanValue = value.toLowerCase().trim();
+		if (cleanValue.includes("math")) return "math_club";
+		if (cleanValue.includes("debate")) return "debating_club";
+		if (cleanValue.includes("science")) return "science_club";
+		if (cleanValue.includes("quiz")) return "quizzers_club";
+		return "others";
+	}
+
+	private mapOrganizationPosition(value: string): string {
+		if (!value) return "member";
+		const cleanValue = value.toLowerCase().trim();
+		if (cleanValue.includes("officer") || cleanValue.includes("president")) return "officer";
+		if (cleanValue.includes("member")) return "member";
+		return "others";
+	}
+
+	private determinePerformanceCategory(average: number): string {
+		// Convert academic average to performance categories for prediction
+		if (average >= 95) return "Improved"; // Excellent performance
+		if (average >= 85) return "Same"; // Good performance
+		return "Declined"; // Below average performance
+	}
 
 	/**
 	 * Initialize and train the ML models using the CSV dataset
@@ -125,13 +240,7 @@ export class MentalHealthPredictor {
 
 		try {
 			// Load and parse CSV data
-			const csvPath = path.join(
-				__dirname,
-				"..",
-				"config",
-				"data",
-				"Student Mental Health Analysis.csv",
-			);
+			const csvPath = path.join(__dirname, "..", "config", "data", "IIF.csv");
 			const csvContent = fs.readFileSync(csvPath, "utf-8");
 
 			const records = parse(csvContent, {
@@ -142,15 +251,50 @@ export class MentalHealthPredictor {
 
 			// Transform raw data to StudentData format
 			const studentData: StudentData[] = records.map((record) => ({
-				gender: record.Gender,
-				age: Number(record.Age),
-				educationLevel: record["Education Level"],
-				sleepDuration: Number(record["Sleep Duration (hrs)"]),
-				stressLevel: record["Stress Level"],
-				academicPerformanceChange: record["Academic Performance Change"],
-				parentsMaritalRelationship: record["Parents Marital Relationship"],
-				whoFinancesYourSchooling: record["Who finances your schooling?"],
-				parentsTotalMonthlyIncome: record["Parents Total Monthly Income"],
+				gender: record["Gender:"] || "Other",
+				age: Number(record["Age:"]) || 20,
+				highSchoolAverage: Number(record["High  School General Average:"]) || 85,
+				natureOfSchooling:
+					record["Nature of Schooling:"] === "Continuous" ? "continuous" : "interrupted",
+				parentsMaritalRelationship: this.mapMaritalRelationship(
+					record["Parents' Marital Relationship: (please check)"],
+				),
+				numberOfChildren:
+					Number(record["Number of children in the family including yourself:"]) || 1,
+				ordinalPosition:
+					record["Ordinal Position (1st child, 2nd child etc. )"] || "1st child",
+				whoFinancesYourSchooling: this.mapFinancialSupport(
+					record["Who finances your schooling?:"],
+				),
+				parentsTotalMonthlyIncome: this.mapParentIncome(
+					record['Parents" Total Monthly Income:'],
+				),
+				quietPlaceToStudy:
+					record["Do you have a quiet place to study? (Please Check)"] === "Yes"
+						? "yes"
+						: "no",
+				natureOfResidence: this.mapResidenceType(
+					record["Nature of Residence while attending school: (Please Check)"],
+				),
+				visionProblems:
+					record["Do your have problems with your vision? (Please Check)"] === "Yes"
+						? "yes"
+						: "no",
+				generalHealthProblems:
+					record["Do your have problems with your general health? (Please Check)"] ===
+					"Yes"
+						? "yes"
+						: "no",
+				psychologicalConsultation:
+					record["Counselor:"] && record["Counselor:"] !== "No" ? "yes" : "no",
+				academicOrganizations: this.mapAcademicOrganizations(record["A. Academic"]),
+				organizationPosition: this.mapOrganizationPosition(
+					record["Occupational position in the organization:"],
+				),
+				// Use High School Average as academic performance indicator for prediction
+				academicPerformanceChange: this.determinePerformanceCategory(
+					Number(record["High  School General Average:"]) || 85,
+				),
 			}));
 
 			console.log(`Loaded ${studentData.length} student records from CSV`);
@@ -453,15 +597,20 @@ export class MentalHealthPredictor {
 		// This is a simplified denormalization for fallback purposes
 		return {
 			gender: normalizedFeatures[0] > 0.5 ? "Female" : "Male",
-			age: Math.round(normalizedFeatures[1] * 30 + 16), // Approximate age range
-			educationLevel: "BA", // Default
-			sleepDuration: normalizedFeatures[3] * 12, // Approximate sleep range
-			stressLevel:
-				normalizedFeatures[4] > 0.66
-					? "High"
-					: normalizedFeatures[4] > 0.33
-						? "Medium"
-						: "Low",
+			age: Math.round(normalizedFeatures[1] || 20), // Age feature
+			highSchoolAverage: Math.round(normalizedFeatures[2] || 85), // High school average
+			natureOfSchooling: normalizedFeatures[3] > 0.5 ? "continuous" : "interrupted",
+			parentsMaritalRelationship: "others", // Default
+			numberOfChildren: Math.round(normalizedFeatures[5] || 1),
+			whoFinancesYourSchooling: "parents", // Default
+			parentsTotalMonthlyIncome: "below_five_thousand", // Default
+			quietPlaceToStudy: normalizedFeatures[8] > 0.5 ? "yes" : "no",
+			natureOfResidence: "family_home", // Default
+			visionProblems: normalizedFeatures[10] > 0.5 ? "yes" : "no",
+			generalHealthProblems: normalizedFeatures[11] > 0.5 ? "yes" : "no",
+			psychologicalConsultation: normalizedFeatures[12] > 0.5 ? "yes" : "no",
+			academicOrganizations: "none", // Default
+			organizationPosition: "member", // Default
 		};
 	}
 	private encodeFeatures(student: StudentData): number[] {
@@ -469,25 +618,9 @@ export class MentalHealthPredictor {
 		const genderMap: { [key: string]: number } = { Male: 0, Female: 1, Other: 2 };
 		const genderEncoded = genderMap[student.gender] ?? 2;
 
-		// Education level encoding (roughly by years of education)
-		const educationMap: { [key: string]: number } = {
-			"Class 8": 8,
-			"Class 9": 9,
-			"Class 10": 10,
-			"Class 11": 11,
-			"Class 12": 12,
-			BA: 15,
-			BSc: 15,
-			BTech: 16,
-			MA: 17,
-			MSc: 17,
-			MTech: 18,
-		};
-		const educationEncoded = educationMap[student.educationLevel] ?? 15;
-
-		// Stress level encoding
-		const stressMap: { [key: string]: number } = { Low: 0, Medium: 1, High: 2 };
-		const stressEncoded = stressMap[student.stressLevel] ?? 1;
+		// Nature of schooling encoding
+		const schoolingMap: { [key: string]: number } = { continuous: 1, interrupted: 0 };
+		const schoolingEncoded = schoolingMap[student.natureOfSchooling || "continuous"] ?? 1;
 
 		// Parents marital relationship encoding
 		const maritalMap: { [key: string]: number } = {
@@ -528,15 +661,57 @@ export class MentalHealthPredictor {
 		const incomeEncoded =
 			incomeMap[student.parentsTotalMonthlyIncome || "below_five_thousand"] ?? 0;
 
+		// Study environment encoding
+		const studyPlaceMap: { [key: string]: number } = { yes: 1, no: 0 };
+		const studyPlaceEncoded = studyPlaceMap[student.quietPlaceToStudy || "yes"] ?? 1;
+
+		// Residence type encoding
+		const residenceMap: { [key: string]: number } = {
+			family_home: 0,
+			relatives_home: 1,
+			bed_spacer: 2,
+			rented_apartment: 3,
+			dorm: 4,
+		};
+		const residenceEncoded = residenceMap[student.natureOfResidence || "family_home"] ?? 0;
+
+		// Health problems encoding
+		const healthMap: { [key: string]: number } = { yes: 1, no: 0 };
+		const visionEncoded = healthMap[student.visionProblems || "no"] ?? 0;
+		const healthEncoded = healthMap[student.generalHealthProblems || "no"] ?? 0;
+		const psychConsultEncoded = healthMap[student.psychologicalConsultation || "no"] ?? 0;
+
+		// Academic organization encoding
+		const orgMap: { [key: string]: number } = {
+			none: 0,
+			math_club: 1,
+			debating_club: 2,
+			science_club: 3,
+			quizzers_club: 4,
+			others: 5,
+		};
+		const orgEncoded = orgMap[student.academicOrganizations || "none"] ?? 0;
+
+		// Organization position encoding
+		const positionMap: { [key: string]: number } = { member: 0, officer: 1, others: 2 };
+		const positionEncoded = positionMap[student.organizationPosition || "member"] ?? 0;
+
 		return [
 			genderEncoded,
 			student.age,
-			educationEncoded,
-			student.sleepDuration,
-			stressEncoded,
+			student.highSchoolAverage || 85,
+			schoolingEncoded,
 			maritalEncoded,
+			student.numberOfChildren || 1,
 			financingEncoded,
 			incomeEncoded,
+			studyPlaceEncoded,
+			residenceEncoded,
+			visionEncoded,
+			healthEncoded,
+			psychConsultEncoded,
+			orgEncoded,
+			positionEncoded,
 		];
 	}
 
@@ -547,12 +722,24 @@ export class MentalHealthPredictor {
 		return {
 			gender: student.gender || "Other",
 			age: student.age || 20,
-			educationLevel: student.educationLevel || "BA",
-			sleepDuration: student.sleepDuration || 7,
-			stressLevel: student.stressLevel || "Medium",
+			highSchoolAverage: student.highSchoolAverage || 85,
+			natureOfSchooling: student.natureOfSchooling || "continuous",
 			parentsMaritalRelationship: student.parentsMaritalRelationship || "others",
+			numberOfChildren: student.numberOfChildren || 1,
+			ordinalPosition: student.ordinalPosition || "1st child",
 			whoFinancesYourSchooling: student.whoFinancesYourSchooling || "parents",
 			parentsTotalMonthlyIncome: student.parentsTotalMonthlyIncome || "below_five_thousand",
+			quietPlaceToStudy: student.quietPlaceToStudy || "yes",
+			natureOfResidence: student.natureOfResidence || "family_home",
+			visionProblems: student.visionProblems || "no",
+			hearingProblems: student.hearingProblems || "no",
+			speechProblems: student.speechProblems || "no",
+			generalHealthProblems: student.generalHealthProblems || "no",
+			psychologicalConsultation: student.psychologicalConsultation || "no",
+			favoriteSubject: student.favoriteSubject || "Math",
+			leastFavoriteSubject: student.leastFavoriteSubject || "Math",
+			academicOrganizations: student.academicOrganizations || "none",
+			organizationPosition: student.organizationPosition || "member",
 		};
 	}
 
@@ -733,16 +920,63 @@ export class MentalHealthPredictor {
 	private identifyRiskFactors(studentData: Partial<StudentData>): string[] {
 		const riskFactors: string[] = [];
 
-		// Sleep duration risk factors
-		if (studentData.sleepDuration && studentData.sleepDuration < 6) {
-			riskFactors.push("Insufficient sleep (< 6 hours)");
-		} else if (studentData.sleepDuration && studentData.sleepDuration > 9) {
-			riskFactors.push("Excessive sleep (> 9 hours)");
+		// Academic performance risk factors
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 80) {
+			riskFactors.push("Below average academic performance");
 		}
 
-		// Stress level risk factors
-		if (studentData.stressLevel === "High") {
-			riskFactors.push("High stress levels");
+		// Educational continuity risk factors
+		if (studentData.natureOfSchooling === "interrupted") {
+			riskFactors.push("Interrupted schooling history");
+		}
+
+		// Family structure risk factors
+		if (
+			studentData.parentsMaritalRelationship === "single_parent" ||
+			studentData.parentsMaritalRelationship === "married_but_separated"
+		) {
+			riskFactors.push("Non-traditional family structure");
+		}
+
+		// Financial stress indicators
+		if (
+			studentData.parentsTotalMonthlyIncome === "below_five_thousand" ||
+			studentData.whoFinancesYourSchooling === "self_supporting"
+		) {
+			riskFactors.push("Financial constraints");
+		}
+
+		// Study environment challenges
+		if (studentData.quietPlaceToStudy === "no") {
+			riskFactors.push("Lack of proper study environment");
+		}
+
+		// Housing instability
+		if (
+			studentData.natureOfResidence === "bed_spacer" ||
+			studentData.natureOfResidence === "rented_apartment"
+		) {
+			riskFactors.push("Housing instability");
+		}
+
+		// Health-related risk factors
+		if (studentData.visionProblems === "yes" || studentData.generalHealthProblems === "yes") {
+			riskFactors.push("Physical health challenges");
+		}
+
+		// Mental health history
+		if (studentData.psychologicalConsultation === "yes") {
+			riskFactors.push("Previous psychological consultation");
+		}
+
+		// Social engagement
+		if (studentData.academicOrganizations === "none") {
+			riskFactors.push("Limited academic social engagement");
+		}
+
+		// Large family size (potential economic strain)
+		if (studentData.numberOfChildren && studentData.numberOfChildren > 5) {
+			riskFactors.push("Large family size");
 		}
 
 		// Age-based risk factors
@@ -750,18 +984,9 @@ export class MentalHealthPredictor {
 			riskFactors.push("Age-related adjustment challenges");
 		}
 
-		// Combined risk factors
-		if (
-			studentData.stressLevel === "High" &&
-			studentData.sleepDuration &&
-			studentData.sleepDuration < 6
-		) {
-			riskFactors.push("Combined high stress and sleep deprivation");
-		}
-
 		// Add general recommendations if no specific risks
 		if (riskFactors.length === 0) {
-			riskFactors.push("Monitor sleep patterns and stress levels regularly");
+			riskFactors.push("Continue monitoring academic and personal well-being");
 		}
 
 		return riskFactors;
@@ -787,15 +1012,21 @@ export class MentalHealthPredictor {
 		else if (prediction === "Same") riskScore += 1;
 		// 'Improved' adds 0
 
-		// Risk factor scoring
+		// Risk factor scoring based on new IIF variables
 		const criticalFactors = [
-			"Insufficient sleep (< 6 hours)",
-			"High stress levels",
-			"Combined high stress and sleep deprivation",
+			"Below average academic performance",
+			"Previous psychological consultation",
+			"Financial constraints",
+			"Physical health challenges",
 		];
 
 		const moderateFactors = [
-			"Excessive sleep (> 9 hours)",
+			"Interrupted schooling history",
+			"Non-traditional family structure",
+			"Lack of proper study environment",
+			"Housing instability",
+			"Limited academic social engagement",
+			"Large family size",
 			"Age-related adjustment challenges",
 		];
 
@@ -809,24 +1040,32 @@ export class MentalHealthPredictor {
 			}
 		});
 
-		// Additional scoring based on specific data points
-		if (studentData.sleepDuration && studentData.sleepDuration < 4) riskScore += 2;
-		if (studentData.stressLevel === "High" && prediction === "Declined") riskScore += 2;
+		// Additional scoring based on specific IIF data points
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 75) riskScore += 2;
+		if (studentData.psychologicalConsultation === "yes" && prediction === "Declined")
+			riskScore += 2;
+		if (studentData.generalHealthProblems === "yes" && studentData.visionProblems === "yes")
+			riskScore += 1;
+		if (
+			studentData.parentsTotalMonthlyIncome === "below_five_thousand" &&
+			studentData.whoFinancesYourSchooling === "self_supporting"
+		)
+			riskScore += 2;
 
 		// Determine risk level and response
-		if (riskScore >= 7) {
+		if (riskScore >= 8) {
 			return {
 				level: "Critical",
 				description:
-					"Student shows multiple indicators of significant mental health concerns. Immediate professional intervention recommended.",
+					"Student shows multiple indicators of significant academic and personal challenges. Immediate professional intervention and comprehensive support recommended.",
 				needsAttention: true,
 				urgency: "Immediate",
 			};
-		} else if (riskScore >= 5) {
+		} else if (riskScore >= 6) {
 			return {
 				level: "High",
 				description:
-					"Student displays concerning patterns that suggest potential mental health issues. Professional consultation strongly recommended.",
+					"Student displays concerning patterns in academic performance and personal circumstances. Professional consultation and academic support strongly recommended.",
 				needsAttention: true,
 				urgency: "Schedule",
 			};
@@ -834,7 +1073,7 @@ export class MentalHealthPredictor {
 			return {
 				level: "Moderate",
 				description:
-					"Student shows some risk factors that warrant attention. Consider counseling services and stress management resources.",
+					"Student shows some risk factors that warrant attention. Consider academic counseling, study support resources, and regular monitoring.",
 				needsAttention: true,
 				urgency: "Monitor",
 			};
@@ -842,7 +1081,7 @@ export class MentalHealthPredictor {
 			return {
 				level: "Low",
 				description:
-					"Student appears to be managing well with minimal risk indicators. Continue monitoring and maintain healthy habits.",
+					"Student appears to be managing well academically and personally with minimal risk indicators. Continue current positive practices.",
 				needsAttention: false,
 				urgency: "None",
 			};

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { PrismaClient, Prisma, StressLevel, PerformanceChange } from "../../generated/prisma";
+import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
@@ -287,9 +287,6 @@ export const controller = (prisma: PrismaClient) => {
 			test_results,
 			significant_notes_councilor_only,
 			student_signature,
-			sleep_duration,
-			stress_level,
-			academic_performance_change,
 		} = req.body;
 
 		// Validate required fields
@@ -333,46 +330,9 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (!sleep_duration) {
-			inventoryLogger.error("Sleep duration is required");
-			res.status(400).json({
-				error: "Sleep duration is required",
-			});
-			return;
-		}
+		// Note: sleep_duration, stress_level, and academic_performance_change are no longer part of IIF validation
 
-		if (!stress_level) {
-			inventoryLogger.error("Stress level is required");
-			res.status(400).json({
-				error: "Stress level is required",
-			});
-			return;
-		}
-
-		if (!academic_performance_change) {
-			inventoryLogger.error("Academic performance change is required");
-			res.status(400).json({
-				error: "Academic performance change is required",
-			});
-			return;
-		}
-
-		// Validate enum values
-		if (!Object.values(StressLevel).includes(stress_level)) {
-			inventoryLogger.error(`Invalid stress level: ${stress_level}`);
-			res.status(400).json({
-				error: `Invalid stress level. Must be one of: ${Object.values(StressLevel).join(", ")}`,
-			});
-			return;
-		}
-
-		if (!Object.values(PerformanceChange).includes(academic_performance_change)) {
-			inventoryLogger.error(`Invalid performance change: ${academic_performance_change}`);
-			res.status(400).json({
-				error: `Invalid performance change. Must be one of: ${Object.values(PerformanceChange).join(", ")}`,
-			});
-			return;
-		}
+		// Note: Individual Inventory Form validation is handled by Prisma schema constraints
 
 		try {
 			// Check if student exists
@@ -463,9 +423,7 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						},
 					}),
-				sleep_duration,
-				stress_level,
-				academic_performance_change,
+				// Note: sleep_duration, stress_level, and academic_performance_change removed from IIF
 				student_signature,
 			};
 
@@ -496,25 +454,61 @@ export const controller = (prisma: PrismaClient) => {
 							inventory.student.person.gender.slice(1)
 						: "Other",
 					age: inventory.student?.person?.age || 20,
-					educationLevel: inventory.student?.program || "None",
-					sleepDuration: parseFloat(sleep_duration) || 7,
-					stressLevel:
-						stress_level === StressLevel.low
-							? "Low"
-							: stress_level === StressLevel.medium
-								? "Medium"
-								: stress_level === StressLevel.high
-									? "High"
-									: "Medium",
+					// Educational background from inventory
+					highSchoolAverage:
+						parseFloat(inventory.educational_background?.honors_received || "85") || 85,
+					natureOfSchooling: inventory.nature_of_schooling?.continuous
+						? "continuous"
+						: "interrupted",
+					// Home and family background
 					parentsMaritalRelationship:
 						inventory.home_and_family_background?.parents_martial_relationship ||
 						"others",
+					numberOfChildren:
+						inventory.home_and_family_background
+							?.number_of_children_in_the_family_including_yourself || 1,
+					ordinalPosition:
+						inventory.home_and_family_background?.ordinal_position || "1st child",
 					whoFinancesYourSchooling:
 						inventory.home_and_family_background?.who_finances_your_schooling ||
 						"parents",
 					parentsTotalMonthlyIncome:
 						inventory.home_and_family_background?.parents_total_montly_income?.income ||
 						"below_five_thousand",
+					quietPlaceToStudy:
+						inventory.home_and_family_background?.do_you_have_quiet_place_to_study ===
+						"yes"
+							? "yes"
+							: "no",
+					natureOfResidence:
+						inventory.home_and_family_background
+							?.nature_of_residence_while_attending_school || "family_home",
+					// Health status
+					visionProblems: inventory.health?.physical?.your_vision ? "yes" : "no",
+					generalHealthProblems: inventory.health?.physical?.your_general_health
+						? "yes"
+						: "no",
+					psychologicalConsultation:
+						inventory.health?.psychological?.status === "yes" ? "yes" : "no",
+					// Interest and hobbies
+					favoriteSubject: inventory.interest_and_hobbies?.favorite_subject || "Math",
+					leastFavoriteSubject:
+						inventory.interest_and_hobbies?.favorite_least_subject || "Math",
+					academicOrganizations:
+						inventory.interest_and_hobbies?.academic === "match_club"
+							? "math_club"
+							: inventory.interest_and_hobbies?.academic === "debating_club"
+								? "debating_club"
+								: inventory.interest_and_hobbies?.academic === "science_club"
+									? "science_club"
+									: inventory.interest_and_hobbies?.academic === "quizzers_club"
+										? "quizzers_club"
+										: "none",
+					organizationPosition:
+						inventory.interest_and_hobbies?.occupational_position_organization ===
+						"officer"
+							? "officer"
+							: "member",
 				};
 
 				// Call the mental health predictor
@@ -591,9 +585,6 @@ export const controller = (prisma: PrismaClient) => {
 			test_results,
 			significant_notes_councilor_only,
 			student_signature,
-			sleep_duration,
-			stress_level,
-			academic_performance_change,
 		} = req.body;
 
 		if (!id) {
@@ -610,25 +601,7 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		// Validate enum values if provided
-		if (stress_level && !Object.values(StressLevel).includes(stress_level)) {
-			inventoryLogger.error(`Invalid stress level: ${stress_level}`);
-			res.status(400).json({
-				error: `Invalid stress level. Must be one of: ${Object.values(StressLevel).join(", ")}`,
-			});
-			return;
-		}
-
-		if (
-			academic_performance_change &&
-			!Object.values(PerformanceChange).includes(academic_performance_change)
-		) {
-			inventoryLogger.error(`Invalid performance change: ${academic_performance_change}`);
-			res.status(400).json({
-				error: `Invalid performance change. Must be one of: ${Object.values(PerformanceChange).join(", ")}`,
-			});
-			return;
-		}
+		// Note: Individual Inventory Form validation is handled by Prisma schema constraints
 
 		inventoryLogger.info(`Updating inventory: ${id}`);
 
@@ -717,9 +690,6 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						}),
 					...(student_signature && { student_signature }),
-					...(sleep_duration && { sleep_duration }),
-					...(stress_level && { stress_level }),
-					...(academic_performance_change && { academic_performance_change }),
 				},
 				include: {
 					student: {
@@ -785,12 +755,22 @@ export const controller = (prisma: PrismaClient) => {
 		const {
 			gender,
 			age,
-			educationLevel,
-			sleepDuration,
-			stressLevel,
+			highSchoolAverage,
+			natureOfSchooling,
 			parentsMaritalRelationship,
+			numberOfChildren,
+			ordinalPosition,
 			whoFinancesYourSchooling,
 			parentsTotalMonthlyIncome,
+			quietPlaceToStudy,
+			natureOfResidence,
+			visionProblems,
+			generalHealthProblems,
+			psychologicalConsultation,
+			favoriteSubject,
+			leastFavoriteSubject,
+			academicOrganizations,
+			organizationPosition,
 		} = req.body;
 
 		if (!studentId) {
@@ -843,21 +823,30 @@ export const controller = (prisma: PrismaClient) => {
 							student.person.gender.slice(1)
 						: "Other"),
 				age: age || student.person?.age || 20,
-				educationLevel: educationLevel || student.program || "None",
-				sleepDuration: sleepDuration || parseFloat(existingInventory.sleep_duration) || 7,
-				stressLevel:
-					stressLevel ||
-					(existingInventory.stress_level === StressLevel.low
-						? "Low"
-						: existingInventory.stress_level === StressLevel.medium
-							? "Medium"
-							: existingInventory.stress_level === StressLevel.high
-								? "High"
-								: "Medium"),
+				// Educational background from inventory or request body
+				highSchoolAverage:
+					highSchoolAverage ||
+					parseFloat(existingInventory.educational_background?.honors_received || "85") ||
+					85,
+				natureOfSchooling:
+					natureOfSchooling ||
+					(existingInventory.nature_of_schooling?.continuous
+						? "continuous"
+						: "interrupted"),
+				// Home and family background
 				parentsMaritalRelationship:
 					parentsMaritalRelationship ||
 					existingInventory.home_and_family_background?.parents_martial_relationship ||
 					"others",
+				numberOfChildren:
+					numberOfChildren ||
+					existingInventory.home_and_family_background
+						?.number_of_children_in_the_family_including_yourself ||
+					1,
+				ordinalPosition:
+					ordinalPosition ||
+					existingInventory.home_and_family_background?.ordinal_position ||
+					"1st child",
 				whoFinancesYourSchooling:
 					whoFinancesYourSchooling ||
 					existingInventory.home_and_family_background?.who_finances_your_schooling ||
@@ -867,6 +856,54 @@ export const controller = (prisma: PrismaClient) => {
 					existingInventory.home_and_family_background?.parents_total_montly_income
 						?.income ||
 					"below_five_thousand",
+				quietPlaceToStudy:
+					quietPlaceToStudy ||
+					(existingInventory.home_and_family_background
+						?.do_you_have_quiet_place_to_study === "yes"
+						? "yes"
+						: "no"),
+				natureOfResidence:
+					natureOfResidence ||
+					existingInventory.home_and_family_background
+						?.nature_of_residence_while_attending_school ||
+					"family_home",
+				// Health status
+				visionProblems:
+					visionProblems ||
+					(existingInventory.health?.physical?.your_vision ? "yes" : "no"),
+				generalHealthProblems:
+					generalHealthProblems ||
+					(existingInventory.health?.physical?.your_general_health ? "yes" : "no"),
+				psychologicalConsultation:
+					psychologicalConsultation ||
+					(existingInventory.health?.psychological?.status === "yes" ? "yes" : "no"),
+				// Interest and hobbies
+				favoriteSubject:
+					favoriteSubject ||
+					existingInventory.interest_and_hobbies?.favorite_subject ||
+					"Math",
+				leastFavoriteSubject:
+					leastFavoriteSubject ||
+					existingInventory.interest_and_hobbies?.favorite_least_subject ||
+					"Math",
+				academicOrganizations:
+					academicOrganizations ||
+					(existingInventory.interest_and_hobbies?.academic === "match_club"
+						? "math_club"
+						: existingInventory.interest_and_hobbies?.academic === "debating_club"
+							? "debating_club"
+							: existingInventory.interest_and_hobbies?.academic === "science_club"
+								? "science_club"
+								: existingInventory.interest_and_hobbies?.academic ===
+									  "quizzers_club"
+									? "quizzers_club"
+									: "none"),
+				organizationPosition:
+					organizationPosition ||
+					(existingInventory.interest_and_hobbies?.occupational_position_organization ===
+					"officer"
+						? "officer"
+						: "member"),
 			};
 
 			// Validate input data
@@ -877,20 +914,38 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			if (
-				studentData.sleepDuration &&
-				(studentData.sleepDuration < 0 || studentData.sleepDuration > 24)
+				studentData.highSchoolAverage &&
+				(studentData.highSchoolAverage < 60 || studentData.highSchoolAverage > 100)
 			) {
-				inventoryLogger.error(`Invalid sleep duration: ${studentData.sleepDuration}`);
-				res.status(400).json({ error: "Sleep duration must be between 0 and 24 hours" });
+				inventoryLogger.error(
+					`Invalid high school average: ${studentData.highSchoolAverage}`,
+				);
+				res.status(400).json({ error: "High school average must be between 60 and 100" });
 				return;
 			}
 
-			const validStressLevels = ["Low", "Medium", "High"];
-			if (studentData.stressLevel && !validStressLevels.includes(studentData.stressLevel)) {
-				inventoryLogger.error(`Invalid stress level: ${studentData.stressLevel}`);
+			const validSchoolingTypes = ["continuous", "interrupted"];
+			if (
+				studentData.natureOfSchooling &&
+				!validSchoolingTypes.includes(studentData.natureOfSchooling)
+			) {
+				inventoryLogger.error(
+					`Invalid nature of schooling: ${studentData.natureOfSchooling}`,
+				);
 				res.status(400).json({
-					error: "Stress level must be one of: Low, Medium, High",
+					error: "Nature of schooling must be one of: continuous, interrupted",
 				});
+				return;
+			}
+
+			if (
+				studentData.numberOfChildren &&
+				(studentData.numberOfChildren < 1 || studentData.numberOfChildren > 20)
+			) {
+				inventoryLogger.error(
+					`Invalid number of children: ${studentData.numberOfChildren}`,
+				);
+				res.status(400).json({ error: "Number of children must be between 1 and 20" });
 				return;
 			}
 
@@ -942,35 +997,96 @@ export const controller = (prisma: PrismaClient) => {
 	const generateRecommendations = (prediction: any): string[] => {
 		const recommendations: string[] = [];
 
+		// Base recommendations based on academic performance prediction
 		if (prediction.prediction === "Declined") {
 			recommendations.push(
-				"Consider scheduling a consultation with a mental health professional",
+				"Schedule a consultation with an academic counselor to develop a personalized study plan",
 			);
-			recommendations.push(
-				"Implement stress reduction techniques such as meditation or deep breathing exercises",
-			);
-			recommendations.push("Establish a consistent sleep schedule");
-			recommendations.push("Engage in regular physical activity");
+			recommendations.push("Consider tutoring or additional academic support services");
+			recommendations.push("Evaluate and improve study environment and habits");
+			recommendations.push("Explore stress management and time management techniques");
 		} else if (prediction.prediction === "Same") {
-			recommendations.push("Maintain current healthy habits");
-			recommendations.push("Monitor stress levels regularly");
-			recommendations.push("Continue with regular sleep pattern");
+			recommendations.push("Maintain current academic practices and study habits");
+			recommendations.push("Continue regular monitoring of academic progress");
+			recommendations.push("Consider gradual improvements to study techniques");
+			recommendations.push("Stay engaged with academic support services");
 		} else {
-			recommendations.push("Continue with current positive practices");
-			recommendations.push("Consider sharing successful strategies with peers");
-			recommendations.push("Maintain work-life balance");
+			recommendations.push("Continue with current successful academic strategies");
+			recommendations.push("Consider peer tutoring or mentoring opportunities");
+			recommendations.push("Maintain balanced approach to academics and personal well-being");
+			recommendations.push("Share successful study techniques with fellow students");
 		}
 
-		// Add specific recommendations based on risk factors
-		if (prediction.riskFactors.some((factor: string) => factor.includes("sleep"))) {
+		// Add specific recommendations based on IIF risk factors
+		if (
+			prediction.riskFactors.some((factor: string) => factor.includes("academic performance"))
+		) {
 			recommendations.push(
-				"Focus on improving sleep hygiene and maintaining 7-9 hours of sleep per night",
+				"Focus on academic skill building and seek subject-specific tutoring",
 			);
 		}
 
-		if (prediction.riskFactors.some((factor: string) => factor.includes("stress"))) {
+		if (
+			prediction.riskFactors.some((factor: string) =>
+				factor.includes("interrupted schooling"),
+			)
+		) {
+			recommendations.push("Work with academic advisors to address any educational gaps");
+		}
+
+		if (
+			prediction.riskFactors.some((factor: string) =>
+				factor.includes("financial constraints"),
+			)
+		) {
 			recommendations.push(
-				"Implement stress management techniques and consider counseling services",
+				"Explore financial aid, scholarships, and student support programs",
+			);
+		}
+
+		if (prediction.riskFactors.some((factor: string) => factor.includes("study environment"))) {
+			recommendations.push(
+				"Identify and utilize quiet study spaces on campus or in the library",
+			);
+		}
+
+		if (
+			prediction.riskFactors.some((factor: string) => factor.includes("housing instability"))
+		) {
+			recommendations.push(
+				"Connect with student housing services for stable accommodation options",
+			);
+		}
+
+		if (prediction.riskFactors.some((factor: string) => factor.includes("health challenges"))) {
+			recommendations.push(
+				"Utilize campus health services and seek appropriate medical support",
+			);
+		}
+
+		if (
+			prediction.riskFactors.some((factor: string) =>
+				factor.includes("psychological consultation"),
+			)
+		) {
+			recommendations.push(
+				"Continue or establish regular check-ins with mental health professionals",
+			);
+		}
+
+		if (prediction.riskFactors.some((factor: string) => factor.includes("social engagement"))) {
+			recommendations.push("Join academic clubs, study groups, or student organizations");
+		}
+
+		if (prediction.riskFactors.some((factor: string) => factor.includes("family structure"))) {
+			recommendations.push(
+				"Consider family counseling resources and develop strong support networks",
+			);
+		}
+
+		if (prediction.riskFactors.some((factor: string) => factor.includes("large family"))) {
+			recommendations.push(
+				"Develop time management skills to balance family and academic responsibilities",
 			);
 		}
 
