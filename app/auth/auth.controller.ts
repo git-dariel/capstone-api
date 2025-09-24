@@ -729,115 +729,64 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Check if email is verified
+			// If email is not verified, generate/send OTP and do NOT sign in yet
 			if (!user.emailVerified) {
-				authLogger.info(`Login attempt with unverified email: ${user.id}`);
-
-				// Generate new OTP for email verification
 				const otpEmailHelper = initOTPEmailHelper();
-				if (otpEmailHelper) {
-					try {
-						const otp = otpEmailHelper.generateOTP();
-						const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
-						// Update user with new OTP
-						await prisma.user.update({
-							where: { id: user.id },
-							data: {
-								emailOtp: otp,
-								emailOtpExpiry: otpExpiry,
-							},
-						});
-
-						// Send OTP email
-						const emailResult = await otpEmailHelper.sendOTPEmail(
-							email,
-							otp,
-							person.firstName || undefined,
-						);
-
-						if (emailResult.success) {
-							authLogger.info(
-								`OTP email sent for unverified login attempt: ${email}`,
-							);
-						} else {
-							authLogger.error(
-								`Failed to send OTP email for unverified login: ${email}: ${emailResult.error}`,
-							);
-						}
-
-						// Prepare response data
-						const responseData: any = {
-							message:
-								"Email verification required. Please check your email for the verification code.",
-							emailVerificationRequired: true,
-							otpSent: emailResult.success,
-							user: {
-								id: user.id,
-								role: user.role,
-								type: user.type,
-								person,
-							},
-						};
-
-						// Include student data if person has student records
-						if (person.students && person.students.length > 0) {
-							responseData.student = person.students[0];
-						}
-
-						// Return response indicating email verification is required
-						res.status(200).json(responseData);
-						return;
-					} catch (emailError) {
-						authLogger.error(
-							`Error sending OTP for unverified login: ${email}: ${emailError}`,
-						);
-
-						const errorResponseData: any = {
-							message:
-								"Email verification required, but failed to send verification code.",
-							emailVerificationRequired: true,
-							otpSent: false,
-							user: {
-								id: user.id,
-								role: user.role,
-								type: user.type,
-								person,
-							},
-						};
-
-						// Include student data if person has student records
-						if (person.students && person.students.length > 0) {
-							errorResponseData.student = person.students[0];
-						}
-
-						res.status(200).json(errorResponseData);
-						return;
-					}
-				} else {
-					// Email service not configured
-					authLogger.error("Email service not configured for unverified login");
-
-					const noServiceResponseData: any = {
-						message: "Email verification required, but email service is not available.",
-						emailVerificationRequired: true,
-						otpSent: false,
-						user: {
-							id: user.id,
-							role: user.role,
-							type: user.type,
-							person,
-						},
-					};
-
-					// Include student data if person has student records
-					if (person.students && person.students.length > 0) {
-						noServiceResponseData.student = person.students[0];
-					}
-
-					res.status(200).json(noServiceResponseData);
+				if (!otpEmailHelper) {
+					authLogger.error("Email service not configured");
+					res.status(500).json({ message: "Email service not available" });
 					return;
 				}
+
+				const newOtp = otpEmailHelper.generateOTP();
+				const newOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+				await prisma.user.update({
+					where: { id: user.id },
+					data: {
+						emailOtp: newOtp,
+						emailOtpExpiry: newOtpExpiry,
+					},
+				});
+
+				try {
+					const emailResult = await otpEmailHelper.sendOTPEmail(
+						email,
+						newOtp,
+						person.firstName || undefined,
+					);
+
+					if (!emailResult.success) {
+						authLogger.error(
+							`Failed to send OTP email to ${email}: ${emailResult.error}`,
+						);
+					}
+				} catch (emailError) {
+					authLogger.error(`Error sending OTP email to ${email}: ${emailError}`);
+				}
+
+				authLogger.info(`Email not verified. OTP sent for user: ${user.id}`);
+
+				const responseData: any = {
+					message: "Email not verified. Verification code sent to your email",
+					user: {
+						id: user.id,
+						role: user.role,
+						type: user.type,
+						person,
+					},
+					emailVerificationRequired: true,
+					otpSent: true,
+				};
+
+				// Include student data if available to maintain response shape
+				if (person.students && person.students.length > 0) {
+					responseData.student = person.students[0];
+				}
+
+				res.status(200).json(responseData);
+				return;
 			}
 
 			const token = jwt.sign(
