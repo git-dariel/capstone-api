@@ -729,6 +729,117 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Check if email is verified
+			if (!user.emailVerified) {
+				authLogger.info(`Login attempt with unverified email: ${user.id}`);
+
+				// Generate new OTP for email verification
+				const otpEmailHelper = initOTPEmailHelper();
+				if (otpEmailHelper) {
+					try {
+						const otp = otpEmailHelper.generateOTP();
+						const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+						// Update user with new OTP
+						await prisma.user.update({
+							where: { id: user.id },
+							data: {
+								emailOtp: otp,
+								emailOtpExpiry: otpExpiry,
+							},
+						});
+
+						// Send OTP email
+						const emailResult = await otpEmailHelper.sendOTPEmail(
+							email,
+							otp,
+							person.firstName || undefined,
+						);
+
+						if (emailResult.success) {
+							authLogger.info(
+								`OTP email sent for unverified login attempt: ${email}`,
+							);
+						} else {
+							authLogger.error(
+								`Failed to send OTP email for unverified login: ${email}: ${emailResult.error}`,
+							);
+						}
+
+						// Prepare response data
+						const responseData: any = {
+							message:
+								"Email verification required. Please check your email for the verification code.",
+							emailVerificationRequired: true,
+							otpSent: emailResult.success,
+							user: {
+								id: user.id,
+								role: user.role,
+								type: user.type,
+								person,
+							},
+						};
+
+						// Include student data if person has student records
+						if (person.students && person.students.length > 0) {
+							responseData.student = person.students[0];
+						}
+
+						// Return response indicating email verification is required
+						res.status(200).json(responseData);
+						return;
+					} catch (emailError) {
+						authLogger.error(
+							`Error sending OTP for unverified login: ${email}: ${emailError}`,
+						);
+
+						const errorResponseData: any = {
+							message:
+								"Email verification required, but failed to send verification code.",
+							emailVerificationRequired: true,
+							otpSent: false,
+							user: {
+								id: user.id,
+								role: user.role,
+								type: user.type,
+								person,
+							},
+						};
+
+						// Include student data if person has student records
+						if (person.students && person.students.length > 0) {
+							errorResponseData.student = person.students[0];
+						}
+
+						res.status(200).json(errorResponseData);
+						return;
+					}
+				} else {
+					// Email service not configured
+					authLogger.error("Email service not configured for unverified login");
+
+					const noServiceResponseData: any = {
+						message: "Email verification required, but email service is not available.",
+						emailVerificationRequired: true,
+						otpSent: false,
+						user: {
+							id: user.id,
+							role: user.role,
+							type: user.type,
+							person,
+						},
+					};
+
+					// Include student data if person has student records
+					if (person.students && person.students.length > 0) {
+						noServiceResponseData.student = person.students[0];
+					}
+
+					res.status(200).json(noServiceResponseData);
+					return;
+				}
+			}
+
 			const token = jwt.sign(
 				{
 					userId: user.id,

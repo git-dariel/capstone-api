@@ -471,8 +471,8 @@ export const router = (route: Router, controller: IController): Router => {
 	 * @openapi
 	 * /api/inventory/{studentId}/predict:
 	 *   post:
-	 *     summary: Predict mental health risk for a student
-	 *     description: Generate mental health prediction based on student's inventory data and additional parameters
+	 *     summary: Predict academic performance risk for a student using IIF data
+	 *     description: Generate academic performance prediction based on student's Individual Inventory Form (IIF) data including educational background, family circumstances, health status, and interests
 	 *     tags: [Inventory]
 	 *     parameters:
 	 *       - in: path
@@ -496,22 +496,27 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                 minimum: 10
 	 *                 maximum: 100
 	 *                 description: Student age (optional, defaults to student record)
-	 *               educationLevel:
-	 *                 type: string
-	 *                 description: Education level (optional, defaults to student program)
-	 *               sleepDuration:
+	 *               highSchoolAverage:
 	 *                 type: number
-	 *                 minimum: 0
-	 *                 maximum: 24
-	 *                 description: Sleep duration in hours (optional, defaults to inventory data)
-	 *               stressLevel:
+	 *                 minimum: 60
+	 *                 maximum: 100
+	 *                 description: High school academic average (optional, defaults to inventory data)
+	 *               natureOfSchooling:
 	 *                 type: string
-	 *                 enum: [Low, Medium, High]
-	 *                 description: Stress level (optional, defaults to inventory data)
+	 *                 enum: [continuous, interrupted]
+	 *                 description: Nature of schooling continuity (optional, defaults to inventory data)
 	 *               parentsMaritalRelationship:
 	 *                 type: string
 	 *                 enum: [single_parent, married_and_staying_together, married_but_separated, not_married_but_living_together, others]
 	 *                 description: Parents marital relationship (optional, defaults to inventory data)
+	 *               numberOfChildren:
+	 *                 type: integer
+	 *                 minimum: 1
+	 *                 maximum: 20
+	 *                 description: Number of children in family (optional, defaults to inventory data)
+	 *               ordinalPosition:
+	 *                 type: string
+	 *                 description: Birth order position in family (optional, defaults to inventory data)
 	 *               whoFinancesYourSchooling:
 	 *                 type: string
 	 *                 enum: [parents, spouse, relatives, brother, sister, scholarship, self_supporting]
@@ -520,6 +525,40 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                 type: string
 	 *                 enum: [below_five_thousand, five_thousand_to_ten_thousand, ten_thousand_to_fifteen_thousand, fifteen_thousand_to_twenty_thousand, twenty_thousand_to_twenty_five_thousand, twenty_five_thousand_to_thirty_thousand, thirty_thousand_to_thirty_five_thousand, thirty_five_thousand_to_forty_thousand, forty_thousand_to_forty_five_thousand, forty_five_thousand_to_fifty_thousand, above_fifty_thousand]
 	 *                 description: Parents total monthly income (optional, defaults to inventory data)
+	 *               quietPlaceToStudy:
+	 *                 type: string
+	 *                 enum: [yes, no]
+	 *                 description: Has quiet place to study (optional, defaults to inventory data)
+	 *               natureOfResidence:
+	 *                 type: string
+	 *                 enum: [family_home, relatives_home, bed_spacer, rented_apartment, dorm]
+	 *                 description: Type of residence while attending school (optional, defaults to inventory data)
+	 *               visionProblems:
+	 *                 type: string
+	 *                 enum: [yes, no]
+	 *                 description: Has vision problems (optional, defaults to inventory data)
+	 *               generalHealthProblems:
+	 *                 type: string
+	 *                 enum: [yes, no]
+	 *                 description: Has general health problems (optional, defaults to inventory data)
+	 *               psychologicalConsultation:
+	 *                 type: string
+	 *                 enum: [yes, no]
+	 *                 description: Has had psychological consultation (optional, defaults to inventory data)
+	 *               favoriteSubject:
+	 *                 type: string
+	 *                 description: Favorite academic subject (optional, defaults to inventory data)
+	 *               leastFavoriteSubject:
+	 *                 type: string
+	 *                 description: Least favorite academic subject (optional, defaults to inventory data)
+	 *               academicOrganizations:
+	 *                 type: string
+	 *                 enum: [none, math_club, debating_club, science_club, quizzers_club, others]
+	 *                 description: Academic organizations participated in (optional, defaults to inventory data)
+	 *               organizationPosition:
+	 *                 type: string
+	 *                 enum: [member, officer, others]
+	 *                 description: Position in organization (optional, defaults to inventory data)
 	 *     responses:
 	 *       200:
 	 *         description: Mental health prediction completed successfully
@@ -530,10 +569,10 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               properties:
 	 *                 message:
 	 *                   type: string
-	 *                   example: "Mental health prediction completed successfully"
+	 *                   example: "Academic performance prediction completed successfully"
 	 *                 disclaimer:
 	 *                   type: string
-	 *                   example: "⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis."
+	 *                   example: "⚠️ IMPORTANT NOTICE: This academic performance prediction is based on Individual Inventory Form data and should be used in conjunction with comprehensive academic counseling."
 	 *                 studentId:
 	 *                   type: string
 	 *                 prediction:
@@ -593,8 +632,9 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                   examples:
 	 *                     - "Student ID is required"
 	 *                     - "Age must be between 10 and 100"
-	 *                     - "Sleep duration must be between 0 and 24 hours"
-	 *                     - "Stress level must be one of: Low, Medium, High"
+	 *                     - "High school average must be between 60 and 100"
+	 *                     - "Number of children must be between 1 and 20"
+	 *                     - "Nature of schooling must be one of: continuous, interrupted"
 	 *       404:
 	 *         description: Not found
 	 *         content:

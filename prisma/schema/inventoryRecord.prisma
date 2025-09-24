@@ -118,18 +118,6 @@ enum PositionInOrganization {
   others
 }
 
-enum StressLevel {
-  low
-  medium
-  high
-}
-
-enum PerformanceChange {
-  same
-  improved
-  declined
-}
-
 type PersonAddress {
   houseNo  Int?
   street   String?
@@ -267,10 +255,7 @@ model IndividualInventory {
   health                                                Health?
   interest_and_hobbies                                  InterestAndHobbies
   test_results                                          TestResults?
-  significant_notes_councilor_only                      SignificantNotesGuidanceOnly?
-  sleep_duration                                        String
-  stress_level                                          StressLevel
-  academic_performance_change                           PerformanceChange
+  significant_notes_councilor_only                      SignificantNotesGuidanceOnly?                                 
   student_signature                                     String
   isDeleted                                             Boolean                       @default(false)
   createdAt                                             DateTime                      @default(now())
