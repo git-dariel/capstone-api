@@ -141,6 +141,9 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const whereClause: Prisma.AnxietyAssessmentWhereInput = {
 				isDeleted: false,
+				user: {
+					isDeleted: false,
+				},
 				...(query
 					? {
 							OR: [
