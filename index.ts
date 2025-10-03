@@ -92,6 +92,7 @@ app.get(`${config.baseApiPath}/`, (_req: Request, res: Response) => {
 
 // Auth routes should be public (login/register)
 app.use(config.baseApiPath, auth);
+app.use(config.baseApiPath, announcement);
 
 // Apply middleware for protected routes
 app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) => {
@@ -108,7 +109,6 @@ app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) =>
 // Protected routes
 app.use(config.baseApiPath, person);
 app.use(config.baseApiPath, student);
-app.use(config.baseApiPath, announcement);
 app.use(config.baseApiPath, user);
 app.use(config.baseApiPath, loggings);
 app.use(config.baseApiPath, anxiety);
