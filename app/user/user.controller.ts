@@ -415,17 +415,89 @@ export const controller = (prisma: PrismaClient) => {
 	});
 
 	const exportCsv = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		userLogger.info("CSV export requested");
+		const {
+			program,
+			gender,
+			severityLevel,
+			status,
+			assessmentType,
+			studentId,
+			firstName,
+			lastName,
+		} = req.query;
+
+		userLogger.info(
+			`CSV export requested with filters: program=${program}, gender=${gender}, severityLevel=${severityLevel}, status=${status}, assessmentType=${assessmentType}, studentId=${studentId}, firstName=${firstName}, lastName=${lastName}`,
+		);
+
+		// Validate filter parameters
+		if (gender && !["male", "female", "other", "prefer_not_to_say"].includes(String(gender))) {
+			userLogger.error(`Invalid gender filter: ${gender}`);
+			res.status(400).json({
+				error: "Invalid gender filter. Must be one of: male, female, other, prefer_not_to_say",
+			});
+			return;
+		}
+
+		if (
+			severityLevel &&
+			!["minimal", "mild", "moderate", "moderately_severe", "severe", "low", "high"].includes(
+				String(severityLevel),
+			)
+		) {
+			userLogger.error(`Invalid severity level filter: ${severityLevel}`);
+			res.status(400).json({
+				error: "Invalid severity level filter. Must be one of: minimal, mild, moderate, moderately_severe, severe, low, high",
+			});
+			return;
+		}
+
+		if (status && !["freshman", "sophomore", "junior", "senior"].includes(String(status))) {
+			userLogger.error(`Invalid status filter: ${status}`);
+			res.status(400).json({
+				error: "Invalid status filter. Must be one of: freshman, sophomore, junior, senior",
+			});
+			return;
+		}
+
+		if (
+			assessmentType &&
+			!["anxiety", "depression", "stress", "suicide"].includes(String(assessmentType))
+		) {
+			userLogger.error(`Invalid assessment type filter: ${assessmentType}`);
+			res.status(400).json({
+				error: "Invalid assessment type filter. Must be one of: anxiety, depression, stress, suicide",
+			});
+			return;
+		}
 
 		try {
-			const csvContent = await exportStudentDataCsv(prisma);
+			const filters = {
+				program: program ? String(program) : undefined,
+				gender: gender ? String(gender) : undefined,
+				severityLevel: severityLevel ? String(severityLevel) : undefined,
+				status: status ? String(status) : undefined,
+				assessmentType: assessmentType ? String(assessmentType) : undefined,
+				studentId: studentId ? String(studentId) : undefined,
+				firstName: firstName ? String(firstName) : undefined,
+				lastName: lastName ? String(lastName) : undefined,
+			};
+
+			const csvContent = await exportStudentDataCsv(prisma, filters);
+
+			// Generate dynamic filename based on filters
+			let filename = "student_mental_health_data";
+			if (filters.assessmentType) {
+				filename += `_${filters.assessmentType}`;
+			}
+			if (Object.values(filters).some((filter) => filter !== undefined)) {
+				filename += "_filtered";
+			}
+			filename += ".csv";
 
 			// Set headers for CSV download
 			res.setHeader("Content-Type", "text/csv");
-			res.setHeader(
-				"Content-Disposition",
-				'attachment; filename="student_mental_health_data.csv"',
-			);
+			res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
 			userLogger.info("CSV export completed successfully");
 			res.status(200).send(csvContent);

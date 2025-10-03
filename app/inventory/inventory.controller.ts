@@ -59,7 +59,16 @@ export const controller = (prisma: PrismaClient) => {
 				query.select = fieldSelections;
 			}
 
-			const inventory = await prisma.individualInventory.findFirst(query);
+			const inventory = await prisma.individualInventory.findFirst({
+				...query,
+				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				},
+			});
 
 			if (!inventory) {
 				inventoryLogger.error(`${config.ERROR.INVENTORY.NOT_FOUND}: ${id}`);
@@ -129,7 +138,16 @@ export const controller = (prisma: PrismaClient) => {
 				query.select = fieldSelections;
 			}
 
-			const inventory = await prisma.individualInventory.findFirst(query);
+			const inventory = await prisma.individualInventory.findFirst({
+				...query,
+				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				},
+			});
 
 			if (!inventory) {
 				inventoryLogger.info(`No inventory found for student ID: ${studentId}`);
@@ -518,13 +536,66 @@ export const controller = (prisma: PrismaClient) => {
 					`Mental health prediction for new inventory ${inventory.id}: ${prediction.prediction} (confidence: ${prediction.confidence})`,
 				);
 
+				// Prepare prediction data for storage
+				const predictionData = {
+					academicPerformanceOutlook: prediction.prediction.toLowerCase() as
+						| "improved"
+						| "same"
+						| "declined",
+					confidence: prediction.confidence,
+					modelAccuracy: {
+						decisionTree: prediction.modelAccuracy.decisionTree,
+						randomForest: prediction.modelAccuracy.randomForest,
+					},
+					riskFactors: prediction.riskFactors,
+					mentalHealthRisk: {
+						level: prediction.mentalHealthRisk.level.toLowerCase() as
+							| "low"
+							| "moderate"
+							| "high"
+							| "critical",
+						description: prediction.mentalHealthRisk.description,
+						needsAttention: prediction.mentalHealthRisk.needsAttention,
+						urgency: prediction.mentalHealthRisk.urgency.toLowerCase() as
+							| "none"
+							| "monitor"
+							| "schedule"
+							| "immediate",
+						assessmentSummary: prediction.mentalHealthRisk.needsAttention
+							? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
+							: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
+						disclaimer:
+							"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
+					},
+					inputData: studentData,
+					recommendations: generateRecommendations(prediction),
+					predictionDate: new Date(),
+				};
+
+				// Update inventory with prediction results
+				const updatedInventory = await prisma.individualInventory.update({
+					where: { id: inventory.id },
+					data: {
+						mentalHealthPrediction: predictionData,
+						predictionGenerated: true,
+						predictionUpdatedAt: new Date(),
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
 				// Return inventory data with prediction results
 				res.status(201).json({
 					message:
 						"Individual inventory created successfully with mental health prediction",
 					disclaimer:
 						"⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
-					inventory,
+					inventory: updatedInventory,
 					mentalHealthPrediction: {
 						academicPerformanceOutlook: prediction.prediction,
 						confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
@@ -956,11 +1027,65 @@ export const controller = (prisma: PrismaClient) => {
 				`Mental health prediction for student ${studentId}: ${prediction.prediction} (confidence: ${prediction.confidence})`,
 			);
 
+			// Prepare prediction data for storage
+			const predictionData = {
+				academicPerformanceOutlook: prediction.prediction.toLowerCase() as
+					| "improved"
+					| "same"
+					| "declined",
+				confidence: prediction.confidence,
+				modelAccuracy: {
+					decisionTree: prediction.modelAccuracy.decisionTree,
+					randomForest: prediction.modelAccuracy.randomForest,
+				},
+				riskFactors: prediction.riskFactors,
+				mentalHealthRisk: {
+					level: prediction.mentalHealthRisk.level.toLowerCase() as
+						| "low"
+						| "moderate"
+						| "high"
+						| "critical",
+					description: prediction.mentalHealthRisk.description,
+					needsAttention: prediction.mentalHealthRisk.needsAttention,
+					urgency: prediction.mentalHealthRisk.urgency.toLowerCase() as
+						| "none"
+						| "monitor"
+						| "schedule"
+						| "immediate",
+					assessmentSummary: prediction.mentalHealthRisk.needsAttention
+						? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
+						: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
+					disclaimer:
+						"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
+				},
+				inputData: studentData,
+				recommendations: generateRecommendations(prediction),
+				predictionDate: new Date(),
+			};
+
+			// Update existing inventory with new prediction results
+			const updatedInventory = await prisma.individualInventory.update({
+				where: { id: existingInventory.id },
+				data: {
+					mentalHealthPrediction: predictionData,
+					predictionGenerated: true,
+					predictionUpdatedAt: new Date(),
+				},
+				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				},
+			});
+
 			res.status(200).json({
 				message: "Mental health prediction completed successfully",
 				disclaimer:
 					"⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
 				studentId,
+				inventory: updatedInventory,
 				prediction: {
 					academicPerformanceOutlook: prediction.prediction,
 					confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
@@ -1093,6 +1218,75 @@ export const controller = (prisma: PrismaClient) => {
 		return recommendations;
 	};
 
+	const getPredictionByStudentId = async (req: Request, res: Response, _next: NextFunction) => {
+		const { studentId } = req.params;
+
+		if (!studentId) {
+			inventoryLogger.error("Student ID is required");
+			res.status(400).json({ error: "Student ID is required" });
+			return;
+		}
+
+		inventoryLogger.info(`Getting prediction data for student ID: ${studentId}`);
+
+		try {
+			const inventory = await prisma.individualInventory.findFirst({
+				where: {
+					studentId,
+					isDeleted: false,
+					predictionGenerated: true,
+				},
+				select: {
+					id: true,
+					studentId: true,
+					mentalHealthPrediction: true,
+					predictionGenerated: true,
+					predictionUpdatedAt: true,
+					student: {
+						select: {
+							studentNumber: true,
+							program: true,
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
+									middleName: true,
+								},
+							},
+						},
+					},
+				},
+			});
+
+			if (!inventory) {
+				inventoryLogger.info(`No prediction data found for student ID: ${studentId}`);
+				res.status(404).json({
+					error: "Mental health prediction not found for this student",
+					message:
+						"This student either doesn't have an inventory or hasn't generated a prediction yet",
+				});
+				return;
+			}
+
+			inventoryLogger.info(`Prediction data retrieved for student: ${inventory.id}`);
+			res.status(200).json({
+				message: "Mental health prediction retrieved successfully",
+				studentId,
+				studentInfo: {
+					studentNumber: inventory.student?.studentNumber,
+					program: inventory.student?.program,
+					name: `${inventory.student?.person?.firstName || ""} ${inventory.student?.person?.lastName || ""}`.trim(),
+				},
+				prediction: inventory.mentalHealthPrediction,
+				predictionGenerated: inventory.predictionGenerated,
+				predictionUpdatedAt: inventory.predictionUpdatedAt,
+			});
+		} catch (error) {
+			inventoryLogger.error(`Error getting prediction for student ID: ${error}`);
+			res.status(500).json({ error: config.ERROR.INVENTORY.INTERNAL_SERVER_ERROR });
+		}
+	};
+
 	return {
 		getById,
 		getByStudentId,
@@ -1101,5 +1295,6 @@ export const controller = (prisma: PrismaClient) => {
 		update,
 		remove,
 		predictMentalHealth,
+		getPredictionByStudentId,
 	};
 };

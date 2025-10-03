@@ -8,6 +8,7 @@ interface IController {
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 	predictMentalHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getPredictionByStudentId(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -651,6 +652,120 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.post("/:studentId/predict", controller.predictMentalHealth);
+
+	/**
+	 * @openapi
+	 * /api/inventory/student/{studentId}/prediction:
+	 *   get:
+	 *     summary: Get mental health prediction for a student
+	 *     description: Retrieve stored mental health prediction data for a specific student
+	 *     tags: [Inventory]
+	 *     parameters:
+	 *       - in: path
+	 *         name: studentId
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Student ID
+	 *     responses:
+	 *       200:
+	 *         description: Mental health prediction retrieved successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Mental health prediction retrieved successfully"
+	 *                 studentId:
+	 *                   type: string
+	 *                 studentInfo:
+	 *                   type: object
+	 *                   properties:
+	 *                     studentNumber:
+	 *                       type: string
+	 *                     program:
+	 *                       type: string
+	 *                     name:
+	 *                       type: string
+	 *                 prediction:
+	 *                   type: object
+	 *                   properties:
+	 *                     academicPerformanceOutlook:
+	 *                       type: string
+	 *                       enum: [improved, same, declined]
+	 *                     confidence:
+	 *                       type: number
+	 *                     modelAccuracy:
+	 *                       type: object
+	 *                       properties:
+	 *                         decisionTree:
+	 *                           type: number
+	 *                         randomForest:
+	 *                           type: number
+	 *                     riskFactors:
+	 *                       type: array
+	 *                       items:
+	 *                         type: string
+	 *                     mentalHealthRisk:
+	 *                       type: object
+	 *                       properties:
+	 *                         level:
+	 *                           type: string
+	 *                           enum: [low, moderate, high, critical]
+	 *                         description:
+	 *                           type: string
+	 *                         needsAttention:
+	 *                           type: boolean
+	 *                         urgency:
+	 *                           type: string
+	 *                           enum: [none, monitor, schedule, immediate]
+	 *                         assessmentSummary:
+	 *                           type: string
+	 *                         disclaimer:
+	 *                           type: string
+	 *                     inputData:
+	 *                       type: object
+	 *                     recommendations:
+	 *                       type: array
+	 *                       items:
+	 *                         type: string
+	 *                     predictionDate:
+	 *                       type: string
+	 *                       format: date-time
+	 *                 predictionGenerated:
+	 *                   type: boolean
+	 *                 predictionUpdatedAt:
+	 *                   type: string
+	 *                   format: date-time
+	 *       400:
+	 *         description: Missing student ID
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student ID is required"
+	 *       404:
+	 *         description: Prediction not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Mental health prediction not found for this student"
+	 *                 message:
+	 *                   type: string
+	 *                   example: "This student either doesn't have an inventory or hasn't generated a prediction yet"
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.get("/student/:studentId/prediction", controller.getPredictionByStudentId);
 
 	route.use(path, routes);
 
