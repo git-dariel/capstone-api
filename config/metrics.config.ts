@@ -105,7 +105,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					where: {
 						isDeleted: false,
 						...dateFilter,
-						user: filter.userFilter || {},
+						user: {
+							isDeleted: false,
+							...(filter.userFilter || {}),
+						},
 					},
 					include: {
 						user: {

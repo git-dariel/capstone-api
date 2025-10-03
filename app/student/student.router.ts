@@ -503,7 +503,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         description: Internal server error
 	 */
-	routes.delete("/:id", controller.remove);
+	routes.put("/:id", controller.remove);
 
 	route.use(path, routes);
 
