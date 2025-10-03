@@ -118,6 +118,26 @@ enum PositionInOrganization {
   others
 }
 
+enum AcademicPerformanceOutlook {
+  improved
+  same
+  declined
+}
+
+enum MentalHealthRiskLevel {
+  low
+  moderate
+  high
+  critical
+}
+
+enum PredictionUrgency {
+  none
+  monitor
+  schedule
+  immediate
+}
+
 type PersonAddress {
   houseNo  Int?
   street   String?
@@ -241,6 +261,31 @@ type SignificantNotesGuidanceOnly {
   remarks  String?
 }
 
+type ModelAccuracy {
+  decisionTree Float
+  randomForest Float
+}
+
+type MentalHealthRisk {
+  level            MentalHealthRiskLevel
+  description      String
+  needsAttention   Boolean
+  urgency          PredictionUrgency
+  assessmentSummary String
+  disclaimer       String
+}
+
+type MentalHealthPrediction {
+  academicPerformanceOutlook AcademicPerformanceOutlook
+  confidence                 Float
+  modelAccuracy              ModelAccuracy
+  riskFactors                String[]
+  mentalHealthRisk           MentalHealthRisk
+  inputData                  Json
+  recommendations            String[]
+  predictionDate             DateTime
+}
+
 model IndividualInventory {
   id                                                    String                        @id @default(auto()) @map("_id") @db.ObjectId
   student                                               Student                       @relation(fields: [studentId], references: [id])
@@ -257,6 +302,10 @@ model IndividualInventory {
   test_results                                          TestResults?
   significant_notes_councilor_only                      SignificantNotesGuidanceOnly?                                 
   student_signature                                     String
+  // Mental Health Prediction fields
+  mentalHealthPrediction                                MentalHealthPrediction?
+  predictionGenerated                                   Boolean                       @default(false)
+  predictionUpdatedAt                                   DateTime?
   isDeleted                                             Boolean                       @default(false)
   createdAt                                             DateTime                      @default(now())
   updatedAt                                             DateTime                      @updatedAt
