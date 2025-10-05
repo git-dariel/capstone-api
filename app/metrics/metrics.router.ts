@@ -114,6 +114,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Server error
 	 */
 	routes.post("/student/dashboard", controller.dashboard);
+	routes.post("/guidance/dashboard", controller.dashboard);
 
 	/**
 	 * @openapi
