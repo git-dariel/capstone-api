@@ -602,6 +602,258 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				}));
 			},
 		},
+		GuidanceDashboard: {
+			studentProgressOverview: async () => {
+				console.log(`🔍 API: Getting student progress overview for guidance dashboard`);
+
+				// Get all students with their assessment data
+				const students = await prisma.student.findMany({
+					where: { isDeleted: false },
+					include: {
+						person: {
+							include: {
+								users: {
+									where: { type: "student", isDeleted: false },
+									include: {
+										anxietyAssessments: {
+											where: { isDeleted: false },
+											orderBy: { assessmentDate: "desc" },
+											take: 1,
+										},
+										stressAssessments: {
+											where: { isDeleted: false },
+											orderBy: { assessmentDate: "desc" },
+											take: 1,
+										},
+										depressionAssessments: {
+											where: { isDeleted: false },
+											orderBy: { assessmentDate: "desc" },
+											take: 1,
+										},
+										suicideAssessments: {
+											where: { isDeleted: false },
+											orderBy: { assessmentDate: "desc" },
+											take: 1,
+										},
+									},
+								},
+							},
+						},
+					},
+				});
+
+				console.log(`📊 Found ${students.length} students in database`);
+
+				// Debug: Log first student structure
+				if (students.length > 0) {
+					console.log(
+						`🔍 First student structure:`,
+						JSON.stringify(students[0], null, 2),
+					);
+				}
+
+				// Process student data to generate progress insights
+				const studentProgressInsights = students
+					.map((student) => {
+						const user = student.person?.users?.[0];
+
+						// If no user account exists, still include the student but with no assessment data
+						if (!user) {
+							return {
+								studentId: student.id,
+								studentName:
+									`${student.person?.firstName || ""} ${student.person?.lastName || ""}`.trim(),
+								studentNumber: student.studentNumber,
+								program: student.program,
+								year: student.year,
+								totalAssessments: {
+									anxiety: 0,
+									stress: 0,
+									depression: 0,
+									suicide: 0,
+									overall: 0,
+								},
+								latestAssessments: {
+									anxiety: null,
+									stress: null,
+									depression: null,
+									suicide: null,
+								},
+								progressInsights: [
+									{
+										type: "warning" as const,
+										assessmentType: "overall" as const,
+										message: "No user account found for this student.",
+										severity: "medium" as const,
+										recommendation:
+											"Student needs to create a user account to take assessments.",
+									},
+								],
+								riskLevel: "low" as const,
+								lastAssessmentDate: null,
+							};
+						}
+
+						const totalAssessments = {
+							anxiety: user.anxietyAssessments.length,
+							stress: user.stressAssessments.length,
+							depression: user.depressionAssessments.length,
+							suicide: user.suicideAssessments.length,
+							overall:
+								user.anxietyAssessments.length +
+								user.stressAssessments.length +
+								user.depressionAssessments.length +
+								user.suicideAssessments.length,
+						};
+
+						const latestAssessments = {
+							anxiety: user.anxietyAssessments[0] || null,
+							stress: user.stressAssessments[0] || null,
+							depression: user.depressionAssessments[0] || null,
+							suicide: user.suicideAssessments[0] || null,
+						};
+
+						// Generate progress insights
+						const progressInsights = [];
+
+						// Check for high severity levels
+						if (
+							latestAssessments.anxiety &&
+							latestAssessments.anxiety.severityLevel === "severe"
+						) {
+							progressInsights.push({
+								type: "warning",
+								assessmentType: "anxiety",
+								message: `Latest anxiety assessment shows severe levels.`,
+								severity: "high",
+								recommendation:
+									"Please contact your guidance counselor immediately for support.",
+							});
+						}
+
+						if (
+							latestAssessments.stress &&
+							latestAssessments.stress.severityLevel === "high"
+						) {
+							progressInsights.push({
+								type: "warning",
+								assessmentType: "stress",
+								message: `Latest stress assessment shows high levels.`,
+								severity: "high",
+								recommendation:
+									"Please contact your guidance counselor immediately for support.",
+							});
+						}
+
+						if (
+							latestAssessments.depression &&
+							latestAssessments.depression.severityLevel === "severe"
+						) {
+							progressInsights.push({
+								type: "warning",
+								assessmentType: "depression",
+								message: `Latest depression assessment shows severe levels.`,
+								severity: "high",
+								recommendation:
+									"Please contact your guidance counselor immediately for support.",
+							});
+						}
+
+						if (
+							latestAssessments.suicide &&
+							latestAssessments.suicide.riskLevel === "high"
+						) {
+							progressInsights.push({
+								type: "warning",
+								assessmentType: "suicide",
+								message: `Latest suicide risk assessment shows high risk level.`,
+								severity: "high",
+								recommendation:
+									"Please contact your guidance counselor or emergency services immediately.",
+							});
+						}
+
+						// Determine overall risk level
+						let riskLevel = "low";
+						if (
+							latestAssessments.suicide?.riskLevel === "high" ||
+							latestAssessments.anxiety?.severityLevel === "severe" ||
+							latestAssessments.depression?.severityLevel === "severe" ||
+							latestAssessments.stress?.severityLevel === "high"
+						) {
+							riskLevel = "high";
+						} else if (
+							latestAssessments.suicide?.riskLevel === "moderate" ||
+							latestAssessments.anxiety?.severityLevel === "moderate" ||
+							latestAssessments.depression?.severityLevel === "moderate" ||
+							latestAssessments.stress?.severityLevel === "moderate"
+						) {
+							riskLevel = "medium";
+						}
+
+						// Get last assessment date
+						const allDates = [
+							latestAssessments.anxiety?.assessmentDate,
+							latestAssessments.stress?.assessmentDate,
+							latestAssessments.depression?.assessmentDate,
+							latestAssessments.suicide?.assessmentDate,
+						].filter(Boolean);
+
+						const lastAssessmentDate =
+							allDates.length > 0
+								? new Date(
+										Math.max(
+											...allDates.map((date) => new Date(date).getTime()),
+										),
+									)
+								: null;
+
+						return {
+							studentId: student.id,
+							studentName:
+								`${student.person?.firstName || ""} ${student.person?.lastName || ""}`.trim(),
+							studentNumber: student.studentNumber,
+							program: student.program,
+							year: student.year,
+							totalAssessments,
+							latestAssessments,
+							progressInsights,
+							riskLevel,
+							lastAssessmentDate: lastAssessmentDate?.toISOString() || null,
+						};
+					})
+					.filter(Boolean);
+
+				const summary = {
+					totalStudents: studentProgressInsights.length,
+					studentsWithAssessments: studentProgressInsights.filter(
+						(s) => s && s.totalAssessments.overall > 0,
+					).length,
+					highRiskStudents: studentProgressInsights.filter(
+						(s) => s && s.riskLevel === "high",
+					).length,
+					moderateRiskStudents: studentProgressInsights.filter(
+						(s) => s && s.riskLevel === "medium",
+					).length,
+					lowRiskStudents: studentProgressInsights.filter(
+						(s) => s && s.riskLevel === "low",
+					).length,
+				};
+
+				console.log(
+					`📊 Student progress overview generated: ${studentProgressInsights.length} students`,
+				);
+
+				// Debug: Log the final result structure
+				const result = {
+					students: studentProgressInsights,
+					summary,
+				};
+				console.log(`🔍 Final result structure:`, JSON.stringify(result, null, 2));
+
+				return result;
+			},
+		},
 		UserDashboard: {
 			personalSummary: async () => {
 				// Extract userId from filter (authenticated user context)

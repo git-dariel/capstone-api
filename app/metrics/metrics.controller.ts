@@ -1,20 +1,19 @@
-import { Request, Response, NextFunction } from "express";
-import { PrismaClient } from "../../generated/prisma";
-import { getLogger } from "../../helper/logger";
+import { NextFunction, Request, Response } from "express";
 import { config } from "../../config/error.config";
 import { METRIC } from "../../config/metrics.config";
-import { AuthRequest } from "../../middleware/verifyToken";
-import { requireAnyRole } from "../../middleware/rbac";
+import { PrismaClient } from "../../generated/prisma";
+import { getLogger } from "../../helper/logger";
 import {
-	mentalHealthPredictor,
-	generateMLVisualizationDemo,
-	generateTextTreeVisualization,
-	generateChartData,
+	generateConfusionMatrixImage,
 	generateDecisionTreeImage,
 	generateFeatureImportanceImage,
+	generateMLVisualizationDemo,
 	generatePerformanceMetricsImage,
-	generateConfusionMatrixImage,
+	generateTextTreeVisualization,
+	mentalHealthPredictor,
 } from "../../helper/ml.helper";
+import { requireAnyRole } from "../../middleware/rbac";
+import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const metricsLogger = logger.child({ module: "metrics" });
@@ -133,6 +132,12 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
+				// Determine model based on request URL
+				let model = "UserDashboard"; // default for student dashboard
+				if (req.originalUrl.includes("/guidance/dashboard")) {
+					model = "GuidanceDashboard";
+				}
+
 				// Create filter with authenticated user context
 				const filter = {
 					userFilter: { id: req.userId },
@@ -142,7 +147,7 @@ export const controller = (prisma: PrismaClient) => {
 					`📊 Dashboard request for user: ${req.userId}, methods: ${data.join(", ")}`,
 				);
 
-				const result = await searchMetrics(prisma, "UserDashboard", data, filter);
+				const result = await searchMetrics(prisma, model, data, filter);
 				res.status(200).json({ data: result });
 			} catch (error: any) {
 				const status = (error.status || 500) as keyof typeof config;
