@@ -153,7 +153,12 @@ export const controller = (prisma: PrismaClient) => {
 			};
 
 			if (fields) {
-				const fieldSelections = fields.split(",").reduce(
+				// Filter out userId from fields since it's not a database field
+				const filteredFields = fields
+					.split(",")
+					.filter((field) => field.trim() !== "userId");
+
+				const fieldSelections = filteredFields.reduce(
 					(acc, field) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
@@ -182,9 +187,27 @@ export const controller = (prisma: PrismaClient) => {
 				prisma.student.count({ where: whereClause }),
 			]);
 
-			studentLogger.info(`Retrieved ${students.length} students`);
+			// Get user IDs for each student by matching personId
+			const studentsWithUserIds = await Promise.all(
+				students.map(async (student) => {
+					const user = await prisma.user.findFirst({
+						where: {
+							personId: student.personId,
+							type: "student",
+							isDeleted: false,
+						},
+						select: { id: true },
+					});
+					return {
+						...student,
+						userId: user?.id || null,
+					};
+				}),
+			);
+
+			studentLogger.info(`Retrieved ${studentsWithUserIds.length} students`);
 			res.status(200).json({
-				students,
+				students: studentsWithUserIds,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
