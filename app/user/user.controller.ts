@@ -253,7 +253,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const update = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
-		const { userName, role, type, status, password, ...personData } = req.body;
+		const { userName, role, type, status, password, currentPassword, ...personData } = req.body;
 
 		if (!id) {
 			userLogger.error(config.ERROR.USER.MISSING_ID);
@@ -281,7 +281,7 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (personData.contactNumber) {
+		if (personData.contactNumber && personData.contactNumber.trim() !== "") {
 			// More flexible phone regex that allows:
 			// - Optional + at start
 			// - Digits 0-9 (including leading zeros for local formats)
@@ -333,7 +333,39 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Hash password if provided
+			// Validate current password if password is being updated
+			if (password) {
+				if (!currentPassword) {
+					userLogger.error(
+						`Current password is required when updating password for user: ${id}`,
+					);
+					res.status(400).json({
+						error: "Current password is required to update password",
+					});
+					return;
+				}
+
+				// Verify current password
+				if (!existingUser.password) {
+					userLogger.error(`User has no password set: ${id}`);
+					res.status(400).json({ error: "No password set for this user" });
+					return;
+				}
+
+				const isCurrentPasswordValid = await bcrypt.compare(
+					currentPassword,
+					existingUser.password,
+				);
+				if (!isCurrentPasswordValid) {
+					userLogger.error(`Invalid current password for user: ${id}`);
+					res.status(400).json({ error: "Current password is incorrect" });
+					return;
+				}
+
+				userLogger.info(`Current password validated for user: ${id}`);
+			}
+
+			// Hash new password if provided
 			let hashedPassword = null;
 			if (password) {
 				hashedPassword = await bcrypt.hash(password, 10);
