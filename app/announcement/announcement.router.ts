@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import multerHelper from "../../helper/multer.helper";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -163,7 +164,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         description: Internal server error
 	 */
-	routes.post("/", controller.create);
+	routes.post("/", multerHelper.uploadFiles, controller.create);
 
 	/**
 	 * @openapi

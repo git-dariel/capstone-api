@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { config } from "../../config/error.config";
 import { Prisma, PrismaClient, AnnouncementStatus } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import cloudinaryService from "../../helper/cloudinary.helper";
 
 const logger = getLogger();
 const announcementLogger = logger.child({ module: "announcement" });
@@ -175,7 +176,8 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
-		const { title, description, attachement, status } = req.body;
+		const { title, description, status } = req.body;
+		const files = req.files as Express.Multer.File[];
 
 		if (!title || !description) {
 			announcementLogger.error("Invalid announcement data");
@@ -223,11 +225,51 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Proces file uploads
+			let attachments: {
+				name: string;
+				url: string;
+			}[] = [];
+
+			if (files && files.length > 0) {
+				announcementLogger.info(`Processing ${files.length} attachments`);
+
+				const uploadPromises = files.map(async (file) => {
+					try {
+						const uploadResult = await cloudinaryService.uploadAttachment(
+							file,
+							`announcement/${Date.now()}`,
+						);
+
+						return {
+							name: uploadResult.filename,
+							url: uploadResult.url,
+						};
+					} catch (error) {
+						announcementLogger.error(
+							`Error uploading file ${file.originalname}: ${error}`,
+						);
+						throw error;
+					}
+				});
+
+				try {
+					attachments = await Promise.all(uploadPromises);
+					announcementLogger.info(
+						`Successfully uploaded ${attachments.length} attachments`,
+					);
+				} catch (error) {
+					announcementLogger.error(`Error uploading attachments: ${error}`);
+					res.status(500).json({ error: "Failed to upload attachments" });
+					return;
+				}
+			}
+
 			const newAnnouncement = await prisma.announcement.create({
 				data: {
 					title: title.trim(),
 					description: description.trim(),
-					attachement: attachement || null,
+					attachement: attachments,
 					status: status || AnnouncementStatus.academic,
 					updatedAt: new Date(),
 					isDeleted: false,

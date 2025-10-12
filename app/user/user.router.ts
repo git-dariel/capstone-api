@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import multerHelper from "../../helper/multer.helper";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -6,6 +7,8 @@ interface IController {
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 	exportCsv(req: Request, res: Response, next: NextFunction): Promise<void>;
+	uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void>;
+	deleteAvatar(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -169,6 +172,84 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: User not found
 	 */
 	routes.put("/:id", controller.remove);
+
+	/**
+	 * @openapi
+	 * /api/user/{id}/avatar:
+	 *   post:
+	 *     summary: Upload avatar for a user
+	 *     description: Upload a single avatar image file for a specific user
+	 *     tags: [User]
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: ID of the user to upload avatar for
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         multipart/form-data:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               file:
+	 *                 type: string
+	 *                 format: binary
+	 *                 description: Avatar image file to upload
+	 *     responses:
+	 *       200:
+	 *         description: Avatar uploaded successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 avatar:
+	 *                   type: object
+	 *                   properties:
+	 *                     name:
+	 *                       type: string
+	 *                     url:
+	 *                       type: string
+	 *                 updatedUser:
+	 *                   type: object
+	 *                   properties:
+	 *                     id:
+	 *                       type: string
+	 *                     avatar:
+	 *                       type: string
+	 *       400:
+	 *         description: No file provided or missing user ID
+	 *       404:
+	 *         description: User not found
+	 *       500:
+	 *         description: Failed to upload avatar
+	 */
+	routes.post("/avatar", multerHelper.uploadSingle, controller.uploadAvatar);
+
+	/**
+	 * @openapi
+	 * /api/user/{id}/avatar:
+	 *   delete:
+	 *     summary: Delete user avatar
+	 *     description: Delete the avatar image for a specific user
+	 *     tags: [User]
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: ID of the user to delete avatar for
+	 *     responses:
+	 *       200:
+	 *         description: Avatar deleted successfully
+	 *       404:
+	 *         description: User not found
+	 */
+	routes.delete("/avatar", controller.deleteAvatar);
 
 	route.use(path, routes);
 
