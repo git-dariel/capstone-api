@@ -4,13 +4,18 @@ enum AnnouncementStatus {
   wellness
 }
 
+type AnnouncementFiles {
+  name String?
+  url  String?
+}
+
 model Announcement {
-  id          String             @id @default(auto()) @map("_id") @db.ObjectId
+  id          String              @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   description String
-  status      AnnouncementStatus @default(academic)
-  attachement String?
-  createdAt   DateTime           @default(now())
+  status      AnnouncementStatus  @default(academic)
+  attachement AnnouncementFiles[]
+  createdAt   DateTime            @default(now())
   updatedAt   DateTime
-  isDeleted   Boolean            @default(false)
+  isDeleted   Boolean             @default(false)
 }
