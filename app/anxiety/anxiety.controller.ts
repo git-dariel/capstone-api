@@ -13,12 +13,14 @@ import {
 	validateDifficultyLevel,
 } from "../../helper/anxiety.helper";
 import { getLogger } from "../../helper/logger";
+import { createNotificationHelper } from "../../helper/notification.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const anxietyLogger = logger.child({ module: "anxiety" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -427,6 +429,27 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			anxietyLogger.info(`${config.SUCCESS.ANXIETY.CREATED}: ${newAssessment.id}`);
+
+			// Create notification for anxiety assessment completion
+			try {
+				await notificationHelper.createAssessmentNotification(
+					"ANXIETY",
+					"CREATED",
+					newAssessment.userId,
+					newAssessment.id,
+					newAssessment.severityLevel,
+					{
+						totalScore: newAssessment.totalScore,
+						severityLevel: newAssessment.severityLevel,
+						assessmentDate: newAssessment.assessmentDate,
+					},
+				);
+			} catch (notificationError) {
+				anxietyLogger.warn(
+					`Failed to create anxiety assessment notification: ${notificationError}`,
+				);
+			}
+
 			res.status(201).json({
 				...newAssessment,
 				analysis: analysisResult,
@@ -647,6 +670,29 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			anxietyLogger.info(`${config.SUCCESS.ANXIETY.UPDATE}: ${updatedAssessment.id}`);
+
+			// Create notification for anxiety assessment update (only for significant changes)
+			try {
+				if (hasGad7Updates) {
+					await notificationHelper.createAssessmentNotification(
+						"ANXIETY",
+						"UPDATED",
+						updatedAssessment.userId,
+						updatedAssessment.id,
+						updatedAssessment.severityLevel,
+						{
+							totalScore: updatedAssessment.totalScore,
+							severityLevel: updatedAssessment.severityLevel,
+							assessmentDate: updatedAssessment.assessmentDate,
+						},
+					);
+				}
+			} catch (notificationError) {
+				anxietyLogger.warn(
+					`Failed to create anxiety assessment update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json({
 				...updatedAssessment,
 				analysis: analysisResult,

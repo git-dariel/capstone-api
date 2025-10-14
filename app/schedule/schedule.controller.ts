@@ -4,11 +4,13 @@ import { getLogger } from "../../helper/logger";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { requireAnyRole } from "../../middleware/rbac";
 import { getPhilippinesStartOfDay } from "../../helper/date.helper";
+import { createNotificationHelper } from "../../helper/notification.helper";
 
 const logger = getLogger();
 const scheduleLogger = logger.child({ module: "schedule" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = requireAnyRole(async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -356,6 +358,25 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			scheduleLogger.info(`Schedule created: ${schedule.id}`);
+
+			// Create notification for schedule creation
+			try {
+				await notificationHelper.createScheduleNotification(
+					"CREATED",
+					schedule.counselorId,
+					schedule.id,
+					{
+						startTime: schedule.startTime,
+						endTime: schedule.endTime,
+						location: schedule.location,
+						status: schedule.status,
+						maxSlots: schedule.maxSlots,
+					},
+				);
+			} catch (notificationError) {
+				scheduleLogger.warn(`Failed to create schedule notification: ${notificationError}`);
+			}
+
 			res.status(201).json({
 				message: "Schedule created successfully",
 				...schedule,
@@ -450,6 +471,46 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			scheduleLogger.info(`Schedule updated: ${updatedSchedule.id}`);
+
+			// Create notification for schedule update
+			try {
+				let notificationAction: "UPDATED" | "CANCELLED" | "AVAILABLE" | "BOOKED" =
+					"UPDATED";
+				if (status) {
+					switch (status) {
+						case "cancelled":
+							notificationAction = "CANCELLED";
+							break;
+						case "available":
+							notificationAction = "AVAILABLE";
+							break;
+						case "booked":
+							notificationAction = "BOOKED";
+							break;
+						default:
+							notificationAction = "UPDATED";
+					}
+				}
+
+				await notificationHelper.createScheduleNotification(
+					notificationAction,
+					updatedSchedule.counselorId,
+					updatedSchedule.id,
+					{
+						startTime: updatedSchedule.startTime,
+						endTime: updatedSchedule.endTime,
+						location: updatedSchedule.location,
+						status: updatedSchedule.status,
+						maxSlots: updatedSchedule.maxSlots,
+						bookedSlots: updatedSchedule.bookedSlots,
+					},
+				);
+			} catch (notificationError) {
+				scheduleLogger.warn(
+					`Failed to create schedule update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json(updatedSchedule);
 		} catch (error) {
 			scheduleLogger.error(`Error updating schedule: ${error}`);

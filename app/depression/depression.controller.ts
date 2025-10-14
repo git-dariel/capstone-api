@@ -14,12 +14,14 @@ import {
 	getPhilippinesTime,
 } from "../../helper/depression.helper";
 import { getLogger } from "../../helper/logger";
+import { createNotificationHelper } from "../../helper/notification.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const depressionLogger = logger.child({ module: "depression" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -447,6 +449,28 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			depressionLogger.info(`${config.SUCCESS.DEPRESSION.CREATED}: ${newAssessment.id}`);
+
+			// Create notification for depression assessment completion
+			try {
+				await notificationHelper.createAssessmentNotification(
+					"DEPRESSION",
+					"CREATED",
+					newAssessment.userId,
+					newAssessment.id,
+					newAssessment.severityLevel,
+					{
+						totalScore: newAssessment.totalScore,
+						severityLevel: newAssessment.severityLevel,
+						assessmentDate: newAssessment.assessmentDate,
+						hasSuicidalIdeation,
+					},
+				);
+			} catch (notificationError) {
+				depressionLogger.warn(
+					`Failed to create depression assessment notification: ${notificationError}`,
+				);
+			}
+
 			res.status(201).json({
 				...newAssessment,
 				analysis: analysisResult,
@@ -703,6 +727,29 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			depressionLogger.info(`${config.SUCCESS.DEPRESSION.UPDATE}: ${updatedAssessment.id}`);
+
+			// Create notification for depression assessment update (only for significant changes)
+			try {
+				if (hasPhq9Updates) {
+					await notificationHelper.createAssessmentNotification(
+						"DEPRESSION",
+						"UPDATED",
+						updatedAssessment.userId,
+						updatedAssessment.id,
+						updatedAssessment.severityLevel,
+						{
+							totalScore: updatedAssessment.totalScore,
+							severityLevel: updatedAssessment.severityLevel,
+							assessmentDate: updatedAssessment.assessmentDate,
+						},
+					);
+				}
+			} catch (notificationError) {
+				depressionLogger.warn(
+					`Failed to create depression assessment update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json({
 				...updatedAssessment,
 				analysis: analysisResult,

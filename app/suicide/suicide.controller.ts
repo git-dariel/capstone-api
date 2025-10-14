@@ -10,12 +10,14 @@ import {
 	validateBehaviorTimeframe,
 	validateSuicideResponse,
 } from "../../helper/suicide.helper";
+import { createNotificationHelper } from "../../helper/notification.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const suicideLogger = logger.child({ module: "suicide" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -364,6 +366,26 @@ export const controller = (prisma: PrismaClient) => {
 
 			suicideLogger.info(`${config.SUCCESS.SUICIDE.CREATED}: ${newAssessment.id}`);
 
+			// Create notification for suicide assessment completion
+			try {
+				await notificationHelper.createAssessmentNotification(
+					"SUICIDE",
+					"CREATED",
+					newAssessment.userId,
+					newAssessment.id,
+					newAssessment.riskLevel,
+					{
+						riskLevel: newAssessment.riskLevel,
+						requiresIntervention: newAssessment.requires_immediate_intervention,
+						assessmentDate: newAssessment.assessmentDate,
+					},
+				);
+			} catch (notificationError) {
+				suicideLogger.warn(
+					`Failed to create suicide assessment notification: ${notificationError}`,
+				);
+			}
+
 			// Set appropriate response status based on risk level
 			const statusCode = requiresIntervention ? 201 : 201; // Always 201 for created, but log severity
 
@@ -549,6 +571,29 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			suicideLogger.info(`${config.SUCCESS.SUICIDE.UPDATE}: ${updatedAssessment.id}`);
+
+			// Create notification for suicide assessment update (only for significant changes)
+			try {
+				if (hasCssrsUpdates) {
+					await notificationHelper.createAssessmentNotification(
+						"SUICIDE",
+						"UPDATED",
+						updatedAssessment.userId,
+						updatedAssessment.id,
+						updatedAssessment.riskLevel,
+						{
+							riskLevel: updatedAssessment.riskLevel,
+							requiresIntervention: updatedAssessment.requires_immediate_intervention,
+							assessmentDate: updatedAssessment.assessmentDate,
+						},
+					);
+				}
+			} catch (notificationError) {
+				suicideLogger.warn(
+					`Failed to create suicide assessment update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json({
 				...updatedAssessment,
 				analysis: analysisResult,

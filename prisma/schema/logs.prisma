@@ -27,7 +27,7 @@ model Log {
   title      String
   message    String?
   user       User?       @relation(fields: [userId], references: [id])
-  userId     String      @unique @db.ObjectId
+  userId     String      @db.ObjectId
   entityType String? // e.g., "User", "Insurance", "Payment"
   entityId   String?
   data       Json?

@@ -1,11 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import { createNotificationHelper } from "../../helper/notification.helper";
 
 const logger = getLogger();
 const appointmentLogger = logger.child({ module: "appointment" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	// Get appointment by ID
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
@@ -394,6 +396,27 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			appointmentLogger.info(`Appointment created: ${result.id}`);
+
+			// Create notification for appointment creation
+			try {
+				await notificationHelper.createAppointmentNotification(
+					"CREATED",
+					result.studentId,
+					result.id,
+					{
+						appointmentType: result.appointmentType,
+						requestedDate: result.requestedDate,
+						counselorName: result.counselor?.person
+							? `${result.counselor.person.firstName} ${result.counselor.person.lastName}`
+							: "Unknown Counselor",
+					},
+				);
+			} catch (notificationError) {
+				appointmentLogger.warn(
+					`Failed to create appointment notification: ${notificationError}`,
+				);
+			}
+
 			res.status(201).json({
 				message: "Appointment request created successfully",
 				...result,
@@ -517,6 +540,46 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			appointmentLogger.info(`Appointment updated: ${result.id}`);
+
+			// Create notification for appointment update
+			try {
+				let notificationAction: "UPDATED" | "CANCELLED" | "CONFIRMED" | "COMPLETED" =
+					"UPDATED";
+				if (status) {
+					switch (status) {
+						case "cancelled":
+							notificationAction = "CANCELLED";
+							break;
+						case "confirmed":
+							notificationAction = "CONFIRMED";
+							break;
+						case "completed":
+							notificationAction = "COMPLETED";
+							break;
+						default:
+							notificationAction = "UPDATED";
+					}
+				}
+
+				await notificationHelper.createAppointmentNotification(
+					notificationAction,
+					result.studentId,
+					result.id,
+					{
+						status: result.status,
+						appointmentType: result.appointmentType,
+						requestedDate: result.requestedDate,
+						counselorName: result.counselor?.person
+							? `${result.counselor.person.firstName} ${result.counselor.person.lastName}`
+							: "Unknown Counselor",
+					},
+				);
+			} catch (notificationError) {
+				appointmentLogger.warn(
+					`Failed to create appointment update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json(result);
 		} catch (error) {
 			appointmentLogger.error(`Error updating appointment: ${error}`);

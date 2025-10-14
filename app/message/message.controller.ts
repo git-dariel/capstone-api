@@ -3,11 +3,13 @@ import { config } from "../../config/error.config";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { emitToUser } from "../../helper/socket.helper";
+import { createNotificationHelper } from "../../helper/notification.helper";
 
 const logger = getLogger();
 const messageLogger = logger.child({ module: "message" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -402,6 +404,37 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			messageLogger.info(`Created message: ${newMessage.id}`);
+
+			// Create notification for message sent
+			try {
+				await notificationHelper.createMessageNotification(
+					"SENT",
+					newMessage.senderId,
+					newMessage.id,
+					{
+						title: newMessage.title,
+						receiverName: newMessage.receiver?.person
+							? `${newMessage.receiver.person.firstName} ${newMessage.receiver.person.lastName}`
+							: "Unknown Receiver",
+					},
+				);
+
+				// Create notification for message received
+				await notificationHelper.createMessageNotification(
+					"RECEIVED",
+					newMessage.receiverId,
+					newMessage.id,
+					{
+						title: newMessage.title,
+						senderName: newMessage.sender?.person
+							? `${newMessage.sender.person.firstName} ${newMessage.sender.person.lastName}`
+							: "Unknown Sender",
+					},
+				);
+			} catch (notificationError) {
+				messageLogger.warn(`Failed to create message notifications: ${notificationError}`);
+			}
+
 			res.status(201).json(newMessage);
 		} catch (error) {
 			messageLogger.error(`Error creating message: ${error}`);
