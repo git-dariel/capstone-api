@@ -263,7 +263,9 @@ export const controller = (prisma: PrismaClient) => {
 		_next: NextFunction,
 	): Promise<void> => {
 		try {
-			metricsLogger.info("📊 Generating chart data for frontend dashboard");
+			// Get days parameter from query, default to 7 days
+			const days = parseInt(req.query.days as string) || 7;
+			metricsLogger.info(`📊 Generating chart data for frontend dashboard (${days} days)`);
 
 			// Get dashboard chart data using real metrics
 			const metrics = METRIC(prisma);
@@ -277,12 +279,16 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Get specialized dashboard data
 			const [trendsData, severityData, monthlyData] = await Promise.all([
-				metrics.Dashboard.getRecentTrends(7), // Last 7 days
+				metrics.Dashboard.getRecentTrends(days), // Dynamic days based on query parameter
 				metrics.Dashboard.getSeverityDistribution(),
 				metrics.Dashboard.getMonthlyStats(6), // Last 6 months
 			]);
 
-			// Get program-wise breakdowns for additional insights
+			metricsLogger.info(
+				`📊 Trends data received: ${trendsData.length} data points for ${days} days`,
+			);
+
+			// Get program-wise breakdowns for additional insights (no date filtering)
 			const [anxietyByProgram, depressionByProgram, stressByProgram] = await Promise.all([
 				metrics.Anxiety.totalAnxietyByProgram(),
 				metrics.Depression.totalDepressionByProgram(),
