@@ -12,12 +12,14 @@ import {
 	getPhilippinesTime,
 } from "../../helper/stress.helper";
 import { getLogger } from "../../helper/logger";
+import { createNotificationHelper } from "../../helper/notification.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const stressLogger = logger.child({ module: "stress" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -423,6 +425,27 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			stressLogger.info(`${config.SUCCESS.STRESS.CREATED}: ${newAssessment.id}`);
+
+			// Create notification for stress assessment completion
+			try {
+				await notificationHelper.createAssessmentNotification(
+					"STRESS",
+					"CREATED",
+					newAssessment.userId,
+					newAssessment.id,
+					newAssessment.severityLevel,
+					{
+						totalScore: newAssessment.totalScore,
+						severityLevel: newAssessment.severityLevel,
+						assessmentDate: newAssessment.assessmentDate,
+					},
+				);
+			} catch (notificationError) {
+				stressLogger.warn(
+					`Failed to create stress assessment notification: ${notificationError}`,
+				);
+			}
+
 			res.status(201).json({
 				...newAssessment,
 				analysis: analysisResult,
@@ -662,6 +685,29 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			stressLogger.info(`${config.SUCCESS.STRESS.UPDATE}: ${updatedAssessment.id}`);
+
+			// Create notification for stress assessment update (only for significant changes)
+			try {
+				if (hasPss10Updates) {
+					await notificationHelper.createAssessmentNotification(
+						"STRESS",
+						"UPDATED",
+						updatedAssessment.userId,
+						updatedAssessment.id,
+						updatedAssessment.severityLevel,
+						{
+							totalScore: updatedAssessment.totalScore,
+							severityLevel: updatedAssessment.severityLevel,
+							assessmentDate: updatedAssessment.assessmentDate,
+						},
+					);
+				}
+			} catch (notificationError) {
+				stressLogger.warn(
+					`Failed to create stress assessment update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json({
 				...updatedAssessment,
 				analysis: analysisResult,

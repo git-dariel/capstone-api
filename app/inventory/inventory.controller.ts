@@ -3,11 +3,13 @@ import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
+import { createNotificationHelper } from "../../helper/notification.helper";
 
 const logger = getLogger();
 const inventoryLogger = logger.child({ module: "inventory" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -463,6 +465,26 @@ export const controller = (prisma: PrismaClient) => {
 
 			inventoryLogger.info(`${config.SUCCESS.INVENTORY.CREATED}: ${inventory.id}`);
 
+			// Create notification for inventory creation
+			try {
+				await notificationHelper.createInventoryNotification(
+					"CREATED",
+					inventory.studentId,
+					inventory.id,
+					{
+						height: inventory.height,
+						weight: inventory.weight,
+						studentName: inventory.student?.person
+							? `${inventory.student.person.firstName} ${inventory.student.person.lastName}`
+							: "Unknown Student",
+					},
+				);
+			} catch (notificationError) {
+				inventoryLogger.warn(
+					`Failed to create inventory notification: ${notificationError}`,
+				);
+			}
+
 			// Automatically run mental health prediction after inventory creation
 			try {
 				// Prepare data for prediction using inventory data and student info
@@ -772,6 +794,27 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			inventoryLogger.info(`${config.SUCCESS.INVENTORY.UPDATE}: ${updatedInventory.id}`);
+
+			// Create notification for inventory update
+			try {
+				await notificationHelper.createInventoryNotification(
+					"UPDATED",
+					updatedInventory.studentId,
+					updatedInventory.id,
+					{
+						height: updatedInventory.height,
+						weight: updatedInventory.weight,
+						studentName: updatedInventory.student?.person
+							? `${updatedInventory.student.person.firstName} ${updatedInventory.student.person.lastName}`
+							: "Unknown Student",
+					},
+				);
+			} catch (notificationError) {
+				inventoryLogger.warn(
+					`Failed to create inventory update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json(updatedInventory);
 		} catch (error) {
 			inventoryLogger.error(`${config.ERROR.INVENTORY.ERROR_UPDATING_INVENTORY}: ${error}`);

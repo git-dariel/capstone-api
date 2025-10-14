@@ -1,15 +1,21 @@
-import { Request, Response, NextFunction } from "express";
-import { PrismaClient, Prisma, LogType, LogStatus, LogSeverity } from "../../generated/prisma";
-import { getLogger } from "../../helper/logger";
+import { NextFunction, Request, Response } from "express";
 import { config } from "../../config/error.config";
+import {
+	LogSeverity,
+	LogStatus,
+	LogType,
+	Prisma,
+	PrismaClient,
+	Role,
+} from "../../generated/prisma";
+import { getLogger } from "../../helper/logger";
 import { AuthRequest } from "../../middleware/verifyToken";
-import { requireAnyRole, requireAdmin } from "../../middleware/rbac";
 
 const logger = getLogger();
 const loggingsLogger = logger.child({ module: "loggings" });
 
 export const controller = (prisma: PrismaClient) => {
-	const getById = requireAnyRole(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
 
@@ -36,7 +42,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			if (fields) {
 				const fieldSelections = fields.split(",").reduce(
-					(acc, field) => {
+					(acc: Record<string, any>, field: string) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
 							const [parent, ...children] = parts;
@@ -73,10 +79,21 @@ export const controller = (prisma: PrismaClient) => {
 			loggingsLogger.error(`${config.ERROR.LOGS.ERROR_GETTING_LOG}: ${error}`);
 			res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
 		}
-	});
+	};
 
-	const getAll = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const { page = 1, limit = 10, sort, fields, query, order = "desc" } = req.query;
+	const getAll = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const {
+			page = 1,
+			limit = 10,
+			sort,
+			fields,
+			query,
+			order = "desc",
+			type,
+			status,
+			severity,
+			userId,
+		} = req.query as Record<string, any>;
 
 		if (isNaN(Number(page)) || Number(page) < 1) {
 			loggingsLogger.error(`${config.ERROR.LOGS.INVALID_PAGE}: ${page}`);
@@ -123,6 +140,28 @@ export const controller = (prisma: PrismaClient) => {
 		);
 
 		try {
+			// Validate filter enums if provided
+			if (type && !Object.values(LogType).includes(type)) {
+				loggingsLogger.error(`${config.ERROR.LOGS.INVALID_TYPE}: ${type}`);
+				res.status(400).json({ error: config.ERROR.LOGS.INVALID_TYPE });
+				return;
+			}
+
+			if (status && !Object.values(LogStatus).includes(status)) {
+				loggingsLogger.error(`${config.ERROR.LOGS.INVALID_STATUS}: ${status}`);
+				res.status(400).json({ error: config.ERROR.LOGS.INVALID_STATUS });
+				return;
+			}
+
+			if (severity && !Object.values(LogSeverity).includes(severity)) {
+				loggingsLogger.error(`${config.ERROR.LOGS.INVALID_SEVERITY}: ${severity}`);
+				res.status(400).json({ error: config.ERROR.LOGS.INVALID_SEVERITY });
+				return;
+			}
+
+			// For non-regular users (e.g., guidance/admin), do not implicitly filter by userId
+			// Only regular users are scoped to their own notifications by default
+			const effectiveUserId = userId || (req.role === Role.user ? req.userId : undefined);
 			const whereClause: Prisma.LogWhereInput = {
 				...(query
 					? {
@@ -134,6 +173,10 @@ export const controller = (prisma: PrismaClient) => {
 							],
 						}
 					: {}),
+				...(type ? { type } : {}),
+				...(status ? { status } : {}),
+				...(severity ? { severity } : {}),
+				...(effectiveUserId ? { userId: String(effectiveUserId) } : {}),
 			};
 
 			const findManyQuery: Prisma.LogFindManyArgs = {
@@ -148,8 +191,8 @@ export const controller = (prisma: PrismaClient) => {
 			};
 
 			if (fields) {
-				const fieldSelections = fields.split(",").reduce(
-					(acc, field) => {
+				const fieldSelections = (fields as string).split(",").reduce(
+					(acc: Record<string, any>, field: string) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
 							const [parent, ...children] = parts;
@@ -188,9 +231,9 @@ export const controller = (prisma: PrismaClient) => {
 			loggingsLogger.error(`${config.ERROR.LOGS.ERROR_GETTING_LOG}: ${error}`);
 			res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
 		}
-	});
+	};
 
-	const create = requireAdmin(async (req: Request, res: Response, _next: NextFunction) => {
+	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		const {
 			type,
 			action,
@@ -286,9 +329,9 @@ export const controller = (prisma: PrismaClient) => {
 			loggingsLogger.error(`${config.ERROR.LOGS.ERROR_GETTING_LOG}: ${error}`);
 			res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
 		}
-	});
+	};
 
-	const update = requireAdmin(async (req: Request, res: Response, _next: NextFunction) => {
+	const update = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const updateData = req.body;
 
@@ -370,58 +413,56 @@ export const controller = (prisma: PrismaClient) => {
 			loggingsLogger.error(`${config.ERROR.LOGS.ERROR_UPDATING_LOG}: ${error}`);
 			res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
 		}
-	});
+	};
 
-	const markAsRead = requireAnyRole(
-		async (req: AuthRequest, res: Response, _next: NextFunction) => {
-			const { id } = req.params;
+	const markAsRead = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
 
-			if (!id) {
-				loggingsLogger.error(config.ERROR.LOGS.MISSING_ID);
-				res.status(400).json({ error: config.ERROR.LOGS.MISSING_ID });
+		if (!id) {
+			loggingsLogger.error(config.ERROR.LOGS.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.LOGS.MISSING_ID });
+			return;
+		}
+
+		try {
+			const existingLog = await prisma.log.findFirst({ where: { id } });
+			if (!existingLog) {
+				loggingsLogger.error(`${config.ERROR.LOGS.NOT_FOUND}: ${id}`);
+				res.status(404).json({ error: config.ERROR.LOGS.NOT_FOUND });
 				return;
 			}
 
-			try {
-				const existingLog = await prisma.log.findFirst({ where: { id } });
-				if (!existingLog) {
-					loggingsLogger.error(`${config.ERROR.LOGS.NOT_FOUND}: ${id}`);
-					res.status(404).json({ error: config.ERROR.LOGS.NOT_FOUND });
-					return;
-				}
-
-				const updatedLog = await prisma.log.update({
-					where: { id },
-					data: {
-						status: LogStatus.read,
-						readAt: new Date(),
-					},
-					include: {
-						user: {
-							select: {
-								id: true,
-								userName: true,
-								person: {
-									select: {
-										firstName: true,
-										lastName: true,
-									},
+			const updatedLog = await prisma.log.update({
+				where: { id },
+				data: {
+					status: LogStatus.read,
+					readAt: new Date(),
+				},
+				include: {
+					user: {
+						select: {
+							id: true,
+							userName: true,
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
 								},
 							},
 						},
 					},
-				});
+				},
+			});
 
-				loggingsLogger.info(`${config.SUCCESS.LOGS.MARKED_AS_READ}: ${updatedLog.id}`);
-				res.status(200).json(updatedLog);
-			} catch (error) {
-				loggingsLogger.error(`${config.ERROR.LOGS.ERROR_UPDATING_LOG}: ${error}`);
-				res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
-			}
-		},
-	);
+			loggingsLogger.info(`${config.SUCCESS.LOGS.MARKED_AS_READ}: ${updatedLog.id}`);
+			res.status(200).json(updatedLog);
+		} catch (error) {
+			loggingsLogger.error(`${config.ERROR.LOGS.ERROR_UPDATING_LOG}: ${error}`);
+			res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
+		}
+	};
 
-	const remove = requireAdmin(async (req: Request, res: Response, _next: NextFunction) => {
+	const remove = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 
 		if (!id) {
@@ -446,7 +487,7 @@ export const controller = (prisma: PrismaClient) => {
 			loggingsLogger.error(`${config.ERROR.LOGS.ERROR_DELETING_LOG}: ${error}`);
 			res.status(500).json({ error: config.ERROR.LOGS.INTERNAL_SERVER_ERROR });
 		}
-	});
+	};
 
 	return {
 		getById,

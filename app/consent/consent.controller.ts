@@ -11,11 +11,13 @@ import {
 	Services,
 } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import { createNotificationHelper } from "../../helper/notification.helper";
 
 const logger = getLogger();
 const consentLogger = logger.child({ module: "consent" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -457,6 +459,26 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			consentLogger.info(`${config.SUCCESS.CONSENT.CREATED}: ${newConsent.id}`);
+
+			// Create notification for consent creation
+			try {
+				await notificationHelper.createConsentNotification(
+					"CREATED",
+					newConsent.studentId,
+					newConsent.id,
+					{
+						financialStatus: newConsent.financial_status,
+						services: newConsent.services,
+						concerns: newConsent.concerns,
+						studentName: newConsent.student?.person
+							? `${newConsent.student.person.firstName} ${newConsent.student.person.lastName}`
+							: "Unknown Student",
+					},
+				);
+			} catch (notificationError) {
+				consentLogger.warn(`Failed to create consent notification: ${notificationError}`);
+			}
+
 			res.status(201).json({
 				message: "Consent created successfully",
 				consent: newConsent,
@@ -591,6 +613,28 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			consentLogger.info(`${config.SUCCESS.CONSENT.UPDATE}: ${updatedConsent.id}`);
+
+			// Create notification for consent update
+			try {
+				await notificationHelper.createConsentNotification(
+					"UPDATED",
+					updatedConsent.studentId,
+					updatedConsent.id,
+					{
+						financialStatus: updatedConsent.financial_status,
+						services: updatedConsent.services,
+						concerns: updatedConsent.concerns,
+						studentName: updatedConsent.student?.person
+							? `${updatedConsent.student.person.firstName} ${updatedConsent.student.person.lastName}`
+							: "Unknown Student",
+					},
+				);
+			} catch (notificationError) {
+				consentLogger.warn(
+					`Failed to create consent update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json(updatedConsent);
 		} catch (error) {
 			consentLogger.error(`${config.ERROR.CONSENT.ERROR_UPDATING_CONSENT}: ${error}`);

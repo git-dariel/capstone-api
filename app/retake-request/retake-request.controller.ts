@@ -8,12 +8,14 @@ import {
 	AssessmentType,
 } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
+import { createNotificationHelper } from "../../helper/notification.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
 
 const logger = getLogger();
 const retakeRequestLogger = logger.child({ module: "retake-request" });
 
 export const controller = (prisma: PrismaClient) => {
+	const notificationHelper = createNotificationHelper(prisma);
 	const getById = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -286,6 +288,25 @@ export const controller = (prisma: PrismaClient) => {
 			retakeRequestLogger.info(
 				`${config.SUCCESS.RETAKE_REQUEST.CREATED}: ${retakeRequest.id}`,
 			);
+
+			// Create notification for retake request creation
+			try {
+				await notificationHelper.createRetakeRequestNotification(
+					"CREATED",
+					retakeRequest.userId,
+					retakeRequest.id,
+					{
+						assessmentType: retakeRequest.assessmentType,
+						reason: retakeRequest.reason,
+						status: retakeRequest.status,
+					},
+				);
+			} catch (notificationError) {
+				retakeRequestLogger.warn(
+					`Failed to create retake request notification: ${notificationError}`,
+				);
+			}
+
 			res.status(201).json(retakeRequest);
 		} catch (error) {
 			retakeRequestLogger.error(
@@ -385,6 +406,33 @@ export const controller = (prisma: PrismaClient) => {
 			retakeRequestLogger.info(
 				`${config.SUCCESS.RETAKE_REQUEST.UPDATE}: ${id} to status ${status}`,
 			);
+
+			// Create notification for retake request status update
+			try {
+				let notificationAction: "APPROVED" | "REJECTED" = "APPROVED";
+				if (status === RetakeRequestStatus.approved) {
+					notificationAction = "APPROVED";
+				} else if (status === RetakeRequestStatus.rejected) {
+					notificationAction = "REJECTED";
+				}
+
+				await notificationHelper.createRetakeRequestNotification(
+					notificationAction,
+					updatedRequest.userId,
+					updatedRequest.id,
+					{
+						assessmentType: updatedRequest.assessmentType,
+						reason: updatedRequest.reason,
+						status: updatedRequest.status,
+						reviewerComments: updatedRequest.reviewerComments,
+					},
+				);
+			} catch (notificationError) {
+				retakeRequestLogger.warn(
+					`Failed to create retake request update notification: ${notificationError}`,
+				);
+			}
+
 			res.status(200).json(updatedRequest);
 		} catch (error) {
 			retakeRequestLogger.error(
