@@ -1483,17 +1483,17 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					}),
 				]);
 
-				// Generate last 7 days array
-				const last7Days = [];
-				for (let i = 6; i >= 0; i--) {
+				// Generate date array based on the requested number of days
+				const dateRange = [];
+				for (let i = days - 1; i >= 0; i--) {
 					const date = new Date();
 					date.setDate(date.getDate() - i);
 					const dateStr = date.toISOString().split("T")[0];
-					last7Days.push(dateStr);
+					dateRange.push(dateStr);
 				}
 
 				// Map data to consistent format
-				const trendsData = last7Days.map((dateStr) => {
+				const trendsData = dateRange.map((dateStr) => {
 					const anxiety =
 						anxietyByDay.find(
 							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
@@ -1509,11 +1509,30 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
 						)?._count.id || 0;
 
-					return {
-						date: new Date(dateStr).toLocaleDateString("en-US", {
+					// Format date based on the number of days
+					let dateFormat;
+					if (days <= 7) {
+						// For 7 days or less, show "MMM DD" format
+						dateFormat = new Date(dateStr).toLocaleDateString("en-US", {
 							month: "short",
 							day: "numeric",
-						}),
+						});
+					} else if (days <= 30) {
+						// For 30 days or less, show "MMM DD" format
+						dateFormat = new Date(dateStr).toLocaleDateString("en-US", {
+							month: "short",
+							day: "numeric",
+						});
+					} else {
+						// For longer periods, show "MMM DD" format but with weekly intervals
+						dateFormat = new Date(dateStr).toLocaleDateString("en-US", {
+							month: "short",
+							day: "numeric",
+						});
+					}
+
+					return {
+						date: dateFormat,
 						anxiety,
 						depression,
 						stress,
