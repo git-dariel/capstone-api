@@ -124,7 +124,7 @@ export const controller = (prisma: PrismaClient) => {
 	const dashboard = requireAnyRole(
 		async (req: AuthRequest, res: Response, _next: NextFunction): Promise<void> => {
 			try {
-				const { data } = req.body;
+				const { data, filter: requestFilter } = req.body;
 
 				if (!Array.isArray(data)) {
 					metricsLogger.error("❌ Invalid input for dashboard request", { data });
@@ -138,13 +138,14 @@ export const controller = (prisma: PrismaClient) => {
 					model = "GuidanceDashboard";
 				}
 
-				// Create filter with authenticated user context
+				// Create filter with authenticated user context and merge with request filter
 				const filter = {
 					userFilter: { id: req.userId },
+					...(requestFilter || {}),
 				};
 
 				metricsLogger.info(
-					`📊 Dashboard request for user: ${req.userId}, methods: ${data.join(", ")}`,
+					`📊 Dashboard request for user: ${req.userId}, methods: ${data.join(", ")}, filter: ${JSON.stringify(filter)}`,
 				);
 
 				const result = await searchMetrics(prisma, model, data, filter);

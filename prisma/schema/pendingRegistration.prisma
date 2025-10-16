@@ -1,0 +1,43 @@
+model PendingRegistration {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  email            String    @unique
+  userName         String?
+  password         String    // Hashed password
+  role             Role?     @default(user)
+  type             Type      @default(student)
+  
+  // Person data
+  firstName        String
+  lastName         String
+  middleName       String?
+  suffix           String?
+  contactNumber    String?
+  gender           String?
+  birthDate        DateTime?
+  birthPlace       String?
+  age              Int?
+  religion         String?
+  civilStatus      String?
+  
+  // Address data (JSON)
+  address          Json?
+  
+  // Guardian data (JSON)
+  guardian         Json?
+  
+  // Student specific data
+  studentNumber    String?
+  program          String?
+  year             String?
+  
+  // OTP verification
+  emailOtp         String
+  emailOtpExpiry   DateTime
+  
+  // Metadata
+  isDeleted        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
+  @@map("pending_registrations")
+}

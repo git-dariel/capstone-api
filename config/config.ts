@@ -17,8 +17,8 @@ export const config = {
 		host: process.env.EMAIL_HOST || "",
 		port: parseInt(process.env.EMAIL_PORT || "587"),
 		secure: process.env.EMAIL_SECURE === "true",
-		user: process.env.EMAIL_USER || "",
-		password: process.env.EMAIL_PASSWORD || "",
+		user: process.env.EMAIL_USER || "mental.health.pup.ph@gmail.com",
+		password: process.env.EMAIL_PASSWORD || "cnmk hlma hkas kabf",
 	},
 
 	CORS: {
