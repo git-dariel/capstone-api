@@ -4,6 +4,8 @@ interface MetricFilter {
 	userFilter?: Record<string, any>;
 	startDate?: string | Date;
 	endDate?: string | Date;
+	page?: number;
+	limit?: number;
 }
 
 export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
@@ -606,9 +608,27 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			studentProgressOverview: async () => {
 				console.log(`🔍 API: Getting student progress overview for guidance dashboard`);
 
-				// Get all students with their assessment data
+				// Extract pagination parameters from filter
+				const page = filter?.page ? Number(filter.page) : 1;
+				const limit = filter?.limit ? Number(filter.limit) : 10;
+				const skip = (page - 1) * limit;
+
+				console.log(`📄 Pagination: page=${page}, limit=${limit}, skip=${skip}`);
+
+				// Get total count of students
+				const totalStudents = await prisma.student.count({
+					where: { isDeleted: false },
+				});
+
+				// Get paginated students with their assessment data
 				const students = await prisma.student.findMany({
 					where: { isDeleted: false },
+					skip,
+					take: limit,
+					orderBy: [
+						{ person: { lastName: "asc" } },
+						{ person: { firstName: "asc" } },
+					],
 					include: {
 						person: {
 							include: {
@@ -641,16 +661,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 					},
 				});
-
-				console.log(`📊 Found ${students.length} students in database`);
-
-				// Debug: Log first student structure
-				if (students.length > 0) {
-					console.log(
-						`🔍 First student structure:`,
-						JSON.stringify(students[0], null, 2),
-					);
-				}
 
 				// Process student data to generate progress insights
 				const studentProgressInsights = students
@@ -825,7 +835,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					.filter(Boolean);
 
 				const summary = {
-					totalStudents: studentProgressInsights.length,
+					totalStudents: totalStudents, // Use the actual total count, not just the current page
 					studentsWithAssessments: studentProgressInsights.filter(
 						(s) => s && s.totalAssessments.overall > 0,
 					).length,
@@ -840,14 +850,24 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					).length,
 				};
 
+				const totalPages = Math.ceil(totalStudents / limit);
+
 				console.log(
-					`📊 Student progress overview generated: ${studentProgressInsights.length} students`,
+					`📊 Student progress overview generated: ${studentProgressInsights.length} of ${totalStudents} students (page ${page}/${totalPages})`,
 				);
 
 				// Debug: Log the final result structure
 				const result = {
 					students: studentProgressInsights,
 					summary,
+					pagination: {
+						page,
+						limit,
+						total: totalStudents,
+						totalPages,
+						hasNextPage: page < totalPages,
+						hasPrevPage: page > 1,
+					},
 				};
 				console.log(`🔍 Final result structure:`, JSON.stringify(result, null, 2));
 
