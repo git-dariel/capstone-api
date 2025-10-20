@@ -212,10 +212,8 @@ type FamilyBackground {
 }
 
 type Employer {
-  firstName  String?
-  lastName   String?
-  middleName String?
-  address    PersonAddress?
+  name    String?
+  address PersonAddress?
 }
 
 type Physical {
