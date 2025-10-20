@@ -272,11 +272,14 @@ export const controller = (prisma: PrismaClient) => {
 			const metrics = METRIC(prisma);
 
 			// Get assessment counts for breakdown
-			const [anxietyTotal, depressionTotal, stressTotal] = await Promise.all([
-				metrics.Anxiety.totalAnxiety(),
-				metrics.Depression.totalDepression(),
-				metrics.Stress.totalStress(),
-			]);
+			const [anxietyTotal, depressionTotal, stressTotal, checklistTotal, suicideTotal] =
+				await Promise.all([
+					metrics.Anxiety.totalAnxiety(),
+					metrics.Depression.totalDepression(),
+					metrics.Stress.totalStress(),
+					metrics.PersonalProblemsChecklist.totalChecklist(),
+					metrics.Suicide.totalSuicide(),
+				]);
 
 			// Get specialized dashboard data
 			const [trendsData, severityData, monthlyData] = await Promise.all([
@@ -290,10 +293,18 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			// Get program-wise breakdowns for additional insights (no date filtering)
-			const [anxietyByProgram, depressionByProgram, stressByProgram] = await Promise.all([
+			const [
+				anxietyByProgram,
+				depressionByProgram,
+				stressByProgram,
+				checklistByProgram,
+				suicideByProgram,
+			] = await Promise.all([
 				metrics.Anxiety.totalAnxietyByProgram(),
 				metrics.Depression.totalDepressionByProgram(),
 				metrics.Stress.totalStressByProgram(),
+				metrics.PersonalProblemsChecklist.totalChecklistByProgram(),
+				metrics.Suicide.totalSuicideByProgram(),
 			]);
 
 			// Format data for charts
@@ -309,7 +320,12 @@ export const controller = (prisma: PrismaClient) => {
 						color: "#f59e0b",
 						percentage:
 							Math.round(
-								(anxietyTotal / (anxietyTotal + depressionTotal + stressTotal)) *
+								(anxietyTotal /
+									(anxietyTotal +
+										depressionTotal +
+										stressTotal +
+										checklistTotal +
+										suicideTotal)) *
 									100,
 							) || 0,
 					},
@@ -319,7 +335,12 @@ export const controller = (prisma: PrismaClient) => {
 						color: "#8b5cf6",
 						percentage:
 							Math.round(
-								(depressionTotal / (anxietyTotal + depressionTotal + stressTotal)) *
+								(depressionTotal /
+									(anxietyTotal +
+										depressionTotal +
+										stressTotal +
+										checklistTotal +
+										suicideTotal)) *
 									100,
 							) || 0,
 					},
@@ -329,7 +350,42 @@ export const controller = (prisma: PrismaClient) => {
 						color: "#ef4444",
 						percentage:
 							Math.round(
-								(stressTotal / (anxietyTotal + depressionTotal + stressTotal)) *
+								(stressTotal /
+									(anxietyTotal +
+										depressionTotal +
+										stressTotal +
+										checklistTotal +
+										suicideTotal)) *
+									100,
+							) || 0,
+					},
+					{
+						name: "Personal Problems",
+						value: checklistTotal,
+						color: "#10b981",
+						percentage:
+							Math.round(
+								(checklistTotal /
+									(anxietyTotal +
+										depressionTotal +
+										stressTotal +
+										checklistTotal +
+										suicideTotal)) *
+									100,
+							) || 0,
+					},
+					{
+						name: "Suicide Risk",
+						value: suicideTotal,
+						color: "#dc2626",
+						percentage:
+							Math.round(
+								(suicideTotal /
+									(anxietyTotal +
+										depressionTotal +
+										stressTotal +
+										checklistTotal +
+										suicideTotal)) *
 									100,
 							) || 0,
 					},
@@ -348,6 +404,9 @@ export const controller = (prisma: PrismaClient) => {
 					depression:
 						depressionByProgram.find((d) => d.program === item.program)?.count || 0,
 					stress: stressByProgram.find((s) => s.program === item.program)?.count || 0,
+					checklist:
+						checklistByProgram.find((c) => c.program === item.program)?.count || 0,
+					suicide: suicideByProgram.find((s) => s.program === item.program)?.count || 0,
 				})),
 
 				// Summary stats
@@ -355,7 +414,14 @@ export const controller = (prisma: PrismaClient) => {
 					anxiety: anxietyTotal,
 					depression: depressionTotal,
 					stress: stressTotal,
-					total: anxietyTotal + depressionTotal + stressTotal,
+					checklist: checklistTotal,
+					suicide: suicideTotal,
+					total:
+						anxietyTotal +
+						depressionTotal +
+						stressTotal +
+						checklistTotal +
+						suicideTotal,
 				},
 			};
 

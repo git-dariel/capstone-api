@@ -34,6 +34,10 @@ interface StudentExportData {
 	// Suicide Assessment
 	suicideRisk: string;
 	suicideDate: string;
+	// Personal Checklist Problems
+	checklistRisk: string;
+	checklistProblems: number;
+	checklistDate: string;
 	// Timestamps
 	createdAt: string;
 	updatedAt: string;
@@ -48,6 +52,7 @@ interface ExportFilters {
 	studentId?: string;
 	firstName?: string;
 	lastName?: string;
+	year?: string;
 }
 
 /**
@@ -58,10 +63,11 @@ interface ExportFilters {
  * @param filters.gender - Filter by gender (exact match: male, female, other, prefer_not_to_say)
  * @param filters.severityLevel - Filter by severity level across all assessments (minimal, mild, moderate, moderately_severe, severe, low, high)
  * @param filters.status - Filter by academic status (freshman, sophomore, junior, senior)
- * @param filters.assessmentType - Filter to only include students with specific assessment type (anxiety, depression, stress, suicide)
+ * @param filters.assessmentType - Filter to only include students with specific assessment type (anxiety, depression, stress, suicide, checklist)
  * @param filters.studentId - Filter by specific student ID (exact match)
  * @param filters.firstName - Filter by first name (partial match, case insensitive)
  * @param filters.lastName - Filter by last name (partial match, case insensitive)
+ * @param filters.year - Filter by year level (1st, 2nd, 3rd, 4th, 5th)
  * @returns CSV content as string
  */
 export const exportStudentDataCsv = async (
@@ -89,6 +95,10 @@ export const exportStudentDataCsv = async (
 
 		if (filters?.status) {
 			whereClause.status = filters.status;
+		}
+
+		if (filters?.year) {
+			whereClause.year = filters.year;
 		}
 
 		// Apply person-related filters
@@ -152,6 +162,11 @@ export const exportStudentDataCsv = async (
 									},
 									take: 1, // Get the latest assessment
 								},
+								personalProblemsChecklist: {
+									where: {
+										isDeleted: false,
+									},
+								},
 							},
 						},
 					},
@@ -195,6 +210,10 @@ export const exportStudentDataCsv = async (
 				stressDate: "",
 				suicideRisk: "",
 				suicideDate: "",
+				// Personal Checklist Problems
+				checklistRisk: "",
+				checklistProblems: 0,
+				checklistDate: "",
 				// Timestamps
 				createdAt: student.createdAt.toISOString(),
 				updatedAt: student.updatedAt.toISOString(),
@@ -231,6 +250,13 @@ export const exportStudentDataCsv = async (
 					baseData.suicideRisk = suicideAssessment.riskLevel;
 					baseData.suicideDate = suicideAssessment.assessmentDate.toISOString();
 				}
+
+				// Get personal checklist problems assessment
+				if (user.personalProblemsChecklist) {
+					baseData.checklistRisk = user.personalProblemsChecklist.checklist_analysis?.riskLevel || "";
+					baseData.checklistProblems = user.personalProblemsChecklist.checklist_analysis?.totalProblemsChecked || 0;
+					baseData.checklistDate = user.personalProblemsChecklist.date_completed.toISOString();
+				}
 			}
 
 			// Apply post-processing filters
@@ -242,7 +268,8 @@ export const exportStudentDataCsv = async (
 					baseData.anxietySeverity === filters.severityLevel ||
 					baseData.depressionSeverity === filters.severityLevel ||
 					baseData.stressSeverity === filters.severityLevel ||
-					baseData.suicideRisk === filters.severityLevel;
+					baseData.suicideRisk === filters.severityLevel ||
+					baseData.checklistRisk === filters.severityLevel;
 
 				if (!severityMatches) {
 					includeRecord = false;
@@ -263,6 +290,9 @@ export const exportStudentDataCsv = async (
 						break;
 					case "suicide":
 						includeRecord = baseData.suicideRisk !== "";
+						break;
+					case "checklist":
+						includeRecord = baseData.checklistRisk !== "";
 						break;
 				}
 			}
@@ -310,6 +340,7 @@ const generateCsvContent = (data: StudentExportData[], assessmentType?: string):
 		depression: ["Depression Score", "Depression Severity", "Depression Assessment Date"],
 		stress: ["Stress Score", "Stress Severity", "Stress Assessment Date"],
 		suicide: ["Suicide Risk Level", "Suicide Assessment Date"],
+		checklist: ["Checklist Risk Level", "Total Problems", "Checklist Assessment Date"],
 	};
 
 	// Timestamp headers (always included)
@@ -329,6 +360,7 @@ const generateCsvContent = (data: StudentExportData[], assessmentType?: string):
 			...assessmentHeaders.depression,
 			...assessmentHeaders.stress,
 			...assessmentHeaders.suicide,
+			...assessmentHeaders.checklist,
 		];
 	}
 
@@ -370,6 +402,11 @@ const generateCsvContent = (data: StudentExportData[], assessmentType?: string):
 				escapeCsvValue(row.stressDate),
 			],
 			suicide: [escapeCsvValue(row.suicideRisk), escapeCsvValue(row.suicideDate)],
+			checklist: [
+				escapeCsvValue(row.checklistRisk),
+				row.checklistProblems.toString(),
+				escapeCsvValue(row.checklistDate),
+			],
 		};
 
 		// Timestamp row data (always included)
@@ -389,6 +426,7 @@ const generateCsvContent = (data: StudentExportData[], assessmentType?: string):
 				...assessmentRowData.depression,
 				...assessmentRowData.stress,
 				...assessmentRowData.suicide,
+				...assessmentRowData.checklist,
 			];
 		}
 
