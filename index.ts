@@ -1,16 +1,15 @@
-import express, { Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
+import express, { NextFunction, Request, Response } from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
-import { Role } from "./generated/prisma";
 import { config } from "./config/config";
-import openApiSpecs from "./docs/openApiSpecs";
-import verifyToken from "./middleware/verifyToken";
-import verifyRole from "./middleware/verifyRole";
-import { connectDb, getPrismaClient } from "./config/database";
 import { corsMiddleware } from "./config/cors.config";
-import { time } from "console";
+import { connectDb, getPrismaClient } from "./config/database";
+import openApiSpecs from "./docs/openApiSpecs";
+import { Role } from "./generated/prisma";
+import verifyRole from "./middleware/verifyRole";
+import verifyToken from "./middleware/verifyToken";
 
 const app = express();
 const prisma = getPrismaClient();
@@ -32,6 +31,7 @@ const message = require("./app/message")(prisma);
 const appointment = require("./app/appointment")(prisma);
 const schedule = require("./app/schedule")(prisma);
 const inventory = require("./app/inventory")(prisma);
+const checklist = require("./app/checklist")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -122,6 +122,7 @@ app.use(config.baseApiPath, message);
 app.use(config.baseApiPath, appointment);
 app.use(config.baseApiPath, schedule);
 app.use(config.baseApiPath, inventory);
+app.use(config.baseApiPath, checklist);
 
 server.listen(config.port, async () => {
 	await connectDb();

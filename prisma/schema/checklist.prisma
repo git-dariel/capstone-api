@@ -1,0 +1,289 @@
+enum ChecklistCategory {
+  social_friends // SOC/FR
+  appearance // APP
+  attitude_opinion // ATT/OPIN
+  parents // PAR
+  family_home // FAM/HOM
+  school // SCH
+  money // MON
+  religion // REL
+  emotional // EMOT
+  dating_sex // DAT/SEX
+}
+
+enum ProblemSeverity {
+  not_checked
+  checked
+  circled_most_important
+}
+
+enum RiskLevel {
+  low
+  moderate
+  high
+  critical
+}
+
+enum UrgencyLevel {
+  none
+  monitor
+  schedule
+  immediate
+}
+
+type SocialFriendsProblems {
+  not_getting_along_with_other_people          ProblemSeverity @default(not_checked)
+  being_criticized_by_others                   ProblemSeverity @default(not_checked)
+  not_fitting_in_with_peers                    ProblemSeverity @default(not_checked)
+  feeling_uncomfortable_in_social_settings     ProblemSeverity @default(not_checked)
+  having_a_bad_reputation                      ProblemSeverity @default(not_checked)
+  feeling_immature                             ProblemSeverity @default(not_checked)
+  being_suspicious_of_others                   ProblemSeverity @default(not_checked)
+  being_shy                                    ProblemSeverity @default(not_checked)
+  not_having_close_friends                     ProblemSeverity @default(not_checked)
+  being_taken_advantage_of_by_friends          ProblemSeverity @default(not_checked)
+  not_having_anyone_to_share_interests_with    ProblemSeverity @default(not_checked)
+  feeling_lonely                               ProblemSeverity @default(not_checked)
+  feeling_unpopular                            ProblemSeverity @default(not_checked)
+  feeling_uncomfortable_when_talking_to_people ProblemSeverity @default(not_checked)
+  feeling_inferior                             ProblemSeverity @default(not_checked)
+  feeling_like_people_are_against_me           ProblemSeverity @default(not_checked)
+  being_embarrassed_by_family_background       ProblemSeverity @default(not_checked)
+  being_let_down_by_friends                    ProblemSeverity @default(not_checked)
+  feeling_different_from_everyone_else         ProblemSeverity @default(not_checked)
+  being_pressured_to_do_the_wrong_thing        ProblemSeverity @default(not_checked)
+}
+
+type AppearanceProblems {
+  being_overweight                      ProblemSeverity @default(not_checked)
+  being_too_short_or_too_tall           ProblemSeverity @default(not_checked)
+  having_a_physical_handicap            ProblemSeverity @default(not_checked)
+  being_too_thin                        ProblemSeverity @default(not_checked)
+  looking_too_young_or_too_old          ProblemSeverity @default(not_checked)
+  being_noticed_for_physical_appearance ProblemSeverity @default(not_checked)
+  looking_too_plain                     ProblemSeverity @default(not_checked)
+  feeling_clumsy_and_awkward            ProblemSeverity @default(not_checked)
+  not_being_clean_and_well_groomed      ProblemSeverity @default(not_checked)
+  not_having_the_right_clothes          ProblemSeverity @default(not_checked)
+  having_an_unattractive_face           ProblemSeverity @default(not_checked)
+  having_scars                          ProblemSeverity @default(not_checked)
+  having_facial_blemishes               ProblemSeverity @default(not_checked)
+  not_being_well_developed              ProblemSeverity @default(not_checked)
+}
+
+type AttitudeOpinionProblems {
+  having_a_poor_attitude_about_everything   ProblemSeverity @default(not_checked)
+  not_having_any_goals_in_life              ProblemSeverity @default(not_checked)
+  having_a_recent_change_in_attitude        ProblemSeverity @default(not_checked)
+  not_listening_to_the_opinions_of_others   ProblemSeverity @default(not_checked)
+  having_no_opinions_about_things           ProblemSeverity @default(not_checked)
+  having_different_values_from_others       ProblemSeverity @default(not_checked)
+  not_understanding_the_attitudes_of_others ProblemSeverity @default(not_checked)
+  having_a_poor_attitude_toward_religion    ProblemSeverity @default(not_checked)
+  having_a_poor_attitude_toward_school      ProblemSeverity @default(not_checked)
+  having_a_poor_attitude_toward_work        ProblemSeverity @default(not_checked)
+  having_a_poor_attitude_toward_family      ProblemSeverity @default(not_checked)
+  having_a_poor_attitude_toward_self        ProblemSeverity @default(not_checked)
+}
+
+type ParentsProblems {
+  father_or_mother_being_sick                    ProblemSeverity @default(not_checked)
+  father_or_mother_having_emotional_problems     ProblemSeverity @default(not_checked)
+  father_or_mother_being_unemployed              ProblemSeverity @default(not_checked)
+  father_or_mother_having_problem_with_alcohol   ProblemSeverity @default(not_checked)
+  parents_fighting_or_arguing                    ProblemSeverity @default(not_checked)
+  parents_being_separated_or_getting_divorced    ProblemSeverity @default(not_checked)
+  parents_being_divorced_remarried_or_stepmother ProblemSeverity @default(not_checked)
+  having_problems_with_stepfather_or_stepmother  ProblemSeverity @default(not_checked)
+  parents_never_being_home                       ProblemSeverity @default(not_checked)
+  not_being_able_to_talk_to_parents              ProblemSeverity @default(not_checked)
+  parents_being_too_strict                       ProblemSeverity @default(not_checked)
+  parents_interfering_with_decisions             ProblemSeverity @default(not_checked)
+  parents_expecting_too_much                     ProblemSeverity @default(not_checked)
+  parents_disapproving_of_boyfriend_girlfriend   ProblemSeverity @default(not_checked)
+  parents_not_trusting_me                        ProblemSeverity @default(not_checked)
+  parents_disapproving_of_job                    ProblemSeverity @default(not_checked)
+  parents_disapproving_of_clothes_or_appearance  ProblemSeverity @default(not_checked)
+  parents_disapproving_of_dating                 ProblemSeverity @default(not_checked)
+  parents_disapproving_of_music                  ProblemSeverity @default(not_checked)
+  parents_disapproving_of_activities             ProblemSeverity @default(not_checked)
+  parents_favoring_brothers_or_sisters           ProblemSeverity @default(not_checked)
+  being_ignored_by_parents                       ProblemSeverity @default(not_checked)
+}
+
+type FamilyHomeProblems {
+  brother_or_sister_being_sick                ProblemSeverity @default(not_checked)
+  brother_or_sister_having_emotional_problems ProblemSeverity @default(not_checked)
+  brother_or_sister_being_unemployed_drugs    ProblemSeverity @default(not_checked)
+  brother_or_sister_being_in_trouble_with_law ProblemSeverity @default(not_checked)
+  being_physically_abused_at_home             ProblemSeverity @default(not_checked)
+  being_sexually_abused_at_home               ProblemSeverity @default(not_checked)
+  arguing_with_brother_or_sister              ProblemSeverity @default(not_checked)
+  family_always_arguing                       ProblemSeverity @default(not_checked)
+  being_bothered_by_brother_or_sister         ProblemSeverity @default(not_checked)
+  family_fighting_or_arguing                  ProblemSeverity @default(not_checked)
+  having_problems_with_relatives              ProblemSeverity @default(not_checked)
+  not_being_any_privacy                       ProblemSeverity @default(not_checked)
+  having_to_do_household_chores               ProblemSeverity @default(not_checked)
+  not_feeling_close_to_family                 ProblemSeverity @default(not_checked)
+  family_not_having_enough_money              ProblemSeverity @default(not_checked)
+  not_getting_along_with_neighbors            ProblemSeverity @default(not_checked)
+  not_willing_to_live_at_home                 ProblemSeverity @default(not_checked)
+  home_being_dirty_or_messy                   ProblemSeverity @default(not_checked)
+  family_having_a_bad_reputation              ProblemSeverity @default(not_checked)
+  living_in_a_bad_neighborhood                ProblemSeverity @default(not_checked)
+  being_adopted                               ProblemSeverity @default(not_checked)
+  not_being_allowed_to_use_the_car            ProblemSeverity @default(not_checked)
+  not_being_allowed_to_buy_a_car              ProblemSeverity @default(not_checked)
+  wanting_to_run_away_from_home               ProblemSeverity @default(not_checked)
+}
+
+type SchoolProblems {
+  getting_bad_grades                        ProblemSeverity @default(not_checked)
+  not_getting_along_with_teachers           ProblemSeverity @default(not_checked)
+  deciding_on_the_right_course_or_studies   ProblemSeverity @default(not_checked)
+  not_having_good_study_habits              ProblemSeverity @default(not_checked)
+  not_having_a_good_place_to_study          ProblemSeverity @default(not_checked)
+  taking_the_wrong_courses                  ProblemSeverity @default(not_checked)
+  not_being_interested_in_school_or_teams   ProblemSeverity @default(not_checked)
+  not_qualifying_for_clubs_or_teams         ProblemSeverity @default(not_checked)
+  not_having_close_friends_at_school        ProblemSeverity @default(not_checked)
+  school_being_too_large                    ProblemSeverity @default(not_checked)
+  missing_school_because_of_illness         ProblemSeverity @default(not_checked)
+  not_understanding_class_material          ProblemSeverity @default(not_checked)
+  not_getting_along_with_other_students     ProblemSeverity @default(not_checked)
+  feeling_out_of_place_in_school            ProblemSeverity @default(not_checked)
+  not_being_interested_in_school            ProblemSeverity @default(not_checked)
+  having_a_language_problem_in_school       ProblemSeverity @default(not_checked)
+  being_in_the_wrong_school                 ProblemSeverity @default(not_checked)
+  teachers_not_being_interested_in_students ProblemSeverity @default(not_checked)
+  being_bored_in_school                     ProblemSeverity @default(not_checked)
+  getting_in_trouble_in_school              ProblemSeverity @default(not_checked)
+  school_being_too_far_from_home            ProblemSeverity @default(not_checked)
+  worrying_about_future_job_or_college      ProblemSeverity @default(not_checked)
+}
+
+type MoneyProblems {
+  budgeting_money                    ProblemSeverity @default(not_checked)
+  not_making_enough_money            ProblemSeverity @default(not_checked)
+  not_having_a_steady_income         ProblemSeverity @default(not_checked)
+  having_to_spend_savings            ProblemSeverity @default(not_checked)
+  owing_money                        ProblemSeverity @default(not_checked)
+  wasting_money                      ProblemSeverity @default(not_checked)
+  depending_on_others_for_money      ProblemSeverity @default(not_checked)
+  lending_money_to_friends_or_family ProblemSeverity @default(not_checked)
+  having_to_give_money_to_parents    ProblemSeverity @default(not_checked)
+  not_having_enough_money_to_date    ProblemSeverity @default(not_checked)
+  not_having_gas_money               ProblemSeverity @default(not_checked)
+  not_having_money_for_clothes       ProblemSeverity @default(not_checked)
+}
+
+type ReligionProblems {
+  feeling_guilty_about_religion                    ProblemSeverity @default(not_checked)
+  not_liking_any_religious_beliefs                 ProblemSeverity @default(not_checked)
+  arguing_with_parents_about_religious_beliefs     ProblemSeverity @default(not_checked)
+  being_confused_about_religious_beliefs           ProblemSeverity @default(not_checked)
+  falling_in_religious_beliefs                     ProblemSeverity @default(not_checked)
+  boyfriend_girlfriend_having_a_different_religion ProblemSeverity @default(not_checked)
+  arguing_with_girlfriend_boyfriend_about_religion ProblemSeverity @default(not_checked)
+  not_being_able_to_get_to_church                  ProblemSeverity @default(not_checked)
+  chores_interfering_with_church_activities        ProblemSeverity @default(not_checked)
+  job_interfering_with_church_activities           ProblemSeverity @default(not_checked)
+  being_upset_by_religious_beliefs_of_others       ProblemSeverity @default(not_checked)
+  worrying_about_being_accepted_by_God             ProblemSeverity @default(not_checked)
+  being_rejected_by_church_members                 ProblemSeverity @default(not_checked)
+  not_having_friends_at_church                     ProblemSeverity @default(not_checked)
+}
+
+type EmotionalProblems {
+  feeling_anxious_or_uptight                   ProblemSeverity @default(not_checked)
+  being_afraid_of_things                       ProblemSeverity @default(not_checked)
+  having_the_same_thoughts_over_and_over_again ProblemSeverity @default(not_checked)
+  being_tired_and_having_no_energy             ProblemSeverity @default(not_checked)
+  feeling_depressed_or_sad                     ProblemSeverity @default(not_checked)
+  having_trouble_concentrating                 ProblemSeverity @default(not_checked)
+  not_remembering_things                       ProblemSeverity @default(not_checked)
+  getting_too_emotional                        ProblemSeverity @default(not_checked)
+  losing_control                               ProblemSeverity @default(not_checked)
+  worrying_about_diseases_or_illness           ProblemSeverity @default(not_checked)
+  having_nightmares                            ProblemSeverity @default(not_checked)
+  thinking_too_much_about_death                ProblemSeverity @default(not_checked)
+  being_afraid_of_hurting_self                 ProblemSeverity @default(not_checked)
+  feeling_things_are_unreal                    ProblemSeverity @default(not_checked)
+  crying_without_good_reason                   ProblemSeverity @default(not_checked)
+  worrying_about_having_a_nervous_breakdown    ProblemSeverity @default(not_checked)
+  not_being_able_to_stop_worrying              ProblemSeverity @default(not_checked)
+  not_being_able_to_relax                      ProblemSeverity @default(not_checked)
+  being_unhappy_all_the_time                   ProblemSeverity @default(not_checked)
+  not_having_any_enjoyment_in_life             ProblemSeverity @default(not_checked)
+  being_influenced_by_others                   ProblemSeverity @default(not_checked)
+  behaving_in_strange_ways                     ProblemSeverity @default(not_checked)
+  feeling_out_of_control                       ProblemSeverity @default(not_checked)
+  being_afraid_of_hurting_someone_else         ProblemSeverity @default(not_checked)
+}
+
+type DatingSexProblems {
+  being_uncomfortable_with_opposite_sex                ProblemSeverity @default(not_checked)
+  not_being_able_to_get_a_boyfriend_girlfriend         ProblemSeverity @default(not_checked)
+  having_problems_with_boyfriend_girlfriend            ProblemSeverity @default(not_checked)
+  wanting_to_break_up_with_boyfriend_girlfriend        ProblemSeverity @default(not_checked)
+  losing_boyfriend_girlfriend                          ProblemSeverity @default(not_checked)
+  arguing_with_boyfriend_girlfriend_and_dating_and_sex ProblemSeverity @default(not_checked)
+  not_having_enough_dates                              ProblemSeverity @default(not_checked)
+  worrying_about_getting_pregnant                      ProblemSeverity @default(not_checked)
+  not_being_able_to_talk_about_dating_and_sex          ProblemSeverity @default(not_checked)
+  being_pregnant_or_girlfriend_being_pregnant          ProblemSeverity @default(not_checked)
+  not_knowing_enough_about_sex                         ProblemSeverity @default(not_checked)
+  worrying_about_sex                                   ProblemSeverity @default(not_checked)
+  thinking_about_sex_too_often                         ProblemSeverity @default(not_checked)
+  worrying_about_being_gay                             ProblemSeverity @default(not_checked)
+  being_troubled_by_sexual_attitudes_of_friends        ProblemSeverity @default(not_checked)
+  being_troubled_by_unusual_sexual_behavior            ProblemSeverity @default(not_checked)
+  being_sexually_underdeveloped                        ProblemSeverity @default(not_checked)
+  boyfriend_girlfriend_wanting_to_get_married          ProblemSeverity @default(not_checked)
+  feeling_used_or_being_pushed_into_having_sex         ProblemSeverity @default(not_checked)
+}
+
+type ChecklistAnalysis {
+  totalProblemsChecked  Int
+  totalCircledImportant Int
+  categoryScores        Json // Object with category -> count mapping
+  riskLevel             RiskLevel
+  urgencyLevel          UrgencyLevel
+  riskFactors           String[]
+  recommendations       String[]
+  needsAttention        Boolean
+  analysisDate          DateTime     @default(now())
+  disclaimer            String       @default("This checklist is for informational purposes only and does not replace professional psychological assessment. Please consult with a qualified mental health professional for proper evaluation and treatment.")
+}
+
+model PersonalProblemsChecklist {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique @db.ObjectId
+
+  // Date completed (basic info like name, age, gender can be retrieved from student.person)
+  date_completed DateTime @default(now())
+
+  // Problem Categories
+  social_friends_problems   SocialFriendsProblems
+  appearance_problems       AppearanceProblems
+  attitude_opinion_problems AttitudeOpinionProblems
+  parents_problems          ParentsProblems
+  family_home_problems      FamilyHomeProblems
+  school_problems           SchoolProblems
+  money_problems            MoneyProblems
+  religion_problems         ReligionProblems
+  emotional_problems        EmotionalProblems
+  dating_sex_problems       DatingSexProblems
+
+  // Analysis and Assessment
+  checklist_analysis ChecklistAnalysis?
+  analysisGenerated  Boolean            @default(false)
+  analysisUpdatedAt  DateTime?
+
+  // Additional fields following your pattern
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

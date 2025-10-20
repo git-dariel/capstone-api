@@ -457,10 +457,11 @@ export const controller = (prisma: PrismaClient) => {
 			studentId,
 			firstName,
 			lastName,
+			year,
 		} = req.query;
 
 		userLogger.info(
-			`CSV export requested with filters: program=${program}, gender=${gender}, severityLevel=${severityLevel}, status=${status}, assessmentType=${assessmentType}, studentId=${studentId}, firstName=${firstName}, lastName=${lastName}`,
+			`CSV export requested with filters: program=${program}, gender=${gender}, severityLevel=${severityLevel}, status=${status}, assessmentType=${assessmentType}, studentId=${studentId}, firstName=${firstName}, lastName=${lastName}, year=${year}`,
 		);
 
 		// Validate filter parameters
@@ -493,13 +494,23 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		if (year && !["1st", "2nd", "3rd", "4th", "5th"].includes(String(year))) {
+			userLogger.error(`Invalid year filter: ${year}`);
+			res.status(400).json({
+				error: "Invalid year filter. Must be one of: 1st, 2nd, 3rd, 4th, 5th",
+			});
+			return;
+		}
+
 		if (
 			assessmentType &&
-			!["anxiety", "depression", "stress", "suicide"].includes(String(assessmentType))
+			!["anxiety", "depression", "stress", "suicide", "checklist"].includes(
+				String(assessmentType),
+			)
 		) {
 			userLogger.error(`Invalid assessment type filter: ${assessmentType}`);
 			res.status(400).json({
-				error: "Invalid assessment type filter. Must be one of: anxiety, depression, stress, suicide",
+				error: "Invalid assessment type filter. Must be one of: anxiety, depression, stress, suicide, checklist",
 			});
 			return;
 		}
@@ -514,6 +525,7 @@ export const controller = (prisma: PrismaClient) => {
 				studentId: studentId ? String(studentId) : undefined,
 				firstName: firstName ? String(firstName) : undefined,
 				lastName: lastName ? String(lastName) : undefined,
+				year: year ? String(year) : undefined,
 			};
 
 			const csvContent = await exportStudentDataCsv(prisma, filters);

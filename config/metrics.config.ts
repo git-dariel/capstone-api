@@ -604,6 +604,414 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				}));
 			},
 		},
+		Suicide: {
+			totalSuicide: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						assessmentDate: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+
+					console.log(`🔍 API: Suicide date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
+				}
+
+				const count = await prisma.suicideAssessment.count({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+				});
+
+				console.log(`📊 Suicide count result: ${count}`);
+				return count;
+			},
+
+			availableYears: async () => {
+				const assessments = await prisma.suicideAssessment.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						assessmentDate: true,
+					},
+				});
+
+				const years = new Set<number>();
+				assessments.forEach((assessment) => {
+					if (assessment.assessmentDate) {
+						years.add(assessment.assessmentDate.getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
+			totalSuicideByProgram: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						assessmentDate: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+
+					console.log(`🔍 API: Suicide by program date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
+				}
+
+				const suicideWithProgram = await prisma.suicideAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: {
+							isDeleted: false,
+							...(filter.userFilter || {}),
+						},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+				});
+
+				console.log(
+					`📊 Found ${suicideWithProgram.length} suicide assessments with program data`,
+				);
+
+				const programCounts: Record<string, number> = {};
+				suicideWithProgram.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						const program = student.program || "Unknown";
+						programCounts[program] = (programCounts[program] || 0) + 1;
+					});
+				});
+
+				const result = Object.entries(programCounts).map(([program, count]) => ({
+					program,
+					count,
+				}));
+
+				console.log(`📊 Suicide by program result:`, result);
+				return result;
+			},
+
+			totalSuicideByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const suicideWithYear = await prisma.suicideAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+				});
+
+				const yearCounts: Record<string, number> = {};
+				suicideWithYear.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						const year = student.year || "Unknown";
+						yearCounts[year] = (yearCounts[year] || 0) + 1;
+					});
+				});
+
+				return Object.entries(yearCounts).map(([year, count]) => ({
+					year,
+					count,
+				}));
+			},
+
+			totalSuicideByGender: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const suicideWithGender = await prisma.suicideAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const genderCounts: Record<string, number> = {};
+				suicideWithGender.forEach((assessment) => {
+					const gender = assessment.user.person?.gender || "Unknown";
+					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+				});
+
+				return Object.entries(genderCounts).map(([gender, count]) => ({
+					gender,
+					count,
+				}));
+			},
+		},
+		PersonalProblemsChecklist: {
+			totalChecklist: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						date_completed: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+
+					console.log(`🔍 API: Checklist date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
+				}
+
+				const count = await prisma.personalProblemsChecklist.count({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+				});
+
+				console.log(`📊 Checklist count result: ${count}`);
+				return count;
+			},
+
+			availableYears: async () => {
+				const assessments = await prisma.personalProblemsChecklist.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						date_completed: true,
+					},
+				});
+
+				const years = new Set<number>();
+				assessments.forEach((assessment) => {
+					if (assessment.date_completed) {
+						years.add(new Date(assessment.date_completed).getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
+			totalChecklistByProgram: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						date_completed: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+
+					console.log(`🔍 API: Checklist by program date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
+				}
+
+				const checklistWithProgram = await prisma.personalProblemsChecklist.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: {
+							isDeleted: false,
+							...(filter.userFilter || {}),
+						},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+				});
+
+				console.log(
+					`📊 Found ${checklistWithProgram.length} checklist assessments with program data`,
+				);
+
+				const programCounts: Record<string, number> = {};
+				checklistWithProgram.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						const program = student.program || "Unknown";
+						programCounts[program] = (programCounts[program] || 0) + 1;
+					});
+				});
+
+				const result = Object.entries(programCounts).map(([program, count]) => ({
+					program,
+					count,
+				}));
+
+				console.log(`📊 Checklist by program result:`, result);
+				return result;
+			},
+
+			totalChecklistByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						date_completed: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const checklistWithYear = await prisma.personalProblemsChecklist.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+				});
+
+				const yearCounts: Record<string, number> = {};
+				checklistWithYear.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						const year = student.year || "Unknown";
+						yearCounts[year] = (yearCounts[year] || 0) + 1;
+					});
+				});
+
+				return Object.entries(yearCounts).map(([year, count]) => ({
+					year,
+					count,
+				}));
+			},
+
+			totalChecklistByGender: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						date_completed: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const checklistWithGender = await prisma.personalProblemsChecklist.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const genderCounts: Record<string, number> = {};
+				checklistWithGender.forEach((assessment) => {
+					const gender = assessment.user.person?.gender || "Unknown";
+					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+				});
+
+				return Object.entries(genderCounts).map(([gender, count]) => ({
+					gender,
+					count,
+				}));
+			},
+		},
 		GuidanceDashboard: {
 			studentProgressOverview: async () => {
 				console.log(`🔍 API: Getting student progress overview for guidance dashboard`);
@@ -655,6 +1063,9 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											orderBy: { assessmentDate: "desc" },
 											take: 1,
 										},
+										personalProblemsChecklist: {
+											where: { isDeleted: false },
+										},
 									},
 								},
 							},
@@ -681,6 +1092,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									stress: 0,
 									depression: 0,
 									suicide: 0,
+									checklist: 0,
 									overall: 0,
 								},
 								latestAssessments: {
@@ -688,6 +1100,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									stress: null,
 									depression: null,
 									suicide: null,
+									checklist: null,
 								},
 								progressInsights: [
 									{
@@ -709,11 +1122,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							stress: user.stressAssessments.length,
 							depression: user.depressionAssessments.length,
 							suicide: user.suicideAssessments.length,
+							checklist: user.personalProblemsChecklist ? 1 : 0,
 							overall:
 								user.anxietyAssessments.length +
 								user.stressAssessments.length +
 								user.depressionAssessments.length +
-								user.suicideAssessments.length,
+								user.suicideAssessments.length +
+								(user.personalProblemsChecklist ? 1 : 0),
 						};
 
 						const latestAssessments = {
@@ -721,6 +1136,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							stress: user.stressAssessments[0] || null,
 							depression: user.depressionAssessments[0] || null,
 							suicide: user.suicideAssessments[0] || null,
+							checklist: user.personalProblemsChecklist || null,
 						};
 
 						// Generate progress insights
@@ -783,20 +1199,41 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							});
 						}
 
+						if (
+							latestAssessments.checklist &&
+							latestAssessments.checklist.checklist_analysis &&
+							(latestAssessments.checklist.checklist_analysis.riskLevel === "high" ||
+								latestAssessments.checklist.checklist_analysis.riskLevel === "critical")
+						) {
+							progressInsights.push({
+								type: "warning",
+								assessmentType: "checklist",
+								message: `Latest personal problems checklist shows ${latestAssessments.checklist.checklist_analysis.riskLevel} risk level.`,
+								severity: "high",
+								recommendation:
+									"Please contact your guidance counselor for support and intervention.",
+							});
+						}
+
 						// Determine overall risk level
 						let riskLevel = "low";
 						if (
 							latestAssessments.suicide?.riskLevel === "high" ||
 							latestAssessments.anxiety?.severityLevel === "severe" ||
 							latestAssessments.depression?.severityLevel === "severe" ||
-							latestAssessments.stress?.severityLevel === "high"
+							latestAssessments.stress?.severityLevel === "high" ||
+							(latestAssessments.checklist?.checklist_analysis &&
+								(latestAssessments.checklist.checklist_analysis.riskLevel === "high" ||
+									latestAssessments.checklist.checklist_analysis.riskLevel === "critical"))
 						) {
 							riskLevel = "high";
 						} else if (
 							latestAssessments.suicide?.riskLevel === "moderate" ||
 							latestAssessments.anxiety?.severityLevel === "moderate" ||
 							latestAssessments.depression?.severityLevel === "moderate" ||
-							latestAssessments.stress?.severityLevel === "moderate"
+							latestAssessments.stress?.severityLevel === "moderate" ||
+							(latestAssessments.checklist?.checklist_analysis &&
+								latestAssessments.checklist.checklist_analysis.riskLevel === "moderate")
 						) {
 							riskLevel = "medium";
 						}
@@ -807,13 +1244,14 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							latestAssessments.stress?.assessmentDate,
 							latestAssessments.depression?.assessmentDate,
 							latestAssessments.suicide?.assessmentDate,
+							latestAssessments.checklist?.date_completed,
 						].filter(Boolean);
 
 						const lastAssessmentDate =
 							allDates.length > 0
 								? new Date(
 										Math.max(
-											...allDates.map((date) => new Date(date).getTime()),
+											...allDates.map((date) => new Date(date as Date).getTime()),
 										),
 									)
 								: null;
@@ -904,6 +1342,9 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: { isDeleted: false },
 							orderBy: { assessmentDate: "desc" },
 						},
+						personalProblemsChecklist: {
+							where: { isDeleted: false },
+						},
 						person: true,
 					},
 				});
@@ -918,17 +1359,26 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						stress: user.stressAssessments.length,
 						depression: user.depressionAssessments.length,
 						suicide: user.suicideAssessments.length,
+						checklist: user.personalProblemsChecklist ? 1 : 0,
 						overall:
 							user.anxietyAssessments.length +
 							user.stressAssessments.length +
 							user.depressionAssessments.length +
-							user.suicideAssessments.length,
+							user.suicideAssessments.length +
+							(user.personalProblemsChecklist ? 1 : 0),
 					},
 					latestAssessments: {
 						anxiety: user.anxietyAssessments[0] || null,
 						stress: user.stressAssessments[0] || null,
 						depression: user.depressionAssessments[0] || null,
 						suicide: user.suicideAssessments[0] || null,
+						checklist: user.personalProblemsChecklist ? {
+							...user.personalProblemsChecklist,
+							severityLevel: user.personalProblemsChecklist.checklist_analysis?.riskLevel || "unknown",
+							totalScore: user.personalProblemsChecklist.checklist_analysis?.categoryScores ? 
+								Object.values(user.personalProblemsChecklist.checklist_analysis.categoryScores as Record<string, number>)
+									.reduce((sum, count) => sum + count, 0) : null,
+						} : null,
 					},
 					userProfile: {
 						id: user.id,
@@ -1040,6 +1490,31 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					);
 				}
 
+				if (!assessmentType || assessmentType === "checklist") {
+					const checklistAssessments = await prisma.personalProblemsChecklist.findMany({
+						where: { userId, isDeleted: false },
+						orderBy: { date_completed: "desc" },
+						take: limit,
+						select: {
+							id: true,
+							date_completed: true,
+							createdAt: true,
+							checklist_analysis: true,
+						},
+					});
+					history.push(
+						...checklistAssessments.map((a) => ({
+							...a,
+							type: "checklist",
+							assessmentDate: a.date_completed, // Normalize field name
+							severityLevel: a.checklist_analysis?.riskLevel || "unknown",
+							totalScore: a.checklist_analysis?.categoryScores ? 
+								Object.values(a.checklist_analysis.categoryScores as Record<string, number>)
+									.reduce((sum, count) => sum + count, 0) : null,
+						})),
+					);
+				}
+
 				// Sort by assessment date descending and limit results
 				history.sort(
 					(a, b) =>
@@ -1076,7 +1551,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					throw new Error("User not found");
 				}
 
-				const [anxietyTrend, stressTrend, depressionTrend, suicideTrend] =
+				const [anxietyTrend, stressTrend, depressionTrend, suicideTrend, checklistTrend] =
 					await Promise.all([
 						prisma.anxietyAssessment.findMany({
 							where: {
@@ -1130,6 +1605,18 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								assessmentDate: true,
 							},
 						}),
+						prisma.personalProblemsChecklist.findMany({
+							where: {
+								userId,
+								isDeleted: false,
+								date_completed: { gte: startDate },
+							},
+							orderBy: { date_completed: "asc" },
+							select: {
+								date_completed: true,
+								checklist_analysis: true,
+							},
+						}),
 					]);
 
 				const trends = {
@@ -1157,6 +1644,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						requiresIntervention: s.requires_immediate_intervention,
 						date: s.assessmentDate,
 					})),
+					checklist: checklistTrend.map((c) => ({
+						score: c.checklist_analysis?.categoryScores ? 
+							Object.values(c.checklist_analysis.categoryScores as Record<string, number>)
+								.reduce((sum, count) => sum + count, 0) : null,
+						level: c.checklist_analysis?.riskLevel || "unknown",
+						date: c.date_completed,
+					})),
 				};
 
 				console.log(`📊 Assessment trends generated for last ${days} days`);
@@ -1183,7 +1677,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					throw new Error("User not found");
 				}
 
-				const [anxietyStats, stressStats, depressionStats, suicideStats] =
+				const [anxietyStats, stressStats, depressionStats, suicideStats, checklistStats] =
 					await Promise.all([
 						prisma.anxietyAssessment.aggregate({
 							where: { userId, isDeleted: false },
@@ -1210,13 +1704,17 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: { userId, isDeleted: false },
 							_count: { id: true },
 						}),
+						prisma.personalProblemsChecklist.aggregate({
+							where: { userId, isDeleted: false },
+							_count: { id: true },
+						}),
 					]);
 
 				// Get first and latest assessment dates from all assessment types
 				const allAssessmentDates: Date[] = [];
 
 				// Collect all assessment dates
-				const [anxietyDates, stressDates, depressionDates, suicideDates] =
+				const [anxietyDates, stressDates, depressionDates, suicideDates, checklistDates] =
 					await Promise.all([
 						prisma.anxietyAssessment.findMany({
 							where: { userId, isDeleted: false },
@@ -1234,6 +1732,10 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: { userId, isDeleted: false },
 							select: { assessmentDate: true },
 						}),
+						prisma.personalProblemsChecklist.findMany({
+							where: { userId, isDeleted: false },
+							select: { date_completed: true },
+						}),
 					]);
 
 				// Combine all dates
@@ -1242,6 +1744,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					...stressDates.map((s) => s.assessmentDate),
 					...depressionDates.map((d) => d.assessmentDate),
 					...suicideDates.map((s) => s.assessmentDate),
+					...checklistDates.map((c) => c.date_completed),
 				);
 
 				const firstAssessmentDate =
@@ -1284,12 +1787,19 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						minScore: null,
 						maxScore: null,
 					},
+					checklist: {
+						count: checklistStats._count.id,
+						averageScore: null, // Checklist uses problem counts, not scores
+						minScore: null,
+						maxScore: null,
+					},
 					overall: {
 						totalAssessments:
 							anxietyStats._count.id +
 							stressStats._count.id +
 							depressionStats._count.id +
-							suicideStats._count.id,
+							suicideStats._count.id +
+							checklistStats._count.id,
 						firstAssessmentDate,
 						latestAssessmentDate,
 					},
@@ -1458,7 +1968,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				};
 
 				// Get assessments grouped by day
-				const [anxietyByDay, depressionByDay, stressByDay] = await Promise.all([
+				const [anxietyByDay, depressionByDay, stressByDay, checklistByDay, suicideByDay] = await Promise.all([
 					prisma.anxietyAssessment.groupBy({
 						by: ["assessmentDate"],
 						where: {
@@ -1501,6 +2011,36 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							assessmentDate: "asc",
 						},
 					}),
+					prisma.personalProblemsChecklist.groupBy({
+						by: ["date_completed"],
+						where: {
+							isDeleted: false,
+							date_completed: {
+								gte: startDate,
+							},
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							id: true,
+						},
+						orderBy: {
+							date_completed: "asc",
+						},
+					}),
+					prisma.suicideAssessment.groupBy({
+						by: ["assessmentDate"],
+						where: {
+							isDeleted: false,
+							...dateFilter,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						_count: {
+							id: true,
+						},
+						orderBy: {
+							assessmentDate: "asc",
+						},
+					}),
 				]);
 
 				// Generate date array based on the requested number of days
@@ -1526,6 +2066,16 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 
 					const stress =
 						stressByDay.find(
+							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
+						)?._count.id || 0;
+
+					const checklist =
+						checklistByDay.find(
+							(item) => item.date_completed.toISOString().split("T")[0] === dateStr,
+						)?._count.id || 0;
+
+					const suicide =
+						suicideByDay.find(
 							(item) => item.assessmentDate.toISOString().split("T")[0] === dateStr,
 						)?._count.id || 0;
 
@@ -1556,6 +2106,8 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						anxiety,
 						depression,
 						stress,
+						checklist,
+						suicide,
 					};
 				});
 
