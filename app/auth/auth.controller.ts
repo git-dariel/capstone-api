@@ -103,6 +103,38 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Check if student number already exists (if provided)
+			if (studentNumber) {
+				const existingStudent = await prisma.student.findFirst({
+					where: {
+						studentNumber,
+						isDeleted: false,
+					},
+				});
+
+				if (existingStudent) {
+					authLogger.error(`Student number already exists: ${studentNumber}`);
+					res.status(400).json({ message: "Student number already exists" });
+					return;
+				}
+
+				// Also check pending registrations for the same student number
+				const existingPendingStudent = await prisma.pendingRegistration.findFirst({
+					where: {
+						studentNumber,
+						isDeleted: false,
+					},
+				});
+
+				if (existingPendingStudent) {
+					authLogger.error(
+						`Student number already exists in pending registration: ${studentNumber}`,
+					);
+					res.status(400).json({ message: "Student number already exists" });
+					return;
+				}
+			}
+
 			// Check if there's already a pending registration for this email
 			const existingPendingRegistration = await prisma.pendingRegistration.findFirst({
 				where: {
