@@ -587,7 +587,7 @@ export const controller = (prisma: PrismaClient) => {
 							? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
 							: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
 						disclaimer:
-							"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
+							"⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 					},
 					inputData: studentData,
 					recommendations: generateRecommendations(prediction),
@@ -616,7 +616,7 @@ export const controller = (prisma: PrismaClient) => {
 					message:
 						"Individual inventory created successfully with mental health prediction",
 					disclaimer:
-						"⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
+						"⚠️ IMPORTANT NOTICE: This mental health assessment is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
 					inventory: updatedInventory,
 					mentalHealthPrediction: {
 						academicPerformanceOutlook: prediction.prediction,
@@ -635,7 +635,7 @@ export const controller = (prisma: PrismaClient) => {
 								? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
 								: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
 							disclaimer:
-								"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
+								"⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 						},
 						inputData: studentData,
 						recommendations: generateRecommendations(prediction),

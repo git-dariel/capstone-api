@@ -25,11 +25,13 @@ const searchMetrics = async (
 	model: string,
 	data: string[],
 	filter: any,
+	methodParams?: Record<string, any>,
 ): Promise<Record<string, any>[]> => {
 	console.log("📊 Starting searchMetrics");
 	console.log("🔧 Model:", model);
 	console.log("🧮 Data:", data);
 	console.log("🔎 Filter:", filter);
+	console.log("📋 Method params:", methodParams);
 
 	let facetObject: ReturnType<typeof METRIC>;
 	try {
@@ -68,9 +70,9 @@ const searchMetrics = async (
 				return null;
 			}
 
-			return [originalKey, queryFn] as [string, () => Promise<any>];
+			return [originalKey, queryFn] as [string, (...args: any[]) => Promise<any>];
 		})
-		.filter((entry): entry is [string, () => Promise<any>] => entry !== null);
+		.filter((entry): entry is [string, (...args: any[]) => Promise<any>] => entry !== null);
 
 	if (facetQueries.length === 0) {
 		metricsLogger.warn(`⚠️ No valid facet keys matched for model "${model}"`);
@@ -80,7 +82,18 @@ const searchMetrics = async (
 	const results = await Promise.all(
 		facetQueries.map(async ([key, queryFn]) => {
 			try {
-				const result = await queryFn();
+				// Pass specific parameters based on the method
+				let result;
+				if (key === "assessmentTrends" && methodParams?.timeRange) {
+					result = await queryFn(methodParams.timeRange);
+				} else if (
+					key === "assessmentHistory" &&
+					(methodParams?.assessmentType || methodParams?.limit)
+				) {
+					result = await queryFn(methodParams.assessmentType, methodParams.limit);
+				} else {
+					result = await queryFn();
+				}
 				return [key, result];
 			} catch (e) {
 				metricsLogger.error(`❌ Failed to fetch metric "${key}"`, { error: e });
@@ -98,7 +111,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const search = async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
 		try {
-			const { model, data, filter } = req.body;
+			const { model, data, filter, methodParams } = req.body;
 
 			if (!model || !Array.isArray(data)) {
 				metricsLogger.error("❌ Invalid input for metrics search", { model, data });
@@ -106,7 +119,7 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const result = await searchMetrics(prisma, model, data, filter);
+			const result = await searchMetrics(prisma, model, data, filter, methodParams);
 			res.status(200).json({ data: result });
 		} catch (error: any) {
 			const status = (error.status || 500) as keyof typeof config;
@@ -124,7 +137,7 @@ export const controller = (prisma: PrismaClient) => {
 	const dashboard = requireAnyRole(
 		async (req: AuthRequest, res: Response, _next: NextFunction): Promise<void> => {
 			try {
-				const { data, filter: requestFilter } = req.body;
+				const { data, filter: requestFilter, methodParams } = req.body;
 
 				if (!Array.isArray(data)) {
 					metricsLogger.error("❌ Invalid input for dashboard request", { data });
@@ -145,10 +158,10 @@ export const controller = (prisma: PrismaClient) => {
 				};
 
 				metricsLogger.info(
-					`📊 Dashboard request for user: ${req.userId}, methods: ${data.join(", ")}, filter: ${JSON.stringify(filter)}`,
+					`📊 Dashboard request for user: ${req.userId}, methods: ${data.join(", ")}, filter: ${JSON.stringify(filter)}, methodParams: ${JSON.stringify(methodParams)}`,
 				);
 
-				const result = await searchMetrics(prisma, model, data, filter);
+				const result = await searchMetrics(prisma, model, data, filter, methodParams);
 				res.status(200).json({ data: result });
 			} catch (error: any) {
 				const status = (error.status || 500) as keyof typeof config;
