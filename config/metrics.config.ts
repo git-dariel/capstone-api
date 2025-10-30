@@ -1528,7 +1528,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				return history;
 			},
 
-			assessmentTrends: async (days: number = 30) => {
+			assessmentTrends: async (timeRange: string = "30d") => {
 				// Extract userId from filter (authenticated user context)
 				const userId = filter.userFilter?.id;
 
@@ -1537,11 +1537,36 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				}
 
 				console.log(
-					`🔍 API: Getting assessment trends for authenticated user: ${userId}, last ${days} days`,
+					`🔍 API: Getting assessment trends for authenticated user: ${userId}, timeRange: ${timeRange}`,
 				);
 
+				// Helper function to convert UTC date to Philippine Time (UTC+8)
+				const convertToPHT = (utcDate: Date): string => {
+					const PHT_OFFSET = 8 * 60 * 60 * 1000; // +8 hours in milliseconds
+					const phtDate = new Date(utcDate.getTime() + PHT_OFFSET);
+					return phtDate.toISOString().split('T')[0];
+				};
+
+				// Calculate date range based on time filter
+				const endDate = new Date();
 				const startDate = new Date();
-				startDate.setDate(startDate.getDate() - days);
+				
+				switch (timeRange) {
+					case "7d":
+						startDate.setDate(endDate.getDate() - 7);
+						break;
+					case "30d":
+						startDate.setDate(endDate.getDate() - 30);
+						break;
+					case "90d":
+						startDate.setDate(endDate.getDate() - 90);
+						break;
+					case "1y":
+						startDate.setFullYear(endDate.getFullYear() - 1);
+						break;
+					default:
+						startDate.setDate(endDate.getDate() - 30);
+				}
 
 				const user = await prisma.user.findUnique({
 					where: { id: userId, isDeleted: false },
@@ -1557,7 +1582,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
-								assessmentDate: { gte: startDate },
+								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
 							select: {
@@ -1570,7 +1595,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
-								assessmentDate: { gte: startDate },
+								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
 							select: {
@@ -1583,7 +1608,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
-								assessmentDate: { gte: startDate },
+								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
 							select: {
@@ -1596,7 +1621,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
-								assessmentDate: { gte: startDate },
+								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
 							select: {
@@ -1609,7 +1634,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
-								date_completed: { gte: startDate },
+								date_completed: { gte: startDate, lte: endDate },
 							},
 							orderBy: { date_completed: "asc" },
 							select: {
@@ -1619,41 +1644,59 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						}),
 					]);
 
-				const trends = {
-					period: `Last ${days} days`,
-					startDate,
-					endDate: new Date(),
-					anxiety: anxietyTrend.map((a) => ({
-						score: a.totalScore,
-						level: a.severityLevel,
-						date: a.assessmentDate,
-					})),
-					stress: stressTrend.map((s) => ({
-						score: s.totalScore,
-						level: s.severityLevel,
-						date: s.assessmentDate,
-					})),
-					depression: depressionTrend.map((d) => ({
-						score: d.totalScore,
-						level: d.severityLevel,
-						date: d.assessmentDate,
-					})),
-					suicide: suicideTrend.map((s) => ({
-						score: null, // Suicide assessments don't have numeric scores
-						level: s.riskLevel,
-						requiresIntervention: s.requires_immediate_intervention,
-						date: s.assessmentDate,
-					})),
-					checklist: checklistTrend.map((c) => ({
-						score: c.checklist_analysis?.categoryScores ? 
-							Object.values(c.checklist_analysis.categoryScores as Record<string, number>)
-								.reduce((sum, count) => sum + count, 0) : null,
-						level: c.checklist_analysis?.riskLevel || "unknown",
-						date: c.date_completed,
-					})),
+				// Helper function to group assessments by date and aggregate severity levels
+				const groupByDateAndAggregate = (assessments: any[], dateKey: string, scoreKey: string, levelKey: string) => {
+					// Instead of grouping by date, return each assessment as a separate data point
+					// This shows all assessments on the timeline without averaging
+					// Convert to Philippine Time (UTC+8)
+					return assessments.map(assessment => ({
+						date: convertToPHT(new Date(assessment[dateKey])),
+						score: assessment[scoreKey] || null,
+						level: assessment[levelKey] || 'unknown',
+						count: 1, // Each individual assessment
+					})).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 				};
 
-				console.log(`📊 Assessment trends generated for last ${days} days`);
+				// Group suicide assessments individually without averaging
+				const groupSuicideByDate = (assessments: any[]) => {
+					// Convert to Philippine Time (UTC+8)
+					return assessments.map(assessment => ({
+						date: convertToPHT(new Date(assessment.assessmentDate)),
+						score: null,
+						level: assessment.riskLevel || 'low',
+						requiresIntervention: assessment.requires_immediate_intervention || false,
+						count: 1, // Each individual assessment
+					})).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+				};
+
+				// Group checklist assessments individually without averaging
+				const groupChecklistByDate = (assessments: any[]) => {
+					return assessments.map(assessment => {
+						const problemCount = assessment.checklist_analysis?.categoryScores ? 
+							Object.values(assessment.checklist_analysis.categoryScores as Record<string, number>)
+								.reduce((sum, count) => sum + count, 0) : null;
+						
+						return {
+							date: convertToPHT(new Date(assessment.date_completed)),
+							score: problemCount,
+							level: assessment.checklist_analysis?.riskLevel || 'unknown',
+							count: 1, // Each individual assessment
+						};
+					}).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+				};
+
+				const trends = {
+					period: timeRange,
+					startDate: convertToPHT(startDate),
+					endDate: convertToPHT(endDate),
+					anxiety: groupByDateAndAggregate(anxietyTrend, 'assessmentDate', 'totalScore', 'severityLevel'),
+					stress: groupByDateAndAggregate(stressTrend, 'assessmentDate', 'totalScore', 'severityLevel'),
+					depression: groupByDateAndAggregate(depressionTrend, 'assessmentDate', 'totalScore', 'severityLevel'),
+					suicide: groupSuicideByDate(suicideTrend),
+					checklist: groupChecklistByDate(checklistTrend),
+				};
+
+				console.log(`📊 Assessment trends generated for ${timeRange}`);
 				return trends;
 			},
 
