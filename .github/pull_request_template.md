@@ -1,5 +1,5 @@
 ## Ticket
-- https://github.com/sureone-insurtech/sureone-api/issues/...
+- https://github.com/git-dariel/capstone-api/issues/...
 
 ## Dependencies
 _does your pull request depend on any other work being completed?_
@@ -10,13 +10,13 @@ _does your pull request depend on any other work being completed?_
 
 ## Pre-Test Plan
 - Checkout this branch
-- On your terminal, navigate to project folder `sureone-api/`
+- On your terminal, navigate to project folder `capstone-api/`
 - Run `npm install`
 - Run `npm start`
 
 ## Test Plan
 1. On your browser, navigate to [API-DOCS](http://localhost:3000/api/docs)
-- [ ] Verify that docs for SureOne loads successfully
+- [ ] Verify that docs for Capstone loads successfully
 2. ...
 - [ ] ...
 

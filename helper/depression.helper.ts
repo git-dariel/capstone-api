@@ -112,6 +112,67 @@ export const getRecommendationMessage = (totalScore: number): string => {
 	return "Score indicates minimal depressive symptoms.";
 };
 
+export const generateRecommendations = (
+	severityLevel: DepressionSeverityLevel,
+	suicidalIdeationDetected?: boolean,
+): string[] => {
+	const recommendations: string[] = [];
+
+	// Immediate action for suicidal ideation
+	if (suicidalIdeationDetected) {
+		recommendations.push(
+			"IMMEDIATE ACTION: Contact crisis hotline or emergency services",
+			"Do not remain alone - reach out to trusted individuals immediately",
+			"Create immediate safety plan with specific coping strategies",
+		);
+		return recommendations; // Return early for crisis situations
+	}
+
+	// Base recommendations based on severity level (limited to 3-4 key recommendations)
+	switch (severityLevel) {
+		case "severe":
+			recommendations.push(
+				"Seek immediate professional mental health care",
+				"Discuss medication options with a psychiatrist",
+				"Establish 24/7 crisis support contacts and safety planning",
+				"Involve trusted family members or friends in your care plan",
+			);
+			break;
+		case "moderately_severe":
+			recommendations.push(
+				"Schedule urgent appointment with a mental health professional",
+				"Consider psychotherapy (CBT, IPT, or psychodynamic therapy)",
+				"Implement structured daily activities and behavioral activation",
+				"Join depression support groups or group therapy sessions",
+			);
+			break;
+		case "moderate":
+			recommendations.push(
+				"Schedule regular therapy sessions with qualified counselor",
+				"Maintain consistent daily routine and sleep schedule",
+				"Engage in regular physical exercise (30 minutes daily)",
+				"Practice cognitive behavioral therapy techniques",
+			);
+			break;
+		case "mild":
+			recommendations.push(
+				"Monitor symptoms and practice self-care strategies",
+				"Maintain regular exercise and healthy eating habits",
+				"Practice stress management and relaxation techniques",
+			);
+			break;
+		case "minimal":
+			recommendations.push(
+				"Continue current positive mental health practices",
+				"Stay connected with supportive friends and family",
+				"Monitor mood changes and seek help if symptoms worsen",
+			);
+			break;
+	}
+
+	return recommendations;
+};
+
 export const createAnalysisResult = (
 	totalScore: number,
 	severityLevel: DepressionSeverityLevel,

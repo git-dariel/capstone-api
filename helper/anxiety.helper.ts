@@ -99,6 +99,52 @@ export const getRecommendationMessage = (totalScore: number): string => {
 	return "Score indicates minimal anxiety symptoms.";
 };
 
+export const generateRecommendations = (
+	totalScore: number,
+	severityLevel: SeverityLevel,
+): string[] => {
+	const recommendations: string[] = [];
+
+	// Base recommendations based on severity level (limited to 3-4 key recommendations)
+	switch (severityLevel) {
+		case "severe":
+			recommendations.push(
+				"Seek immediate professional help from a mental health specialist",
+				"Practice daily grounding techniques and breathing exercises",
+				"Implement crisis management strategies and emergency contacts",
+			);
+			break;
+		case "moderate":
+			recommendations.push(
+				"Schedule an appointment with a counselor or therapist",
+				"Practice regular mindfulness and relaxation techniques",
+				"Maintain a consistent sleep schedule and healthy routine",
+			);
+			break;
+		case "mild":
+			recommendations.push(
+				"Monitor anxiety symptoms and track triggers in a journal",
+				"Practice stress management techniques like deep breathing",
+				"Engage in regular physical exercise and outdoor activities",
+			);
+			break;
+		case "minimal":
+			recommendations.push(
+				"Continue current coping strategies that are working well",
+				"Maintain healthy lifestyle habits for prevention",
+				"Stay aware of early signs of anxiety for early intervention",
+			);
+			break;
+	}
+
+	// Only add one additional recommendation based on score for severe cases
+	if (totalScore >= 15) {
+		recommendations.push("Create a comprehensive safety plan with trusted individuals");
+	}
+
+	return recommendations;
+};
+
 export const createAnalysisResult = (totalScore: number, severityLevel: SeverityLevel) => {
 	return {
 		totalScore,

@@ -6,6 +6,7 @@ import {
 	createAnalysisResult,
 	createDetailedAnalysisResult,
 	determineRiskLevel,
+	generateRecommendations,
 	requiresImmediateIntervention,
 	validateBehaviorTimeframe,
 	validateSuicideResponse,
@@ -364,6 +365,9 @@ export const controller = (prisma: PrismaClient) => {
 				requiresIntervention,
 			);
 
+			// Generate personalized recommendations
+			const recommendations = generateRecommendations(riskLevel, requiresIntervention);
+
 			suicideLogger.info(`${config.SUCCESS.SUICIDE.CREATED}: ${newAssessment.id}`);
 
 			// Create notification for suicide assessment completion
@@ -378,6 +382,7 @@ export const controller = (prisma: PrismaClient) => {
 						riskLevel: newAssessment.riskLevel,
 						requiresIntervention: newAssessment.requires_immediate_intervention,
 						assessmentDate: newAssessment.assessmentDate,
+						recommendations: recommendations.slice(0, 3), // Include top 3 recommendations in notification
 					},
 				);
 			} catch (notificationError) {
@@ -391,7 +396,10 @@ export const controller = (prisma: PrismaClient) => {
 
 			res.status(statusCode).json({
 				...newAssessment,
-				analysis: analysisResult,
+				analysis: {
+					...analysisResult,
+					recommendations,
+				},
 			});
 		} catch (error) {
 			suicideLogger.error(`${config.ERROR.SUICIDE.ERROR_GETTING_ASSESSMENT}: ${error}`);

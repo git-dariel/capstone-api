@@ -11,6 +11,7 @@ import {
 	checkSuicidalIdeation,
 	getCooldownStatus,
 	formatCooldownMessage,
+	generateRecommendations,
 	getPhilippinesTime,
 } from "../../helper/depression.helper";
 import { getLogger } from "../../helper/logger";
@@ -442,6 +443,9 @@ export const controller = (prisma: PrismaClient) => {
 				severityLevel,
 			);
 
+			// Generate personalized recommendations
+			const recommendations = generateRecommendations(severityLevel);
+
 			// Add cooldown information to response
 			const cooldownStatus = getCooldownStatus(
 				newAssessment.assessmentDate,
@@ -463,6 +467,7 @@ export const controller = (prisma: PrismaClient) => {
 						severityLevel: newAssessment.severityLevel,
 						assessmentDate: newAssessment.assessmentDate,
 						hasSuicidalIdeation,
+						recommendations: recommendations.slice(0, 3), // Include top 3 recommendations in notification
 					},
 				);
 			} catch (notificationError) {
@@ -473,7 +478,10 @@ export const controller = (prisma: PrismaClient) => {
 
 			res.status(201).json({
 				...newAssessment,
-				analysis: analysisResult,
+				analysis: {
+					...analysisResult,
+					recommendations,
+				},
 				cooldownInfo: {
 					isActive: true, // New assessments always start with active cooldown
 					daysRemaining: cooldownStatus.daysRemaining,
