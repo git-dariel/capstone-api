@@ -11,6 +11,22 @@ import { Role } from "./generated/prisma";
 import verifyRole from "./middleware/verifyRole";
 import verifyToken from "./middleware/verifyToken";
 
+process.on("uncaughtException", (err) => {
+	console.error("=== UNCAUGHT EXCEPTION ===");
+	console.error("Error:", err.message);
+	console.error("Stack:", err.stack);
+	console.error("========================");
+	process.exit(1);
+});
+
+process.on("unhandledRejection", (reason: any, promise) => {
+	console.error("=== UNHANDLED PROMISE REJECTION ===");
+	console.error("Promise:", promise);
+	console.error("Reason:", reason);
+	console.error("===============================");
+	process.exit(1);
+});
+
 const app = express();
 const prisma = getPrismaClient();
 

@@ -6,6 +6,9 @@ interface MetricFilter {
 	endDate?: string | Date;
 	page?: number;
 	limit?: number;
+	program?: string;
+	yearLevel?: string;
+	gender?: string;
 }
 
 export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
@@ -131,17 +134,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					`📊 Found ${anxietyWithProgram.length} anxiety assessments with program data`,
 				);
 
-				const programCounts: Record<string, number> = {};
+				// Count unique students per program
+				const programStudentSets: Record<string, Set<string>> = {};
 				anxietyWithProgram.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
-						programCounts[student.program] = (programCounts[student.program] || 0) + 1;
+						if (!programStudentSets[student.program]) {
+							programStudentSets[student.program] = new Set();
+						}
+						programStudentSets[student.program].add(student.id);
 					});
 				});
 
-				const result = Object.entries(programCounts).map(([program, count]) => ({
+				const result = Object.entries(programStudentSets).map(([program, studentSet]) => ({
 					program,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 
 				console.log(`📊 Anxiety by program result:`, result);
@@ -181,17 +188,26 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const yearCounts: Record<string, number> = {};
+				// Count unique students per year level
+				const yearStudentSets: Record<string, Set<string>> = {};
 				anxietyWithYear.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
-						yearCounts[student.year] = (yearCounts[student.year] || 0) + 1;
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						
+						if (!yearStudentSets[student.year]) {
+							yearStudentSets[student.year] = new Set();
+						}
+						yearStudentSets[student.year].add(student.id);
 					});
 				});
 
-				return Object.entries(yearCounts).map(([year, count]) => ({
+				return Object.entries(yearStudentSets).map(([year, studentSet]) => ({
 					year,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -216,22 +232,123 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						user: {
 							include: {
-								person: true,
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
 							},
 						},
 					},
 				});
 
-				const genderCounts: Record<string, number> = {};
+				// Count unique students per gender
+				const genderStudentSets: Record<string, Set<string>> = {};
 				anxietyWithGender.forEach((assessment) => {
 					const gender = assessment.user.person?.gender || "unknown";
-					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+					const students = assessment.user.person?.students || [];
+					
+					students.forEach((student) => {
+						// Filter by program if specified (case-insensitive)
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						// Filter by year level if specified (case-insensitive)
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						
+						if (!genderStudentSets[gender]) {
+							genderStudentSets[gender] = new Set();
+						}
+						genderStudentSets[gender].add(student.id);
+					});
 				});
 
-				return Object.entries(genderCounts).map(([gender, count]) => ({
+				return Object.entries(genderStudentSets).map(([gender, studentSet]) => ({
 					gender,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
+			},
+
+			assessmentStudentList: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const assessments = await prisma.anxietyAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+					orderBy: {
+						assessmentDate: 'desc',
+					},
+				});
+
+				// Collect unique students matching filters
+				const studentMap = new Map();
+				
+				assessments.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					
+					students.forEach((student) => {
+						// Apply filters
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						if (filter.gender && assessment.user.person?.gender?.toLowerCase() !== filter.gender.toLowerCase()) {
+							return;
+						}
+
+						// Only add each student once
+						if (!studentMap.has(student.id)) {
+							studentMap.set(student.id, {
+								id: student.id,
+								studentNumber: student.studentNumber,
+								firstName: assessment.user.person?.firstName || '',
+								lastName: assessment.user.person?.lastName || '',
+								email: assessment.user.person?.email || '',
+								program: student.program,
+								year: student.year,
+								gender: assessment.user.person?.gender || 'unknown',
+								assessmentType: 'anxiety',
+								severity: assessment.severityLevel,
+								score: assessment.totalScore,
+								assessmentDate: assessment.assessmentDate?.toISOString(),
+								createdAt: assessment.createdAt.toISOString(),
+							});
+						}
+					});
+				});
+
+				return Array.from(studentMap.values());
 			},
 		},
 		Stress: {
@@ -319,17 +436,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const programCounts: Record<string, number> = {};
+				// Count unique students per program
+				const programStudentSets: Record<string, Set<string>> = {};
 				stressWithProgram.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
-						programCounts[student.program] = (programCounts[student.program] || 0) + 1;
+						if (!programStudentSets[student.program]) {
+							programStudentSets[student.program] = new Set();
+						}
+						programStudentSets[student.program].add(student.id);
 					});
 				});
 
-				return Object.entries(programCounts).map(([program, count]) => ({
+				return Object.entries(programStudentSets).map(([program, studentSet]) => ({
 					program,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -366,17 +487,26 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const yearCounts: Record<string, number> = {};
+				// Count unique students per year level
+				const yearStudentSets: Record<string, Set<string>> = {};
 				stressWithYear.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
-						yearCounts[student.year] = (yearCounts[student.year] || 0) + 1;
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						
+						if (!yearStudentSets[student.year]) {
+							yearStudentSets[student.year] = new Set();
+						}
+						yearStudentSets[student.year].add(student.id);
 					});
 				});
 
-				return Object.entries(yearCounts).map(([year, count]) => ({
+				return Object.entries(yearStudentSets).map(([year, studentSet]) => ({
 					year,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -401,22 +531,122 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						user: {
 							include: {
-								person: true,
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
 							},
 						},
 					},
 				});
 
-				const genderCounts: Record<string, number> = {};
+				// Count unique students per gender
+				const genderStudentSets: Record<string, Set<string>> = {};
 				stressWithGender.forEach((assessment) => {
 					const gender = assessment.user.person?.gender || "unknown";
-					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						// Filter by year level if specified
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						
+						if (!genderStudentSets[gender]) {
+							genderStudentSets[gender] = new Set();
+						}
+						genderStudentSets[gender].add(student.id);
+					});
 				});
 
-				return Object.entries(genderCounts).map(([gender, count]) => ({
+				return Object.entries(genderStudentSets).map(([gender, studentSet]) => ({
 					gender,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
+			},
+
+			assessmentStudentList: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const assessments = await prisma.stressAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+					orderBy: {
+						assessmentDate: 'desc',
+					},
+				});
+
+				// Collect unique students matching filters
+				const studentMap = new Map();
+				
+				assessments.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					
+					students.forEach((student) => {
+						// Apply filters
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						if (filter.gender && assessment.user.person?.gender?.toLowerCase() !== filter.gender.toLowerCase()) {
+							return;
+						}
+
+						// Only add each student once
+						if (!studentMap.has(student.id)) {
+							studentMap.set(student.id, {
+								id: student.id,
+								studentNumber: student.studentNumber,
+								firstName: assessment.user.person?.firstName || '',
+								lastName: assessment.user.person?.lastName || '',
+								email: assessment.user.person?.email || '',
+								program: student.program,
+								year: student.year,
+								gender: assessment.user.person?.gender || 'unknown',
+								assessmentType: 'stress',
+								severity: assessment.severityLevel,
+								score: assessment.totalScore,
+								assessmentDate: assessment.assessmentDate?.toISOString(),
+								createdAt: assessment.createdAt.toISOString(),
+							});
+						}
+					});
+				});
+
+				return Array.from(studentMap.values());
 			},
 		},
 		Depression: {
@@ -504,17 +734,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const programCounts: Record<string, number> = {};
+				// Count unique students per program
+				const programStudentSets: Record<string, Set<string>> = {};
 				depressionWithProgram.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
-						programCounts[student.program] = (programCounts[student.program] || 0) + 1;
+						if (!programStudentSets[student.program]) {
+							programStudentSets[student.program] = new Set();
+						}
+						programStudentSets[student.program].add(student.id);
 					});
 				});
 
-				return Object.entries(programCounts).map(([program, count]) => ({
+				return Object.entries(programStudentSets).map(([program, studentSet]) => ({
 					program,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -551,17 +785,26 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const yearCounts: Record<string, number> = {};
+				// Count unique students per year level
+				const yearStudentSets: Record<string, Set<string>> = {};
 				depressionWithYear.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
-						yearCounts[student.year] = (yearCounts[student.year] || 0) + 1;
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						
+						if (!yearStudentSets[student.year]) {
+							yearStudentSets[student.year] = new Set();
+						}
+						yearStudentSets[student.year].add(student.id);
 					});
 				});
 
-				return Object.entries(yearCounts).map(([year, count]) => ({
+				return Object.entries(yearStudentSets).map(([year, studentSet]) => ({
 					year,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -586,22 +829,122 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						user: {
 							include: {
-								person: true,
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
 							},
 						},
 					},
 				});
 
-				const genderCounts: Record<string, number> = {};
+				// Count unique students per gender
+				const genderStudentSets: Record<string, Set<string>> = {};
 				depressionWithGender.forEach((assessment) => {
 					const gender = assessment.user.person?.gender || "unknown";
-					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						// Filter by year level if specified
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						
+						if (!genderStudentSets[gender]) {
+							genderStudentSets[gender] = new Set();
+						}
+						genderStudentSets[gender].add(student.id);
+					});
 				});
 
-				return Object.entries(genderCounts).map(([gender, count]) => ({
+				return Object.entries(genderStudentSets).map(([gender, studentSet]) => ({
 					gender,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
+			},
+
+			assessmentStudentList: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const assessments = await prisma.depressionAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+					orderBy: {
+						assessmentDate: 'desc',
+					},
+				});
+
+				// Collect unique students matching filters
+				const studentMap = new Map();
+				
+				assessments.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					
+					students.forEach((student) => {
+						// Apply filters
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						if (filter.gender && assessment.user.person?.gender?.toLowerCase() !== filter.gender.toLowerCase()) {
+							return;
+						}
+
+						// Only add each student once
+						if (!studentMap.has(student.id)) {
+							studentMap.set(student.id, {
+								id: student.id,
+								studentNumber: student.studentNumber,
+								firstName: assessment.user.person?.firstName || '',
+								lastName: assessment.user.person?.lastName || '',
+								email: assessment.user.person?.email || '',
+								program: student.program,
+								year: student.year,
+								gender: assessment.user.person?.gender || 'unknown',
+								assessmentType: 'depression',
+								severity: assessment.severityLevel,
+								score: assessment.totalScore,
+								assessmentDate: assessment.assessmentDate?.toISOString(),
+								createdAt: assessment.createdAt.toISOString(),
+							});
+						}
+					});
+				});
+
+				return Array.from(studentMap.values());
 			},
 		},
 		Suicide: {
@@ -703,18 +1046,22 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					`📊 Found ${suicideWithProgram.length} suicide assessments with program data`,
 				);
 
-				const programCounts: Record<string, number> = {};
+				// Count unique students per program
+				const programStudentSets: Record<string, Set<string>> = {};
 				suicideWithProgram.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
 						const program = student.program || "Unknown";
-						programCounts[program] = (programCounts[program] || 0) + 1;
+						if (!programStudentSets[program]) {
+							programStudentSets[program] = new Set();
+						}
+						programStudentSets[program].add(student.id);
 					});
 				});
 
-				const result = Object.entries(programCounts).map(([program, count]) => ({
+				const result = Object.entries(programStudentSets).map(([program, studentSet]) => ({
 					program,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 
 				console.log(`📊 Suicide by program result:`, result);
@@ -754,18 +1101,28 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const yearCounts: Record<string, number> = {};
+				// Count unique students per year level
+				const yearStudentSets: Record<string, Set<string>> = {};
 				suicideWithYear.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
 						const year = student.year || "Unknown";
-						yearCounts[year] = (yearCounts[year] || 0) + 1;
+						
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						
+						if (!yearStudentSets[year]) {
+							yearStudentSets[year] = new Set();
+						}
+						yearStudentSets[year].add(student.id);
 					});
 				});
 
-				return Object.entries(yearCounts).map(([year, count]) => ({
+				return Object.entries(yearStudentSets).map(([year, studentSet]) => ({
 					year,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -790,22 +1147,122 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						user: {
 							include: {
-								person: true,
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
 							},
 						},
 					},
 				});
 
-				const genderCounts: Record<string, number> = {};
+				// Count unique students per gender
+				const genderStudentSets: Record<string, Set<string>> = {};
 				suicideWithGender.forEach((assessment) => {
 					const gender = assessment.user.person?.gender || "Unknown";
-					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						// Filter by year level if specified
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						
+						if (!genderStudentSets[gender]) {
+							genderStudentSets[gender] = new Set();
+						}
+						genderStudentSets[gender].add(student.id);
+					});
 				});
 
-				return Object.entries(genderCounts).map(([gender, count]) => ({
+				return Object.entries(genderStudentSets).map(([gender, studentSet]) => ({
 					gender,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
+			},
+
+			assessmentStudentList: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						assessmentDate: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const assessments = await prisma.suicideAssessment.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+					orderBy: {
+						assessmentDate: 'desc',
+					},
+				});
+
+				// Collect unique students matching filters
+				const studentMap = new Map();
+				
+				assessments.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					
+					students.forEach((student) => {
+						// Apply filters
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						if (filter.gender && assessment.user.person?.gender?.toLowerCase() !== filter.gender.toLowerCase()) {
+							return;
+						}
+
+						// Only add each student once
+						if (!studentMap.has(student.id)) {
+							studentMap.set(student.id, {
+								id: student.id,
+								studentNumber: student.studentNumber,
+								firstName: assessment.user.person?.firstName || '',
+								lastName: assessment.user.person?.lastName || '',
+								email: assessment.user.person?.email || '',
+								program: student.program,
+								year: student.year,
+								gender: assessment.user.person?.gender || 'unknown',
+								assessmentType: 'suicide',
+								severity: assessment.riskLevel,
+								score: undefined, // Suicide assessment doesn't have a score
+								assessmentDate: assessment.assessmentDate?.toISOString(),
+								createdAt: assessment.createdAt.toISOString(),
+							});
+						}
+					});
+				});
+
+				return Array.from(studentMap.values());
 			},
 		},
 		PersonalProblemsChecklist: {
@@ -907,18 +1364,22 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					`📊 Found ${checklistWithProgram.length} checklist assessments with program data`,
 				);
 
-				const programCounts: Record<string, number> = {};
+				// Count unique students per program
+				const programStudentSets: Record<string, Set<string>> = {};
 				checklistWithProgram.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
 						const program = student.program || "Unknown";
-						programCounts[program] = (programCounts[program] || 0) + 1;
+						if (!programStudentSets[program]) {
+							programStudentSets[program] = new Set();
+						}
+						programStudentSets[program].add(student.id);
 					});
 				});
 
-				const result = Object.entries(programCounts).map(([program, count]) => ({
+				const result = Object.entries(programStudentSets).map(([program, studentSet]) => ({
 					program,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 
 				console.log(`📊 Checklist by program result:`, result);
@@ -958,18 +1419,28 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
-				const yearCounts: Record<string, number> = {};
+				// Count unique students per year level
+				const yearStudentSets: Record<string, Set<string>> = {};
 				checklistWithYear.forEach((assessment) => {
 					const students = assessment.user.person?.students || [];
 					students.forEach((student) => {
 						const year = student.year || "Unknown";
-						yearCounts[year] = (yearCounts[year] || 0) + 1;
+						
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						
+						if (!yearStudentSets[year]) {
+							yearStudentSets[year] = new Set();
+						}
+						yearStudentSets[year].add(student.id);
 					});
 				});
 
-				return Object.entries(yearCounts).map(([year, count]) => ({
+				return Object.entries(yearStudentSets).map(([year, studentSet]) => ({
 					year,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
 			},
 
@@ -994,22 +1465,122 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						user: {
 							include: {
-								person: true,
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
 							},
 						},
 					},
 				});
 
-				const genderCounts: Record<string, number> = {};
+				// Count unique students per gender
+				const genderStudentSets: Record<string, Set<string>> = {};
 				checklistWithGender.forEach((assessment) => {
 					const gender = assessment.user.person?.gender || "Unknown";
-					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+					const students = assessment.user.person?.students || [];
+					students.forEach((student) => {
+						// Filter by program if specified
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						// Filter by year level if specified
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						
+						if (!genderStudentSets[gender]) {
+							genderStudentSets[gender] = new Set();
+						}
+						genderStudentSets[gender].add(student.id);
+					});
 				});
 
-				return Object.entries(genderCounts).map(([gender, count]) => ({
+				return Object.entries(genderStudentSets).map(([gender, studentSet]) => ({
 					gender,
-					count,
+					count: studentSet.size, // Count unique students
 				}));
+			},
+
+			assessmentStudentList: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					dateFilter = {
+						date_completed: {
+							gte: new Date(filter.startDate),
+							...(filter.endDate && { lte: new Date(filter.endDate) }),
+						},
+					};
+				}
+
+				const assessments = await prisma.personalProblemsChecklist.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+						user: filter.userFilter || {},
+					},
+					include: {
+						user: {
+							include: {
+								person: {
+									include: {
+										students: {
+											where: { isDeleted: false },
+										},
+									},
+								},
+							},
+						},
+					},
+					orderBy: {
+						date_completed: 'desc',
+					},
+				});
+
+				// Collect unique students matching filters
+				const studentMap = new Map();
+				
+				assessments.forEach((assessment) => {
+					const students = assessment.user.person?.students || [];
+					
+					students.forEach((student) => {
+						// Apply filters
+						if (filter.program && student.program.toLowerCase() !== filter.program.toLowerCase()) {
+							return;
+						}
+						if (filter.yearLevel && student.year.toLowerCase() !== filter.yearLevel.toLowerCase()) {
+							return;
+						}
+						if (filter.gender && assessment.user.person?.gender?.toLowerCase() !== filter.gender.toLowerCase()) {
+							return;
+						}
+
+						// Only add each student once
+						if (!studentMap.has(student.id)) {
+							studentMap.set(student.id, {
+								id: student.id,
+								studentNumber: student.studentNumber,
+								firstName: assessment.user.person?.firstName || '',
+								lastName: assessment.user.person?.lastName || '',
+								email: assessment.user.person?.email || '',
+								program: student.program,
+								year: student.year,
+								gender: assessment.user.person?.gender || 'unknown',
+								assessmentType: 'checklist',
+								severity: undefined, // Checklist doesn't have severity
+								score: undefined, // Checklist doesn't have a score
+								assessmentDate: assessment.date_completed?.toISOString(),
+								createdAt: assessment.createdAt.toISOString(),
+							});
+						}
+					});
+				});
+
+				return Array.from(studentMap.values());
 			},
 		},
 		GuidanceDashboard: {
@@ -2312,6 +2883,1019 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						stress,
 					};
 				});
+			},
+		},
+		Inventory: {
+			totalInventory: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+
+					console.log(`🔍 API: Inventory date filter applied`);
+					console.log(`📅 Start Date: ${startDate.toISOString()}`);
+					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
+				}
+
+				const count = await prisma.individualInventory.count({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+				});
+
+				console.log(`📊 Inventory count result: ${count}`);
+				return count;
+			},
+
+			availableYears: async () => {
+				const inventories = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+					},
+					select: {
+						createdAt: true,
+					},
+				});
+
+				const years = new Set<number>();
+				inventories.forEach((inventory) => {
+					if (inventory.createdAt) {
+						years.add(inventory.createdAt.getFullYear());
+					}
+				});
+
+				return Array.from(years).sort((a, b) => b - a);
+			},
+
+			totalInventoryByProgram: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventoriesWithProgram = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const programCounts: Record<string, number> = {};
+				inventoriesWithProgram.forEach((inventory) => {
+					const program = inventory.student?.program || "Unknown";
+					programCounts[program] = (programCounts[program] || 0) + 1;
+				});
+
+				return Object.entries(programCounts).map(([program, count]) => ({
+					program,
+					count,
+				}));
+			},
+
+			totalInventoryByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventoriesWithYear = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const yearCounts: Record<string, number> = {};
+				inventoriesWithYear.forEach((inventory) => {
+					const year = inventory.student?.year || "Unknown";
+					yearCounts[year] = (yearCounts[year] || 0) + 1;
+				});
+
+				return Object.entries(yearCounts).map(([year, count]) => ({
+					year,
+					count,
+				}));
+			},
+
+			totalInventoryByGender: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventoriesWithGender = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const genderCounts: Record<string, number> = {};
+				inventoriesWithGender.forEach((inventory) => {
+					const gender = inventory.student?.person?.gender || "Unknown";
+					genderCounts[gender] = (genderCounts[gender] || 0) + 1;
+				});
+
+				return Object.entries(genderCounts).map(([gender, count]) => ({
+					gender,
+					count,
+				}));
+			},
+
+			mentalHealthPredictionDistribution: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						predictionGenerated: true,
+						...dateFilter,
+					},
+					select: {
+						mentalHealthPrediction: true,
+					},
+				});
+
+				const riskCounts: Record<string, number> = {
+					"Low Risk": 0,
+					"Moderate Risk": 0,
+					"High Risk": 0,
+					"Critical Risk": 0,
+				};
+
+				inventories.forEach((inventory) => {
+					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
+						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						if (risk === "low") riskCounts["Low Risk"]++;
+						else if (risk === "moderate") riskCounts["Moderate Risk"]++;
+						else if (risk === "high") riskCounts["High Risk"]++;
+						else if (risk === "critical") riskCounts["Critical Risk"]++;
+					}
+				});
+
+				return Object.entries(riskCounts).map(([risk, count]) => ({
+					risk,
+					count,
+				}));
+			},
+
+			bmiCategoryDistribution: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+					select: {
+						height: true,
+						weight: true,
+					},
+				});
+
+				const bmiCounts: Record<string, number> = {
+					"Underweight": 0,
+					"Normal": 0,
+					"Overweight": 0,
+					"Obese": 0,
+					"Unknown": 0,
+				};
+
+				const calculateBMICategory = (height: string, weight: string): string => {
+					try {
+						let heightInMeters: number;
+						let weightInKg: number;
+						let isImperialHeight = false;
+
+						// Check if height is in feet'inches format (e.g., "5'7")
+						if (height.includes("'")) {
+							isImperialHeight = true;
+							const [feet, inches] = height.split("'").map(s => parseFloat(s.replace(/[^0-9.]/g, '')));
+							if (isNaN(feet) || isNaN(inches)) return "Unknown";
+							// Convert feet and inches to meters: (feet * 12 + inches) * 0.0254
+							heightInMeters = (feet * 12 + inches) * 0.0254;
+						} else {
+							// Assume height is in centimeters
+							heightInMeters = parseFloat(height) / 100;
+						}
+
+						// Parse weight value
+						const weightValue = parseFloat(weight.replace(/[^0-9.]/g, ''));
+						if (isNaN(weightValue)) return "Unknown";
+						
+						// If height is imperial (feet/inches), assume weight is in pounds too
+						// Otherwise check for explicit lb/pound indicators or very high values (> 200)
+						if (isImperialHeight || weight.toLowerCase().includes('lb') || weight.toLowerCase().includes('pound') || weightValue > 200) {
+							weightInKg = weightValue * 0.453592; // Convert pounds to kg
+						} else {
+							weightInKg = weightValue; // Assume already in kg
+						}
+
+						if (heightInMeters <= 0 || weightInKg <= 0) return "Unknown";
+						
+						const bmi = weightInKg / (heightInMeters * heightInMeters);
+						
+						if (bmi < 18.5) return "Underweight";
+						if (bmi < 25) return "Normal";
+						if (bmi < 30) return "Overweight";
+						return "Obese";
+					} catch (error) {
+						return "Unknown";
+					}
+				};
+
+				inventories.forEach((inventory) => {
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					bmiCounts[category]++;
+				});
+
+				return Object.entries(bmiCounts)
+					.filter(([_, count]) => count > 0)
+					.map(([category, count]) => ({
+						category,
+						count,
+					}));
+			},
+
+			mentalHealthPredictionByProgram: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						predictionGenerated: true,
+						...dateFilter,
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const programRiskCounts: Record<string, Record<string, number>> = {};
+
+				inventories.forEach((inventory) => {
+					const program = inventory.student?.program || "Unknown";
+					if (!programRiskCounts[program]) {
+						programRiskCounts[program] = {
+							"Low Risk": 0,
+							"Moderate Risk": 0,
+							"High Risk": 0,
+							"Critical Risk": 0,
+						};
+					}
+
+					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
+						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						if (risk === "low") programRiskCounts[program]["Low Risk"]++;
+						else if (risk === "moderate") programRiskCounts[program]["Moderate Risk"]++;
+						else if (risk === "high") programRiskCounts[program]["High Risk"]++;
+						else if (risk === "critical") programRiskCounts[program]["Critical Risk"]++;
+					}
+				});
+
+				return Object.entries(programRiskCounts).map(([program, risks]) => ({
+					program,
+					risks,
+					total: Object.values(risks).reduce((sum, count) => sum + count, 0),
+				}));
+			},
+
+			mentalHealthPredictionByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				// Build where clause for filtering by program
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				if (filter.program) {
+					whereClause.student = {
+						program: filter.program,
+						isDeleted: false,
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const yearRiskCounts: Record<string, Record<string, number>> = {};
+
+				inventories.forEach((inventory) => {
+					const year = inventory.student?.year || "Unknown";
+					if (!yearRiskCounts[year]) {
+						yearRiskCounts[year] = {
+							"Low Risk": 0,
+							"Moderate Risk": 0,
+							"High Risk": 0,
+							"Critical Risk": 0,
+						};
+					}
+
+					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
+						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						if (risk === "low") yearRiskCounts[year]["Low Risk"]++;
+						else if (risk === "moderate") yearRiskCounts[year]["Moderate Risk"]++;
+						else if (risk === "high") yearRiskCounts[year]["High Risk"]++;
+						else if (risk === "critical") yearRiskCounts[year]["Critical Risk"]++;
+					}
+				});
+
+				return Object.entries(yearRiskCounts).map(([year, risks]) => ({
+					year,
+					risks,
+					total: Object.values(risks).reduce((sum, count) => sum + count, 0),
+				}));
+			},
+
+			mentalHealthPredictionByGender: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				// Build where clause for filtering by program and year
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				// Add student filters if provided
+				if (filter.program || filter.yearLevel) {
+					whereClause.student = {
+						isDeleted: false,
+						...(filter.program && { program: filter.program }),
+						...(filter.yearLevel && { year: filter.yearLevel }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const genderRiskCounts: Record<string, Record<string, number>> = {};
+
+				inventories.forEach((inventory) => {
+					const gender = inventory.student?.person?.gender || "Unknown";
+					if (!genderRiskCounts[gender]) {
+						genderRiskCounts[gender] = {
+							"Low Risk": 0,
+							"Moderate Risk": 0,
+							"High Risk": 0,
+							"Critical Risk": 0,
+						};
+					}
+
+					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
+						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						if (risk === "low") genderRiskCounts[gender]["Low Risk"]++;
+						else if (risk === "moderate") genderRiskCounts[gender]["Moderate Risk"]++;
+						else if (risk === "high") genderRiskCounts[gender]["High Risk"]++;
+						else if (risk === "critical") genderRiskCounts[gender]["Critical Risk"]++;
+					}
+				});
+
+				return Object.entries(genderRiskCounts).map(([gender, risks]) => ({
+					gender,
+					risks,
+					total: Object.values(risks).reduce((sum, count) => sum + count, 0),
+				}));
+			},
+
+			bmiCategoryByProgram: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const programBMICounts: Record<string, Record<string, number>> = {};
+
+				const calculateBMICategory = (height: string, weight: string): string => {
+					try {
+						let heightInMeters: number;
+						let weightInKg: number;
+						let isImperialHeight = false;
+
+						// Check if height is in feet'inches format (e.g., "5'7")
+						if (height.includes("'")) {
+							isImperialHeight = true;
+							const [feet, inches] = height.split("'").map(s => parseFloat(s.replace(/[^0-9.]/g, '')));
+							if (isNaN(feet) || isNaN(inches)) return "Unknown";
+							// Convert feet and inches to meters: (feet * 12 + inches) * 0.0254
+							heightInMeters = (feet * 12 + inches) * 0.0254;
+						} else {
+							// Assume height is in centimeters
+							heightInMeters = parseFloat(height) / 100;
+						}
+
+						// Parse weight value
+						const weightValue = parseFloat(weight.replace(/[^0-9.]/g, ''));
+						if (isNaN(weightValue)) return "Unknown";
+						
+						// If height is imperial (feet/inches), assume weight is in pounds too
+						// Otherwise check for explicit lb/pound indicators or very high values (> 200)
+						if (isImperialHeight || weight.toLowerCase().includes('lb') || weight.toLowerCase().includes('pound') || weightValue > 200) {
+							weightInKg = weightValue * 0.453592; // Convert pounds to kg
+						} else {
+							weightInKg = weightValue; // Assume already in kg
+						}
+
+						if (heightInMeters <= 0 || weightInKg <= 0) return "Unknown";
+						
+						const bmi = weightInKg / (heightInMeters * heightInMeters);
+						
+						if (bmi < 18.5) return "Underweight";
+						if (bmi < 25) return "Normal";
+						if (bmi < 30) return "Overweight";
+						return "Obese";
+					} catch (error) {
+						return "Unknown";
+					}
+				};
+
+				inventories.forEach((inventory) => {
+					const program = inventory.student?.program || "Unknown";
+					if (!programBMICounts[program]) {
+						programBMICounts[program] = {
+							"Underweight": 0,
+							"Normal": 0,
+							"Overweight": 0,
+							"Obese": 0,
+						};
+					}
+
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					if (category !== "Unknown") {
+						programBMICounts[program][category]++;
+					}
+				});
+
+				return Object.entries(programBMICounts).map(([program, categories]) => ({
+					program,
+					categories,
+					total: Object.values(categories).reduce((sum, count) => sum + count, 0),
+				}));
+			},
+
+			bmiCategoryByYear: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				// Build where clause for filtering by program
+				let whereClause: any = {
+					isDeleted: false,
+					...dateFilter,
+				};
+
+				if (filter.program) {
+					whereClause.student = {
+						program: filter.program,
+						isDeleted: false,
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const yearBMICounts: Record<string, Record<string, number>> = {};
+
+				const calculateBMICategory = (height: string, weight: string): string => {
+					try {
+						let heightInMeters: number;
+						let weightInKg: number;
+						let isImperialHeight = false;
+
+						// Check if height is in feet'inches format (e.g., "5'7")
+						if (height.includes("'")) {
+							isImperialHeight = true;
+							const [feet, inches] = height.split("'").map(s => parseFloat(s.replace(/[^0-9.]/g, '')));
+							if (isNaN(feet) || isNaN(inches)) return "Unknown";
+							// Convert feet and inches to meters: (feet * 12 + inches) * 0.0254
+							heightInMeters = (feet * 12 + inches) * 0.0254;
+						} else {
+							// Assume height is in centimeters
+							heightInMeters = parseFloat(height) / 100;
+						}
+
+						// Parse weight value
+						const weightValue = parseFloat(weight.replace(/[^0-9.]/g, ''));
+						if (isNaN(weightValue)) return "Unknown";
+						
+						// If height is imperial (feet/inches), assume weight is in pounds too
+						// Otherwise check for explicit lb/pound indicators or very high values (> 200)
+						if (isImperialHeight || weight.toLowerCase().includes('lb') || weight.toLowerCase().includes('pound') || weightValue > 200) {
+							weightInKg = weightValue * 0.453592; // Convert pounds to kg
+						} else {
+							weightInKg = weightValue; // Assume already in kg
+						}
+
+						if (heightInMeters <= 0 || weightInKg <= 0) return "Unknown";
+						
+						const bmi = weightInKg / (heightInMeters * heightInMeters);
+						
+						if (bmi < 18.5) return "Underweight";
+						if (bmi < 25) return "Normal";
+						if (bmi < 30) return "Overweight";
+						return "Obese";
+					} catch (error) {
+						return "Unknown";
+					}
+				};
+
+				inventories.forEach((inventory) => {
+					const year = inventory.student?.year || "Unknown";
+					if (!yearBMICounts[year]) {
+						yearBMICounts[year] = {
+							"Underweight": 0,
+							"Normal": 0,
+							"Overweight": 0,
+							"Obese": 0,
+						};
+					}
+
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					if (category !== "Unknown") {
+						yearBMICounts[year][category]++;
+					}
+				});
+
+				return Object.entries(yearBMICounts).map(([year, categories]) => ({
+					year,
+					categories,
+					total: Object.values(categories).reduce((sum, count) => sum + count, 0),
+				}));
+			},
+
+			bmiCategoryByGender: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				// Build where clause for filtering by program and year
+				let whereClause: any = {
+					isDeleted: false,
+					...dateFilter,
+				};
+
+				// Add student filters if provided
+				if (filter.program || filter.yearLevel) {
+					whereClause.student = {
+						isDeleted: false,
+						...(filter.program && { program: filter.program }),
+						...(filter.yearLevel && { year: filter.yearLevel }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+
+				const genderBMICounts: Record<string, Record<string, number>> = {};
+
+				const calculateBMICategory = (height: string, weight: string): string => {
+					try {
+						let heightInMeters: number;
+						let weightInKg: number;
+						let isImperialHeight = false;
+
+						// Check if height is in feet'inches format (e.g., "5'7")
+						if (height.includes("'")) {
+							isImperialHeight = true;
+							const [feet, inches] = height.split("'").map(s => parseFloat(s.replace(/[^0-9.]/g, '')));
+							if (isNaN(feet) || isNaN(inches)) return "Unknown";
+							// Convert feet and inches to meters: (feet * 12 + inches) * 0.0254
+							heightInMeters = (feet * 12 + inches) * 0.0254;
+						} else {
+							// Assume height is in centimeters
+							heightInMeters = parseFloat(height) / 100;
+						}
+
+						// Parse weight value
+						const weightValue = parseFloat(weight.replace(/[^0-9.]/g, ''));
+						if (isNaN(weightValue)) return "Unknown";
+						
+						// If height is imperial (feet/inches), assume weight is in pounds too
+						// Otherwise check for explicit lb/pound indicators or very high values (> 200)
+						if (isImperialHeight || weight.toLowerCase().includes('lb') || weight.toLowerCase().includes('pound') || weightValue > 200) {
+							weightInKg = weightValue * 0.453592; // Convert pounds to kg
+						} else {
+							weightInKg = weightValue; // Assume already in kg
+						}
+
+						if (heightInMeters <= 0 || weightInKg <= 0) return "Unknown";
+						
+						const bmi = weightInKg / (heightInMeters * heightInMeters);
+						
+						if (bmi < 18.5) return "Underweight";
+						if (bmi < 25) return "Normal";
+						if (bmi < 30) return "Overweight";
+						return "Obese";
+					} catch (error) {
+						return "Unknown";
+					}
+				};
+
+				inventories.forEach((inventory) => {
+					const gender = inventory.student?.person?.gender || "Unknown";
+					if (!genderBMICounts[gender]) {
+						genderBMICounts[gender] = {
+							"Underweight": 0,
+							"Normal": 0,
+							"Overweight": 0,
+							"Obese": 0,
+						};
+					}
+
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					if (category !== "Unknown") {
+						genderBMICounts[gender][category]++;
+					}
+				});
+
+				return Object.entries(genderBMICounts).map(([gender, categories]) => ({
+					gender,
+					categories,
+					total: Object.values(categories).reduce((sum, count) => sum + count, 0),
+				}));
+			},
+
+			inventoryStudentList: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				// Build where clause with all filters
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				// Build student filter
+				const studentFilter: any = { isDeleted: false };
+				if (filter.program) studentFilter.program = filter.program;
+				if (filter.yearLevel) studentFilter.year = filter.yearLevel;
+				if (filter.gender) {
+					// Gender is on the person, need to handle this differently
+					whereClause.student = {
+						...studentFilter,
+						person: {
+							gender: filter.gender,
+						},
+					};
+				} else if (filter.program || filter.yearLevel) {
+					whereClause.student = studentFilter;
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+					orderBy: {
+						createdAt: "desc",
+					},
+				});
+
+				// Calculate BMI category
+				const calculateBMICategory = (height: string, weight: string): string => {
+					try {
+						let heightInMeters: number;
+						let weightInKg: number;
+						let isImperialHeight = false;
+
+						// Check if height is in feet'inches format (e.g., "5'7")
+						if (height.includes("'")) {
+							isImperialHeight = true;
+							const [feet, inches] = height.split("'").map(s => parseFloat(s.replace(/[^0-9.]/g, '')));
+							if (isNaN(feet) || isNaN(inches)) return "Unknown";
+							// Convert feet and inches to meters: (feet * 12 + inches) * 0.0254
+							heightInMeters = (feet * 12 + inches) * 0.0254;
+						} else {
+							// Assume height is in centimeters
+							heightInMeters = parseFloat(height) / 100;
+						}
+
+						// Parse weight value
+						const weightValue = parseFloat(weight.replace(/[^0-9.]/g, ''));
+						if (isNaN(weightValue)) return "Unknown";
+						
+						// If height is imperial (feet/inches), assume weight is in pounds too
+						// Otherwise check for explicit lb/pound indicators or very high values (> 200)
+						if (isImperialHeight || weight.toLowerCase().includes('lb') || weight.toLowerCase().includes('pound') || weightValue > 200) {
+							weightInKg = weightValue * 0.453592; // Convert pounds to kg
+						} else {
+							weightInKg = weightValue; // Assume already in kg
+						}
+
+						if (heightInMeters <= 0 || weightInKg <= 0) return "Unknown";
+						
+						const bmi = weightInKg / (heightInMeters * heightInMeters);
+						
+						if (bmi < 18.5) return "Underweight";
+						if (bmi < 25) return "Normal";
+						if (bmi < 30) return "Overweight";
+						return "Obese";
+					} catch (error) {
+						return "Unknown";
+					}
+				};
+
+				return inventories.map((inventory) => ({
+					id: inventory.id,
+					studentNumber: inventory.student?.studentNumber || "N/A",
+					firstName: inventory.student?.person?.firstName || "",
+					lastName: inventory.student?.person?.lastName || "",
+					email: inventory.student?.person?.email || "N/A",
+					program: inventory.student?.program || "N/A",
+					year: inventory.student?.year || "N/A",
+					gender: inventory.student?.person?.gender || "N/A",
+					mentalHealthPrediction: inventory.mentalHealthPrediction?.mentalHealthRisk?.level 
+						? `${inventory.mentalHealthPrediction.mentalHealthRisk.level.charAt(0).toUpperCase()}${inventory.mentalHealthPrediction.mentalHealthRisk.level.slice(1)} Risk`
+						: "N/A",
+					bmiCategory: calculateBMICategory(inventory.height, inventory.weight),
+					createdAt: inventory.createdAt,
+				}));
+			},
+
+			inventoryStats: async () => {
+				let dateFilter = {};
+
+				if (filter.startDate) {
+					const startDate = new Date(filter.startDate);
+					const endDate = filter.endDate ? new Date(filter.endDate) : null;
+
+					dateFilter = {
+						createdAt: {
+							gte: startDate,
+							...(endDate && { lte: endDate }),
+						},
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: {
+						isDeleted: false,
+						...dateFilter,
+					},
+					select: {
+						height: true,
+						weight: true,
+						predictionGenerated: true,
+						mentalHealthPrediction: true,
+					},
+				});
+
+				const totalRecords = inventories.length;
+				
+				// Count high risk (includes high and critical)
+				const highRiskCount = inventories.filter((inv) => {
+					const risk = inv.mentalHealthPrediction?.mentalHealthRisk?.level;
+					return risk === "high" || risk === "critical";
+				}).length;
+
+				// Calculate completion rate (inventories with predictions)
+				const completedPredictions = inventories.filter(inv => inv.predictionGenerated).length;
+				const completionRate = totalRecords > 0 
+					? Math.round((completedPredictions / totalRecords) * 100) 
+					: 0;
+
+				// Calculate average BMI
+				let totalBMI = 0;
+				let validBMICount = 0;
+
+				inventories.forEach((inv) => {
+					try {
+						const heightInMeters = parseFloat(inv.height) / 100;
+						const weightInKg = parseFloat(inv.weight);
+						if (heightInMeters > 0 && weightInKg > 0) {
+							const bmi = weightInKg / (heightInMeters * heightInMeters);
+							if (bmi > 0 && bmi < 100) { // Sanity check
+								totalBMI += bmi;
+								validBMICount++;
+							}
+						}
+					} catch (error) {
+						// Skip invalid entries
+					}
+				});
+
+				const avgBmi = validBMICount > 0 ? totalBMI / validBMICount : 0;
+
+				return {
+					totalRecords,
+					highRiskCount,
+					completionRate,
+					avgBmi: Math.round(avgBmi * 10) / 10, // Round to 1 decimal
+				};
 			},
 		},
 	};

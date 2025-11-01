@@ -3,7 +3,7 @@ import { LogType, Prisma, PrismaClient, Type } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { createNotificationHelper } from "../../helper/notification.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
-import { analyzeChecklistData } from "../../helper/checklist.helper";
+import { analyzeChecklistData, generateRecommendations } from "../../helper/checklist.helper";
 
 const logger = getLogger();
 const checklistLogger = logger.child({ module: "checklist" });
@@ -297,11 +297,17 @@ export const controller = (prisma: PrismaClient) => {
 			// Automatically generate analysis for the new checklist
 			const analysis = analyzeChecklistData(checklist);
 
-			// Update the checklist with analysis
+			// Generate personalized recommendations
+			const recommendations = generateRecommendations(analysis);
+
+			// Update the checklist with analysis and recommendations
 			const checklistWithAnalysis = await prisma.personalProblemsChecklist.update({
 				where: { id: checklist.id },
 				data: {
-					checklist_analysis: analysis,
+					checklist_analysis: {
+						...analysis,
+						recommendations,
+					},
 					analysisGenerated: true,
 					analysisUpdatedAt: new Date(),
 				},

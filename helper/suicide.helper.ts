@@ -153,6 +153,53 @@ export const getRecommendationMessage = (
 	}
 };
 
+export const generateRecommendations = (
+	riskLevel: SuicideRiskLevel,
+	requiresIntervention: boolean,
+): string[] => {
+	const recommendations: string[] = [];
+
+	// Immediate intervention recommendations (most critical)
+	if (requiresIntervention) {
+		recommendations.push(
+			"🚨 IMMEDIATE ACTION: Contact emergency services (911) or crisis hotline now",
+			"Do not leave the person alone - ensure immediate supervision",
+			"Remove all means of self-harm from the environment immediately",
+			"Transport to emergency room or crisis intervention center",
+		);
+		return recommendations; // Return early for immediate intervention cases
+	}
+
+	// Risk level-specific recommendations (limited to 3-4 key items)
+	switch (riskLevel) {
+		case "high":
+			recommendations.push(
+				"Schedule urgent psychiatric evaluation within 24 hours",
+				"Implement immediate safety planning with mental health professional",
+				"Arrange 24/7 supervision and support system",
+				"Remove access to lethal means (medications, weapons, etc.)",
+			);
+			break;
+		case "moderate":
+			recommendations.push(
+				"Schedule immediate professional mental health assessment",
+				"Develop comprehensive safety plan with trusted individuals",
+				"Arrange increased supervision and check-ins with support network",
+				"Establish crisis contact protocol with mental health provider",
+			);
+			break;
+		case "low":
+			recommendations.push(
+				"Continue regular mental health monitoring and support",
+				"Maintain connections with mental health professionals",
+				"Monitor mood changes and seek help if symptoms worsen",
+			);
+			break;
+	}
+
+	return recommendations;
+};
+
 export const createAnalysisResult = (
 	riskLevel: SuicideRiskLevel,
 	requiresIntervention: boolean,

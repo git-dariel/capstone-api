@@ -111,6 +111,39 @@ export const getRecommendationMessage = (totalScore: number): string => {
 	return "Score indicates low stress levels. Continue with current coping strategies.";
 };
 
+export const generateRecommendations = (severityLevel: StressSeverityLevel): string[] => {
+	const recommendations: string[] = [];
+
+	// Base recommendations based on severity level (limited to 3-4 key recommendations)
+	switch (severityLevel) {
+		case "high":
+			recommendations.push(
+				"Seek professional help for stress management counseling",
+				"Practice immediate stress relief techniques (deep breathing, grounding)",
+				"Evaluate and modify major stressors in your environment",
+				"Implement comprehensive stress management program",
+			);
+			break;
+		case "moderate":
+			recommendations.push(
+				"Develop and practice regular stress management techniques",
+				"Identify and address primary sources of stress in your life",
+				"Engage in regular physical exercise for stress relief",
+				"Maintain healthy sleep schedule and relaxation routines",
+			);
+			break;
+		case "low":
+			recommendations.push(
+				"Continue current effective stress management strategies",
+				"Maintain healthy lifestyle habits for stress prevention",
+				"Monitor stress levels and respond early to changes",
+			);
+			break;
+	}
+
+	return recommendations;
+};
+
 export const createAnalysisResult = (totalScore: number, severityLevel: StressSeverityLevel) => {
 	return {
 		totalScore,
