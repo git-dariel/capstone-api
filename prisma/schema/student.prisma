@@ -6,8 +6,9 @@ enum AcademicStatus {
 }
 
 type Notes {
-  title   String?
-  content String?
+  title     String?
+  content   String?
+  createdAt DateTime?
 }
 
 model Student {
