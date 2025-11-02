@@ -301,6 +301,21 @@ export const controller = (prisma: PrismaClient) => {
 					});
 					return;
 				}
+
+				// Validate and normalize createdAt if provided
+				if (note.createdAt !== undefined && note.createdAt !== null) {
+					// Try to parse as Date to ensure it's valid
+					const dateValue = new Date(note.createdAt);
+					if (isNaN(dateValue.getTime())) {
+						studentLogger.error(`Invalid note createdAt: ${note.createdAt}`);
+						res.status(400).json({
+							error: "Note createdAt must be a valid date",
+						});
+						return;
+					}
+					// Convert to ISO string to ensure proper format
+					note.createdAt = dateValue.toISOString();
+				}
 			}
 		}
 
@@ -517,6 +532,21 @@ export const controller = (prisma: PrismaClient) => {
 						error: "Note content must be a string",
 					});
 					return;
+				}
+
+				// Validate and normalize createdAt if provided
+				if (note.createdAt !== undefined && note.createdAt !== null) {
+					// Try to parse as Date to ensure it's valid
+					const dateValue = new Date(note.createdAt);
+					if (isNaN(dateValue.getTime())) {
+						studentLogger.error(`Invalid note createdAt: ${note.createdAt}`);
+						res.status(400).json({
+							error: "Note createdAt must be a valid date",
+						});
+						return;
+					}
+					// Convert to ISO string to ensure proper format
+					note.createdAt = dateValue.toISOString();
 				}
 			}
 		}
