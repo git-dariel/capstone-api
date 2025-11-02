@@ -279,7 +279,12 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			// Get days parameter from query, default to 7 days
 			const days = parseInt(req.query.days as string) || 7;
-			metricsLogger.info(`📊 Generating chart data for frontend dashboard (${days} days)`);
+			// Get assessment type filter from query
+			const assessmentType = (req.query.assessmentType as string) || "all";
+
+			metricsLogger.info(
+				`📊 Generating chart data for frontend dashboard (${days} days, assessment: ${assessmentType})`,
+			);
 
 			// Get dashboard chart data using real metrics
 			const metrics = METRIC(prisma);
@@ -305,20 +310,17 @@ export const controller = (prisma: PrismaClient) => {
 				`📊 Trends data received: ${trendsData.length} data points for ${days} days`,
 			);
 
-			// Get program-wise breakdowns for additional insights (no date filtering)
-			const [
-				anxietyByProgram,
-				depressionByProgram,
-				stressByProgram,
-				checklistByProgram,
-				suicideByProgram,
-			] = await Promise.all([
-				metrics.Anxiety.totalAnxietyByProgram(),
-				metrics.Depression.totalDepressionByProgram(),
-				metrics.Stress.totalStressByProgram(),
-				metrics.PersonalProblemsChecklist.totalChecklistByProgram(),
-				metrics.Suicide.totalSuicideByProgram(),
-			]);
+			// Get program distribution with optional assessment type filter
+			const programDistribution =
+				await metrics.Dashboard.getProgramDistribution(assessmentType);
+
+			metricsLogger.info(
+				`📊 Program distribution received: ${programDistribution.length} programs for assessment type: ${assessmentType}`,
+			);
+
+			metricsLogger.info(
+				`📊 Program distribution received: ${programDistribution.length} programs for assessment type: ${assessmentType}`,
+			);
 
 			// Format data for charts
 			const chartData = {
@@ -410,17 +412,8 @@ export const controller = (prisma: PrismaClient) => {
 				// Monthly trends for additional line chart
 				monthlyTrends: monthlyData,
 
-				// Program distribution for insights
-				programDistribution: anxietyByProgram.map((item) => ({
-					program: item.program,
-					anxiety: item.count,
-					depression:
-						depressionByProgram.find((d) => d.program === item.program)?.count || 0,
-					stress: stressByProgram.find((s) => s.program === item.program)?.count || 0,
-					checklist:
-						checklistByProgram.find((c) => c.program === item.program)?.count || 0,
-					suicide: suicideByProgram.find((s) => s.program === item.program)?.count || 0,
-				})),
+				// Program distribution for insights (with optional assessment filter)
+				programDistribution,
 
 				// Summary stats
 				totalStats: {

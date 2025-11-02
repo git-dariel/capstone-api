@@ -2812,6 +2812,8 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 		},
 		Dashboard: {
 			getRecentTrends: async (days: number = 30) => {
+				console.log(`🔍 Getting recent trends for ${days} days`);
+
 				const startDate = new Date();
 				startDate.setDate(startDate.getDate() - days);
 
@@ -3124,6 +3126,297 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						stress,
 					};
 				});
+			},
+
+			getProgramDistribution: async (assessmentType?: string) => {
+				console.log(`🔍 Getting program distribution, assessmentType: ${assessmentType}`);
+
+				// If specific assessment type is requested, fetch only that type
+				if (assessmentType && assessmentType !== "all") {
+					let assessments: any[] = [];
+					let countField = assessmentType.toLowerCase();
+
+					switch (assessmentType.toLowerCase()) {
+						case "anxiety":
+							assessments = await prisma.anxietyAssessment.findMany({
+								where: {
+									isDeleted: false,
+									...(filter.userFilter && { user: filter.userFilter }),
+								},
+								include: {
+									user: {
+										include: {
+											person: {
+												include: {
+													students: {
+														where: { isDeleted: false },
+													},
+												},
+											},
+										},
+									},
+								},
+							});
+							break;
+						case "depression":
+							assessments = await prisma.depressionAssessment.findMany({
+								where: {
+									isDeleted: false,
+									...(filter.userFilter && { user: filter.userFilter }),
+								},
+								include: {
+									user: {
+										include: {
+											person: {
+												include: {
+													students: {
+														where: { isDeleted: false },
+													},
+												},
+											},
+										},
+									},
+								},
+							});
+							break;
+						case "stress":
+							assessments = await prisma.stressAssessment.findMany({
+								where: {
+									isDeleted: false,
+									...(filter.userFilter && { user: filter.userFilter }),
+								},
+								include: {
+									user: {
+										include: {
+											person: {
+												include: {
+													students: {
+														where: { isDeleted: false },
+													},
+												},
+											},
+										},
+									},
+								},
+							});
+							break;
+						case "checklist":
+							assessments = await prisma.personalProblemsChecklist.findMany({
+								where: {
+									isDeleted: false,
+									...(filter.userFilter && { user: filter.userFilter }),
+								},
+								include: {
+									user: {
+										include: {
+											person: {
+												include: {
+													students: {
+														where: { isDeleted: false },
+													},
+												},
+											},
+										},
+									},
+								},
+							});
+							break;
+						case "suicide":
+							assessments = await prisma.suicideAssessment.findMany({
+								where: {
+									isDeleted: false,
+									...(filter.userFilter && { user: filter.userFilter }),
+								},
+								include: {
+									user: {
+										include: {
+											person: {
+												include: {
+													students: {
+														where: { isDeleted: false },
+													},
+												},
+											},
+										},
+									},
+								},
+							});
+							break;
+					}
+
+					// Count unique students per program
+					const programStudentSets: Record<string, Set<string>> = {};
+					assessments.forEach((assessment: any) => {
+						const students = assessment.user?.person?.students || [];
+						students.forEach((student: any) => {
+							const program = student.program || "Unknown";
+							if (!programStudentSets[program]) {
+								programStudentSets[program] = new Set();
+							}
+							programStudentSets[program].add(student.id);
+						});
+					});
+
+					return Object.entries(programStudentSets).map(([program, studentSet]) => ({
+						program,
+						[countField]: studentSet.size,
+					}));
+				}
+
+				// Default behavior: fetch all assessment types
+				const [
+					anxietyByProgram,
+					depressionByProgram,
+					stressByProgram,
+					checklistByProgram,
+					suicideByProgram,
+				] = await Promise.all([
+					prisma.anxietyAssessment.findMany({
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						include: {
+							user: {
+								include: {
+									person: {
+										include: {
+											students: {
+												where: { isDeleted: false },
+											},
+										},
+									},
+								},
+							},
+						},
+					}),
+					prisma.depressionAssessment.findMany({
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						include: {
+							user: {
+								include: {
+									person: {
+										include: {
+											students: {
+												where: { isDeleted: false },
+											},
+										},
+									},
+								},
+							},
+						},
+					}),
+					prisma.stressAssessment.findMany({
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						include: {
+							user: {
+								include: {
+									person: {
+										include: {
+											students: {
+												where: { isDeleted: false },
+											},
+										},
+									},
+								},
+							},
+						},
+					}),
+					prisma.personalProblemsChecklist.findMany({
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						include: {
+							user: {
+								include: {
+									person: {
+										include: {
+											students: {
+												where: { isDeleted: false },
+											},
+										},
+									},
+								},
+							},
+						},
+					}),
+					prisma.suicideAssessment.findMany({
+						where: {
+							isDeleted: false,
+							...(filter.userFilter && { user: filter.userFilter }),
+						},
+						include: {
+							user: {
+								include: {
+									person: {
+										include: {
+											students: {
+												where: { isDeleted: false },
+											},
+										},
+									},
+								},
+							},
+						},
+					}),
+				]);
+
+				// Create maps to track unique students per program for each assessment type
+				const programMaps: Record<
+					string,
+					{
+						anxiety: Set<string>;
+						depression: Set<string>;
+						stress: Set<string>;
+						checklist: Set<string>;
+						suicide: Set<string>;
+					}
+				> = {};
+
+				// Helper function to add student to program map
+				const addToMap = (
+					assessment: any,
+					assessmentType: "anxiety" | "depression" | "stress" | "checklist" | "suicide",
+				) => {
+					const students = assessment.user?.person?.students || [];
+					students.forEach((student: any) => {
+						const program = student.program || "Unknown";
+						if (!programMaps[program]) {
+							programMaps[program] = {
+								anxiety: new Set(),
+								depression: new Set(),
+								stress: new Set(),
+								checklist: new Set(),
+								suicide: new Set(),
+							};
+						}
+						programMaps[program][assessmentType].add(student.id);
+					});
+				};
+
+				// Process each assessment type
+				anxietyByProgram.forEach((a) => addToMap(a, "anxiety"));
+				depressionByProgram.forEach((d) => addToMap(d, "depression"));
+				stressByProgram.forEach((s) => addToMap(s, "stress"));
+				checklistByProgram.forEach((c) => addToMap(c, "checklist"));
+				suicideByProgram.forEach((s) => addToMap(s, "suicide"));
+
+				// Convert to array format
+				return Object.entries(programMaps).map(([program, sets]) => ({
+					program,
+					anxiety: sets.anxiety.size,
+					depression: sets.depression.size,
+					stress: sets.stress.size,
+					checklist: sets.checklist.size,
+					suicide: sets.suicide.size,
+				}));
 			},
 		},
 		Inventory: {
