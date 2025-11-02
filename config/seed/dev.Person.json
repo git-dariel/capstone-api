@@ -1,0 +1,75 @@
+[{
+  "_id": {
+    "$oid": "68f60feb40a5d3e29cab0c12"
+  },
+  "firstName": "Dr. Conchita",
+  "lastName": "Dotado",
+  "contactNumber": "09123456780",
+  "email": "conchitadotado@iskolarngbayan.pup.edu.ph",
+  "gender": "female",
+  "birthDate": {
+    "$date": "1985-01-01T00:00:00.000Z"
+  },
+  "civilStatus": "single",
+  "isDeleted": false,
+  "address": {
+    "street": "789 Counselor Ave",
+    "city": "Example City",
+    "type": "current"
+  },
+  "religion": ""
+},
+{
+  "_id": {
+    "$oid": "69072dd0804d83922b69746d"
+  },
+  "firstName": "Dariel",
+  "lastName": "Avila",
+  "contactNumber": "09935683942",
+  "email": "darielvavila@iskolarngbayan.pup.edu.ph",
+  "gender": "male",
+  "civilStatus": "single",
+  "isDeleted": false,
+  "address": {
+    "street": "Bonifacio",
+    "city": "Macalelon",
+    "province": "Quezon Province",
+    "zipCode": {
+      "$numberLong": "4309"
+    },
+    "type": "current"
+  },
+  "guardian": {
+    "firstName": "Annaliza",
+    "lastName": "Avila",
+    "contactNumber": "09505724178",
+    "relationship": "mother"
+  }
+},
+{
+  "_id": {
+    "$oid": "690777d5a0c12690205aa65b"
+  },
+  "firstName": "Pauline",
+  "lastName": "Flores",
+  "contactNumber": "09935683942",
+  "email": "paulineblesssflores@iskolarngbayan.pup.edu.ph",
+  "gender": "female",
+  "civilStatus": "single",
+  "isDeleted": false,
+  "address": {
+    "street": "Bonifacio",
+    "city": "Lucena",
+    "province": "Quezon",
+    "zipCode": {
+      "$numberLong": "4309"
+    },
+    "type": "current"
+  },
+  "guardian": {
+    "firstName": "Annaliza",
+    "lastName": "Avila",
+    "contactNumber": "09123456789",
+    "relationship": "mother"
+  }
+}]

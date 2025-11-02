@@ -16,7 +16,7 @@ model Student {
   program             String
   year                String
   status              AcademicStatus       @default(freshman)
-  notes               Notes[]
+  notes               Notes[] // also known as consultation records
   person              Person               @relation(fields: [personId], references: [id])
   personId            String               @db.ObjectId
   consent             Consent?

@@ -1,0 +1,464 @@
+[{
+  "_id": {
+    "$oid": "69072eab804d83922b697471"
+  },
+  "studentId": {
+    "$oid": "69072dd2804d83922b69746f"
+  },
+  "height": "57",
+  "weight": "150",
+  "coplexion": "Medium",
+  "student_signature": "DARIEL V AVILA",
+  "predictionGenerated": true,
+  "isDeleted": false,
+  "createdAt": {
+    "$date": "2025-11-02T10:12:58.613Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T10:13:01.025Z"
+  },
+  "person_to_be_contacted_in_case_of_accident_or_illness": {
+    "firstName": "Annaliza",
+    "lastName": "Avila",
+    "middleName": "Valdez",
+    "address": {
+      "street": "Bonifacio",
+      "province": "Quezon Province",
+      "city": "Macalelon",
+      "barangay": "Castillo",
+      "zipCode": {
+        "$numberLong": "4309"
+      },
+      "country": "Philippines"
+    },
+    "relationship": "parent"
+  },
+  "educational_background": {
+    "level": "high_school",
+    "school_graduation": "Olongtao National High School",
+    "school_address": {
+      "street": "",
+      "province": "",
+      "city": "",
+      "barangay": "",
+      "country": "Philippines"
+    },
+    "status": "public",
+    "dates_of_attendance": {
+      "$date": "2021-03-08T00:00:00.000Z"
+    },
+    "honors_received": "yes"
+  },
+  "nature_of_schooling": {
+    "continuous": true,
+    "interrupted": false,
+    "exaplain_why": null
+  },
+  "home_and_family_background": {
+    "father": {
+      "firstName": "Daryl",
+      "lastName": "Avila",
+      "middleName": "Hutalla",
+      "age": {
+        "$numberLong": "50"
+      },
+      "status": "living",
+      "educational_attainment": "bachelors_degree",
+      "occupation": "Seaman",
+      "employer": {
+        "name": "",
+        "address": {
+          "street": "",
+          "province": "",
+          "city": "",
+          "barangay": "",
+          "country": "Philippines"
+        }
+      }
+    },
+    "mother": {
+      "firstName": "Annaliza",
+      "lastName": "Avila",
+      "middleName": "Valdez",
+      "age": {
+        "$numberLong": "0"
+      },
+      "status": "living",
+      "educational_attainment": "high_school",
+      "occupation": "House Wife",
+      "employer": {
+        "name": "",
+        "address": {
+          "street": "",
+          "province": "",
+          "city": "",
+          "barangay": "",
+          "country": "Philippines"
+        }
+      }
+    },
+    "guardian": {
+      "firstName": "Annaliza",
+      "lastName": "Avila",
+      "middleName": "Valdez",
+      "age": {
+        "$numberLong": "50"
+      },
+      "status": "living",
+      "educational_attainment": "high_school",
+      "occupation": "House Wife",
+      "employer": {
+        "name": "",
+        "address": {
+          "street": "",
+          "province": "",
+          "city": "",
+          "barangay": "",
+          "country": "Philippines"
+        }
+      }
+    },
+    "parents_martial_relationship": "married_and_staying_together",
+    "number_of_children_in_the_family_including_yourself": {
+      "$numberLong": "3"
+    },
+    "number_of_brothers": {
+      "$numberLong": "1"
+    },
+    "number_of_sisters": {
+      "$numberLong": "1"
+    },
+    "number_of_brothers_or_sisters_employed": {
+      "$numberLong": "0"
+    },
+    "ordinal_position": "1st child",
+    "is_your_brother_sister_who_is_gainfully_employed_providing_support_to_your": "family",
+    "who_finances_your_schooling": "parents",
+    "how_much_is_your_weekly_allowance": {
+      "$numberLong": "1000"
+    },
+    "parents_total_montly_income": {
+      "income": "ten_thousand_to_fifteen_thousand",
+      "others": ""
+    },
+    "do_you_have_quiet_place_to_study": "yes",
+    "do_you_share_your_room_with_anyone": {
+      "status": "yes",
+      "if_yes_with_whom": "pup students"
+    },
+    "nature_of_residence_while_attending_school": "bed_spacer"
+  },
+  "health": {
+    "physical": {
+      "your_vision": true,
+      "your_hearing": false,
+      "your_speech": false,
+      "your_general_health": false,
+      "if_yes_please_specify": "nearsighted"
+    },
+    "psychological": {
+      "consulted": "psychologist",
+      "status": "no",
+      "when": null,
+      "for_what": ""
+    }
+  },
+  "interest_and_hobbies": {
+    "academic": "science_club",
+    "favorite_subject": "Science",
+    "favorite_least_subject": "Math",
+    "what_are_your_hobbies": [
+      "Reading",
+      "Gaming",
+      "Music"
+    ],
+    "organizations_participated": "athletics",
+    "occupational_position_organization": "member"
+  },
+  "mentalHealthPrediction": {
+    "academicPerformanceOutlook": "same",
+    "confidence": 0.9099999999999999,
+    "modelAccuracy": {
+      "decisionTree": 1,
+      "randomForest": 0.875
+    },
+    "riskFactors": [
+      "Housing instability",
+      "Physical health challenges"
+    ],
+    "mentalHealthRisk": {
+      "level": "moderate",
+      "description": "Student shows some risk factors that warrant attention. Consider academic counseling, study support resources, and regular monitoring.",
+      "needsAttention": true,
+      "urgency": "monitor",
+      "assessmentSummary": "⚠️ ATTENTION NEEDED: Student shows some risk factors that warrant attention. Consider academic counseling, study support resources, and regular monitoring.",
+      "disclaimer": "⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments."
+    },
+    "inputData": {
+      "gender": "Male",
+      "age": 20,
+      "highSchoolAverage": 85,
+      "natureOfSchooling": "continuous",
+      "parentsMaritalRelationship": "married_and_staying_together",
+      "numberOfChildren": 3,
+      "ordinalPosition": "1st child",
+      "whoFinancesYourSchooling": "parents",
+      "parentsTotalMonthlyIncome": "ten_thousand_to_fifteen_thousand",
+      "quietPlaceToStudy": "yes",
+      "natureOfResidence": "bed_spacer",
+      "visionProblems": "yes",
+      "generalHealthProblems": "no",
+      "psychologicalConsultation": "no",
+      "favoriteSubject": "Science",
+      "leastFavoriteSubject": "Math",
+      "academicOrganizations": "science_club",
+      "organizationPosition": "member"
+    },
+    "recommendations": [
+      "Maintain current academic practices and study habits",
+      "Continue regular monitoring of academic progress",
+      "Consider gradual improvements to study techniques",
+      "Stay engaged with academic support services",
+      "Utilize campus health services and seek appropriate medical support"
+    ],
+    "predictionDate": {
+      "$date": "2025-11-02T10:13:01.023Z"
+    }
+  },
+  "predictionUpdatedAt": {
+    "$date": "2025-11-02T10:13:01.023Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69077864a0c12690205aa65f"
+  },
+  "studentId": {
+    "$oid": "690777d5a0c12690205aa65d"
+  },
+  "height": "5'5",
+  "weight": "150",
+  "coplexion": "Medium",
+  "student_signature": "Pauline Flores",
+  "predictionGenerated": true,
+  "isDeleted": false,
+  "createdAt": {
+    "$date": "2025-11-02T15:27:32.819Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:27:33.479Z"
+  },
+  "person_to_be_contacted_in_case_of_accident_or_illness": {
+    "firstName": "Annaliza",
+    "lastName": "Avila",
+    "middleName": "Valdez",
+    "address": {
+      "street": "Bonifacio",
+      "province": "Quezon",
+      "city": "Lucena",
+      "barangay": "Castillo",
+      "zipCode": {
+        "$numberLong": "4309"
+      },
+      "country": "Philippines"
+    },
+    "relationship": "parent"
+  },
+  "educational_background": {
+    "level": "high_school",
+    "school_graduation": "Olongtao National High School",
+    "school_address": {
+      "street": "",
+      "province": "",
+      "city": "",
+      "barangay": "",
+      "country": "Philippines"
+    },
+    "status": "public",
+    "dates_of_attendance": {
+      "$date": "2025-11-02T15:25:59.520Z"
+    },
+    "honors_received": "none"
+  },
+  "nature_of_schooling": {
+    "continuous": true,
+    "interrupted": false,
+    "exaplain_why": null
+  },
+  "home_and_family_background": {
+    "father": {
+      "firstName": "Dar",
+      "lastName": "Valdez",
+      "middleName": "Avila",
+      "age": {
+        "$numberLong": "50"
+      },
+      "status": "living",
+      "educational_attainment": "bachelors_degree",
+      "occupation": "Seaman",
+      "employer": {
+        "name": "",
+        "address": {
+          "street": "",
+          "province": "",
+          "city": "",
+          "barangay": "",
+          "country": "Philippines"
+        }
+      }
+    },
+    "mother": {
+      "firstName": "Annaliza",
+      "lastName": "Avila",
+      "middleName": "Valdez",
+      "age": {
+        "$numberLong": "50"
+      },
+      "status": "living",
+      "educational_attainment": "high_school",
+      "occupation": "House Wife",
+      "employer": {
+        "name": "",
+        "address": {
+          "street": "",
+          "province": "",
+          "city": "",
+          "barangay": "",
+          "country": "Philippines"
+        }
+      }
+    },
+    "guardian": {
+      "firstName": "Annaliza",
+      "lastName": "Avila",
+      "middleName": "Valdez",
+      "age": {
+        "$numberLong": "50"
+      },
+      "status": "living",
+      "educational_attainment": "high_school",
+      "occupation": "House Wife",
+      "employer": {
+        "name": "",
+        "address": {
+          "street": "",
+          "province": "",
+          "city": "",
+          "barangay": "",
+          "country": "Philippines"
+        }
+      }
+    },
+    "parents_martial_relationship": "married_and_staying_together",
+    "number_of_children_in_the_family_including_yourself": {
+      "$numberLong": "4"
+    },
+    "number_of_brothers": {
+      "$numberLong": "2"
+    },
+    "number_of_sisters": {
+      "$numberLong": "1"
+    },
+    "number_of_brothers_or_sisters_employed": {
+      "$numberLong": "0"
+    },
+    "ordinal_position": "2nd child",
+    "is_your_brother_sister_who_is_gainfully_employed_providing_support_to_your": "family",
+    "who_finances_your_schooling": "parents",
+    "how_much_is_your_weekly_allowance": {
+      "$numberLong": "500"
+    },
+    "parents_total_montly_income": {
+      "income": "below_five_thousand",
+      "others": ""
+    },
+    "do_you_have_quiet_place_to_study": "yes",
+    "do_you_share_your_room_with_anyone": {
+      "status": "yes",
+      "if_yes_with_whom": "pup students"
+    },
+    "nature_of_residence_while_attending_school": "bed_spacer"
+  },
+  "health": {
+    "physical": {
+      "your_vision": true,
+      "your_hearing": false,
+      "your_speech": false,
+      "your_general_health": false,
+      "if_yes_please_specify": "nearsighted"
+    },
+    "psychological": {
+      "consulted": "psychologist",
+      "status": "no",
+      "when": null,
+      "for_what": ""
+    }
+  },
+  "interest_and_hobbies": {
+    "academic": "match_club",
+    "favorite_subject": "Math",
+    "favorite_least_subject": "Science",
+    "what_are_your_hobbies": [
+      "Reading",
+      "Gaming",
+      "Music",
+      "Dancing"
+    ],
+    "organizations_participated": "athletics",
+    "occupational_position_organization": "member"
+  },
+  "mentalHealthPrediction": {
+    "academicPerformanceOutlook": "same",
+    "confidence": 0.9099999999999999,
+    "modelAccuracy": {
+      "decisionTree": 1,
+      "randomForest": 0.8378
+    },
+    "riskFactors": [
+      "Financial constraints",
+      "Housing instability",
+      "Physical health challenges"
+    ],
+    "mentalHealthRisk": {
+      "level": "high",
+      "description": "Student displays concerning patterns in academic performance and personal circumstances. Professional consultation and academic support strongly recommended.",
+      "needsAttention": true,
+      "urgency": "schedule",
+      "assessmentSummary": "⚠️ ATTENTION NEEDED: Student displays concerning patterns in academic performance and personal circumstances. Professional consultation and academic support strongly recommended.",
+      "disclaimer": "⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments."
+    },
+    "inputData": {
+      "gender": "Female",
+      "age": 20,
+      "highSchoolAverage": 85,
+      "natureOfSchooling": "continuous",
+      "parentsMaritalRelationship": "married_and_staying_together",
+      "numberOfChildren": 4,
+      "ordinalPosition": "2nd child",
+      "whoFinancesYourSchooling": "parents",
+      "parentsTotalMonthlyIncome": "below_five_thousand",
+      "quietPlaceToStudy": "yes",
+      "natureOfResidence": "bed_spacer",
+      "visionProblems": "yes",
+      "generalHealthProblems": "no",
+      "psychologicalConsultation": "no",
+      "favoriteSubject": "Math",
+      "leastFavoriteSubject": "Science",
+      "academicOrganizations": "math_club",
+      "organizationPosition": "member"
+    },
+    "recommendations": [
+      "Maintain current academic practices and study habits",
+      "Continue regular monitoring of academic progress",
+      "Consider gradual improvements to study techniques",
+      "Stay engaged with academic support services",
+      "Utilize campus health services and seek appropriate medical support"
+    ],
+    "predictionDate": {
+      "$date": "2025-11-02T15:27:33.477Z"
+    }
+  },
+  "predictionUpdatedAt": {
+    "$date": "2025-11-02T15:27:33.477Z"
+  }
+}]
