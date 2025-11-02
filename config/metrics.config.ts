@@ -11,6 +11,9 @@ interface MetricFilter {
 	gender?: string;
 	assessmentId?: string;
 	assessmentType?: string;
+	riskLevel?: string;
+	severityLevel?: string;
+	bmiCategory?: string;
 }
 
 export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
@@ -3473,21 +3476,38 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
+				// Normalize the risk level filter (convert display format to database format)
+				let normalizedRiskLevel: string | undefined = undefined;
+				if (filter.riskLevel) {
+					const riskLower = filter.riskLevel.toLowerCase();
+					if (riskLower.includes("low")) normalizedRiskLevel = "low";
+					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
+					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
+					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
+				}
+
 				const programRiskCounts: Record<string, Record<string, number>> = {};
 
 				inventories.forEach((inventory) => {
 					const program = inventory.student?.program || "Unknown";
-					if (!programRiskCounts[program]) {
-						programRiskCounts[program] = {
-							"Low Risk": 0,
-							"Moderate Risk": 0,
-							"High Risk": 0,
-							"Critical Risk": 0,
-						};
-					}
-
+					
 					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
 						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						
+						// If risk level filter is set, only count matching risk levels
+						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+							return; // Skip this inventory if it doesn't match the filter
+						}
+						
+						if (!programRiskCounts[program]) {
+							programRiskCounts[program] = {
+								"Low Risk": 0,
+								"Moderate Risk": 0,
+								"High Risk": 0,
+								"Critical Risk": 0,
+							};
+						}
+						
 						if (risk === "low") programRiskCounts[program]["Low Risk"]++;
 						else if (risk === "moderate") programRiskCounts[program]["Moderate Risk"]++;
 						else if (risk === "high") programRiskCounts[program]["High Risk"]++;
@@ -3542,21 +3562,38 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
+				// Normalize the risk level filter (convert display format to database format)
+				let normalizedRiskLevel: string | undefined = undefined;
+				if (filter.riskLevel) {
+					const riskLower = filter.riskLevel.toLowerCase();
+					if (riskLower.includes("low")) normalizedRiskLevel = "low";
+					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
+					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
+					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
+				}
+
 				const yearRiskCounts: Record<string, Record<string, number>> = {};
 
 				inventories.forEach((inventory) => {
 					const year = inventory.student?.year || "Unknown";
-					if (!yearRiskCounts[year]) {
-						yearRiskCounts[year] = {
-							"Low Risk": 0,
-							"Moderate Risk": 0,
-							"High Risk": 0,
-							"Critical Risk": 0,
-						};
-					}
-
+					
 					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
 						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						
+						// If risk level filter is set, only count matching risk levels
+						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+							return; // Skip this inventory if it doesn't match the filter
+						}
+						
+						if (!yearRiskCounts[year]) {
+							yearRiskCounts[year] = {
+								"Low Risk": 0,
+								"Moderate Risk": 0,
+								"High Risk": 0,
+								"Critical Risk": 0,
+							};
+						}
+						
 						if (risk === "low") yearRiskCounts[year]["Low Risk"]++;
 						else if (risk === "moderate") yearRiskCounts[year]["Moderate Risk"]++;
 						else if (risk === "high") yearRiskCounts[year]["High Risk"]++;
@@ -3613,21 +3650,38 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
+				// Normalize the risk level filter (convert display format to database format)
+				let normalizedRiskLevel: string | undefined = undefined;
+				if (filter.riskLevel) {
+					const riskLower = filter.riskLevel.toLowerCase();
+					if (riskLower.includes("low")) normalizedRiskLevel = "low";
+					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
+					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
+					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
+				}
+
 				const genderRiskCounts: Record<string, Record<string, number>> = {};
 
 				inventories.forEach((inventory) => {
 					const gender = inventory.student?.person?.gender || "Unknown";
-					if (!genderRiskCounts[gender]) {
-						genderRiskCounts[gender] = {
-							"Low Risk": 0,
-							"Moderate Risk": 0,
-							"High Risk": 0,
-							"Critical Risk": 0,
-						};
-					}
-
+					
 					if (inventory.mentalHealthPrediction?.mentalHealthRisk) {
 						const risk = inventory.mentalHealthPrediction.mentalHealthRisk.level;
+						
+						// If risk level filter is set, only count matching risk levels
+						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+							return; // Skip this inventory if it doesn't match the filter
+						}
+						
+						if (!genderRiskCounts[gender]) {
+							genderRiskCounts[gender] = {
+								"Low Risk": 0,
+								"Moderate Risk": 0,
+								"High Risk": 0,
+								"Critical Risk": 0,
+							};
+						}
+						
 						if (risk === "low") genderRiskCounts[gender]["Low Risk"]++;
 						else if (risk === "moderate") genderRiskCounts[gender]["Moderate Risk"]++;
 						else if (risk === "high") genderRiskCounts[gender]["High Risk"]++;
@@ -3725,6 +3779,14 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 
 				inventories.forEach((inventory) => {
 					const program = inventory.student?.program || "Unknown";
+					
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					
+					// If BMI category filter is set, only count matching categories
+					if (filter.bmiCategory && category !== filter.bmiCategory) {
+						return; // Skip this inventory if it doesn't match the filter
+					}
+					
 					if (!programBMICounts[program]) {
 						programBMICounts[program] = {
 							Underweight: 0,
@@ -3734,7 +3796,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						};
 					}
 
-					const category = calculateBMICategory(inventory.height, inventory.weight);
 					if (category !== "Unknown") {
 						programBMICounts[program][category]++;
 					}
@@ -3840,6 +3901,14 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 
 				inventories.forEach((inventory) => {
 					const year = inventory.student?.year || "Unknown";
+					
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					
+					// If BMI category filter is set, only count matching categories
+					if (filter.bmiCategory && category !== filter.bmiCategory) {
+						return; // Skip this inventory if it doesn't match the filter
+					}
+					
 					if (!yearBMICounts[year]) {
 						yearBMICounts[year] = {
 							Underweight: 0,
@@ -3849,7 +3918,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						};
 					}
 
-					const category = calculateBMICategory(inventory.height, inventory.weight);
 					if (category !== "Unknown") {
 						yearBMICounts[year][category]++;
 					}
@@ -3957,6 +4025,14 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 
 				inventories.forEach((inventory) => {
 					const gender = inventory.student?.person?.gender || "Unknown";
+					
+					const category = calculateBMICategory(inventory.height, inventory.weight);
+					
+					// If BMI category filter is set, only count matching categories
+					if (filter.bmiCategory && category !== filter.bmiCategory) {
+						return; // Skip this inventory if it doesn't match the filter
+					}
+					
 					if (!genderBMICounts[gender]) {
 						genderBMICounts[gender] = {
 							Underweight: 0,
@@ -3966,7 +4042,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						};
 					}
 
-					const category = calculateBMICategory(inventory.height, inventory.weight);
 					if (category !== "Unknown") {
 						genderBMICounts[gender][category]++;
 					}
@@ -4031,6 +4106,16 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 				});
 
+				// Normalize the risk level filter (convert display format to database format)
+				let normalizedRiskLevel: string | undefined = undefined;
+				if (filter.riskLevel) {
+					const riskLower = filter.riskLevel.toLowerCase();
+					if (riskLower.includes("low")) normalizedRiskLevel = "low";
+					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
+					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
+					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
+				}
+
 				// Calculate BMI category
 				const calculateBMICategory = (height: string, weight: string): string => {
 					try {
@@ -4082,23 +4167,39 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					}
 				};
 
-				return inventories.map((inventory) => ({
-					id: inventory.id,
-					studentId: inventory.student?.id, // Add student ID for frontend lookups
-					studentNumber: inventory.student?.studentNumber || "N/A",
-					firstName: inventory.student?.person?.firstName || "",
-					lastName: inventory.student?.person?.lastName || "",
-					email: inventory.student?.person?.email || "N/A",
-					program: inventory.student?.program || "N/A",
-					year: inventory.student?.year || "N/A",
-					gender: inventory.student?.person?.gender || "N/A",
-					mentalHealthPrediction: inventory.mentalHealthPrediction?.mentalHealthRisk
-						?.level
-						? `${inventory.mentalHealthPrediction.mentalHealthRisk.level.charAt(0).toUpperCase()}${inventory.mentalHealthPrediction.mentalHealthRisk.level.slice(1)} Risk`
-						: "N/A",
-					bmiCategory: calculateBMICategory(inventory.height, inventory.weight),
-					createdAt: inventory.createdAt,
-				}));
+				return inventories
+					.filter((inventory) => {
+						// Filter by risk level if specified
+						if (normalizedRiskLevel) {
+							const risk = inventory.mentalHealthPrediction?.mentalHealthRisk?.level;
+							if (risk !== normalizedRiskLevel) return false;
+						}
+						
+						// Filter by BMI category if specified
+						if (filter.bmiCategory) {
+							const bmiCat = calculateBMICategory(inventory.height, inventory.weight);
+							if (bmiCat !== filter.bmiCategory) return false;
+						}
+						
+						return true;
+					})
+					.map((inventory) => ({
+						id: inventory.id,
+						studentId: inventory.student?.id, // Add student ID for frontend lookups
+						studentNumber: inventory.student?.studentNumber || "N/A",
+						firstName: inventory.student?.person?.firstName || "",
+						lastName: inventory.student?.person?.lastName || "",
+						email: inventory.student?.person?.email || "N/A",
+						program: inventory.student?.program || "N/A",
+						year: inventory.student?.year || "N/A",
+						gender: inventory.student?.person?.gender || "N/A",
+						mentalHealthPrediction: inventory.mentalHealthPrediction?.mentalHealthRisk
+							?.level
+							? `${inventory.mentalHealthPrediction.mentalHealthRisk.level.charAt(0).toUpperCase()}${inventory.mentalHealthPrediction.mentalHealthRisk.level.slice(1)} Risk`
+							: "N/A",
+						bmiCategory: calculateBMICategory(inventory.height, inventory.weight),
+						createdAt: inventory.createdAt,
+					}));
 			},
 
 			inventoryStats: async () => {
