@@ -9,6 +9,8 @@ interface MetricFilter {
 	program?: string;
 	yearLevel?: string;
 	gender?: string;
+	assessmentId?: string;
+	assessmentType?: string;
 }
 
 export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
@@ -1979,6 +1981,98 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				console.log(`🔍 Final result structure:`, JSON.stringify(result, null, 2));
 
 				return result;
+			},
+			getAssessmentDetails: async () => {
+				console.log(`🔍 API: Getting detailed assessment data`);
+
+				// Extract assessment ID and type from filter
+				const assessmentId = filter?.assessmentId;
+				const assessmentType = filter?.assessmentType;
+
+				if (!assessmentId || !assessmentType) {
+					throw new Error("Assessment ID and type are required");
+				}
+
+				console.log(`📋 Fetching ${assessmentType} assessment with ID: ${assessmentId}`);
+
+				let assessmentData = null;
+
+				switch (assessmentType.toLowerCase()) {
+					case "anxiety":
+						assessmentData = await prisma.anxietyAssessment.findUnique({
+							where: { id: assessmentId, isDeleted: false },
+							include: {
+								user: {
+									include: {
+										person: true,
+									},
+								},
+							},
+						});
+						break;
+
+					case "depression":
+						assessmentData = await prisma.depressionAssessment.findUnique({
+							where: { id: assessmentId, isDeleted: false },
+							include: {
+								user: {
+									include: {
+										person: true,
+									},
+								},
+							},
+						});
+						break;
+
+					case "stress":
+						assessmentData = await prisma.stressAssessment.findUnique({
+							where: { id: assessmentId, isDeleted: false },
+							include: {
+								user: {
+									include: {
+										person: true,
+									},
+								},
+							},
+						});
+						break;
+
+					case "suicide":
+						assessmentData = await prisma.suicideAssessment.findUnique({
+							where: { id: assessmentId, isDeleted: false },
+							include: {
+								user: {
+									include: {
+										person: true,
+									},
+								},
+							},
+						});
+						break;
+
+					case "checklist":
+						assessmentData = await prisma.personalProblemsChecklist.findUnique({
+							where: { id: assessmentId, isDeleted: false },
+							include: {
+								user: {
+									include: {
+										person: true,
+									},
+								},
+							},
+						});
+						break;
+
+					default:
+						throw new Error(`Invalid assessment type: ${assessmentType}`);
+				}
+
+				if (!assessmentData) {
+					throw new Error(`Assessment not found: ${assessmentId}`);
+				}
+
+				console.log(`✅ Assessment data retrieved successfully`);
+				return assessmentData;
 			},
 		},
 		UserDashboard: {
