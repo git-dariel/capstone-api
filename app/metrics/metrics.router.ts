@@ -217,6 +217,20 @@ export const router = (route: Router, controller: IController): Router => {
 	 *   get:
 	 *     summary: Get chart-ready data for frontend visualization
 	 *     tags: [Metrics, ML Visualization]
+	 *     parameters:
+	 *       - in: query
+	 *         name: days
+	 *         schema:
+	 *           type: integer
+	 *           default: 7
+	 *         description: Number of days for trend data (7, 30, or 90)
+	 *       - in: query
+	 *         name: assessmentType
+	 *         schema:
+	 *           type: string
+	 *           enum: [all, anxiety, depression, stress, checklist, suicide]
+	 *           default: all
+	 *         description: Filter program distribution by specific assessment type
 	 *     responses:
 	 *       200:
 	 *         description: Chart data for frontend libraries
@@ -232,11 +246,17 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                 data:
 	 *                   type: object
 	 *                   properties:
-	 *                     featureImportanceChart:
-	 *                       type: object
-	 *                     performanceChart:
-	 *                       type: object
-	 *                     confusionMatrixChart:
+	 *                     trendsData:
+	 *                       type: array
+	 *                     assessmentBreakdown:
+	 *                       type: array
+	 *                     severityData:
+	 *                       type: array
+	 *                     monthlyTrends:
+	 *                       type: array
+	 *                     programDistribution:
+	 *                       type: array
+	 *                     totalStats:
 	 *                       type: object
 	 *       500:
 	 *         description: Server error
