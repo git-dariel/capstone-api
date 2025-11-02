@@ -1,0 +1,27 @@
+[{
+  "_id": {
+    "$oid": "6907855bc7aa1e8f20ac63c1"
+  },
+  "userId": {
+    "$oid": "69072dd1804d83922b69746e"
+  },
+  "wished_dead_or_sleep_not_wake_up": "yes",
+  "actually_had_thoughts_killing_self": "yes",
+  "thinking_about_how_might_do_this": "yes",
+  "had_thoughts_and_some_intention": "yes",
+  "started_worked_out_details_how_kill": "yes",
+  "done_anything_started_prepared_end_life": "yes",
+  "behavior_timeframe": "past_three_months",
+  "riskLevel": "high",
+  "requires_immediate_intervention": true,
+  "assessmentDate": {
+    "$date": "2025-11-02T16:22:51.242Z"
+  },
+  "createdAt": {
+    "$date": "2025-11-02T16:22:51.244Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T16:22:51.244Z"
+  },
+  "isDeleted": false
+}]

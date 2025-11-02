@@ -1,0 +1,82 @@
+[{
+  "_id": {
+    "$oid": "69072e06804d83922b697470"
+  },
+  "studentId": {
+    "$oid": "69072dd2804d83922b69746f"
+  },
+  "referred": "self",
+  "with_whom_do_you_live": "guardians",
+  "financial_status": "never_stressful",
+  "what_brings_you_to_guidance": null,
+  "physical_problem": "no",
+  "physical_symptoms": "headaches",
+  "services": "general_information",
+  "isDeleted": false,
+  "createdAt": {
+    "$date": "2025-11-02T10:10:14.769Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T10:10:14.769Z"
+  },
+  "concerns": {
+    "personal_growth": "somewhat_important",
+    "depression": "somewhat_important",
+    "suicidal_thoughts": "very_important",
+    "study_skills": "somewhat_important",
+    "family_concerns": "important",
+    "sexual_concerns": "not_applicable",
+    "educational_concerns": "important",
+    "anxiety": "somewhat_important",
+    "drug_use": "leat_important",
+    "physical_concerns": "somewhat_important",
+    "self_concept": "very_important",
+    "decision_making_about_leaving_pup": "leat_important",
+    "financial_concerns": "somewhat_important",
+    "relationship_with_others": "important",
+    "spirituality": "somewhat_important",
+    "weight_eating_issues": "leat_important",
+    "career": "important"
+  }
+},
+{
+  "_id": {
+    "$oid": "69077807a0c12690205aa65e"
+  },
+  "studentId": {
+    "$oid": "690777d5a0c12690205aa65d"
+  },
+  "referred": "self",
+  "with_whom_do_you_live": "guardians",
+  "financial_status": "never_stressful",
+  "what_brings_you_to_guidance": null,
+  "physical_problem": "no",
+  "physical_symptoms": "cold_hands_and_feet",
+  "services": "stress_management",
+  "isDeleted": false,
+  "createdAt": {
+    "$date": "2025-11-02T15:25:59.340Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:25:59.340Z"
+  },
+  "concerns": {
+    "personal_growth": "very_important",
+    "depression": "important",
+    "suicidal_thoughts": "not_applicable",
+    "study_skills": "most_important",
+    "family_concerns": "most_important",
+    "sexual_concerns": "somewhat_important",
+    "educational_concerns": "most_important",
+    "anxiety": "somewhat_important",
+    "drug_use": "not_applicable",
+    "physical_concerns": "leat_important",
+    "self_concept": "most_important",
+    "decision_making_about_leaving_pup": "leat_important",
+    "financial_concerns": "most_important",
+    "relationship_with_others": "most_important",
+    "spirituality": "most_important",
+    "weight_eating_issues": "important",
+    "career": "most_important"
+  }
+}]

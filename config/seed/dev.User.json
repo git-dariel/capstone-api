@@ -1,0 +1,80 @@
+[{
+  "_id": {
+    "$oid": "68f6101e40a5d3e29cab0c15"
+  },
+  "personId": {
+    "$oid": "68f60feb40a5d3e29cab0c12"
+  },
+  "userName": "guidance_counselor",
+  "password": "$2b$10$x2GEeM4BcLk0tRDBf0a8Ue6GXbHh93ZiZplPtow8tTnANRwXkaYKe",
+  "role": "admin",
+  "type": "guidance",
+  "status": "active",
+  "isDeleted": false,
+  "loginMethod": "email",
+  "emailVerified": true,
+  "createdAt": {
+    "$date": "2025-06-27T11:53:43.235Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:28:59.894Z"
+  },
+  "lastLogin": {
+    "$date": "2025-11-02T15:28:59.893Z"
+  },
+  "emailOtp": null,
+  "emailOtpExpiry": null,
+  "avatar": "https://res.cloudinary.com/mental-health-dev/image/upload/v1760294645/mental-health-assets/avatars/685e864714bf575592f5bb34/gwkvsycxid1n8iahz2dn.png"
+},
+{
+  "_id": {
+    "$oid": "69072dd1804d83922b69746e"
+  },
+  "personId": {
+    "$oid": "69072dd0804d83922b69746d"
+  },
+  "userName": "darielvavila@iskolarngbayan.pup.edu.ph",
+  "password": "$2b$10$fkP8AsDswHimoXFteaPmWOSmLbPubbAxXx0CRV3kQjGxkELMIKViu",
+  "role": "user",
+  "type": "student",
+  "status": "active",
+  "isDeleted": false,
+  "loginMethod": "email",
+  "emailVerified": true,
+  "createdAt": {
+    "$date": "2025-11-02T10:09:21.358Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T14:33:13.003Z"
+  },
+  "lastLogin": {
+    "$date": "2025-11-02T14:33:13.001Z"
+  },
+  "avatar": "https://res.cloudinary.com/mental-health-dev/image/upload/v1762078439/mental-health-assets/avatars/69072dd1804d83922b69746e/lrqaiz0hj2jtjtocnent.png"
+},
+{
+  "_id": {
+    "$oid": "690777d5a0c12690205aa65c"
+  },
+  "personId": {
+    "$oid": "690777d5a0c12690205aa65b"
+  },
+  "userName": "paulineblesssflores@iskolarngbayan.pup.edu.ph",
+  "password": "$2b$10$J0iM5SEPiA./0lUJIm3Hwej7/07bhBMEZv36qI1A/XCpkhOWsAf0a",
+  "role": "user",
+  "type": "student",
+  "status": "active",
+  "isDeleted": false,
+  "loginMethod": "email",
+  "emailVerified": true,
+  "createdAt": {
+    "$date": "2025-11-02T15:25:09.135Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:27:57.158Z"
+  },
+  "lastLogin": {
+    "$date": "2025-11-02T15:25:22.288Z"
+  },
+  "avatar": "https://res.cloudinary.com/mental-health-dev/image/upload/v1762097284/mental-health-assets/avatars/690777d5a0c12690205aa65c/dai5e21nfjwtfscz9g7f.png"
+}]

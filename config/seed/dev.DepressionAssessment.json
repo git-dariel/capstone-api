@@ -1,0 +1,66 @@
+[{
+  "_id": {
+    "$oid": "69076926f6c6c4456458efed"
+  },
+  "userId": {
+    "$oid": "69072dd1804d83922b69746e"
+  },
+  "little_interest_pleasure_doing_things": "nearly_every_day",
+  "feeling_down_depressed_hopeless": "nearly_every_day",
+  "trouble_falling_staying_asleep_too_much": "nearly_every_day",
+  "feeling_tired_having_little_energy": "nearly_every_day",
+  "poor_appetite_overeating": "nearly_every_day",
+  "feeling_bad_about_yourself_failure": "nearly_every_day",
+  "trouble_concentrating_things": "nearly_every_day",
+  "moving_speaking_slowly_fidgety_restless": "nearly_every_day",
+  "thoughts_better_off_dead_hurting_yourself": "nearly_every_day",
+  "totalScore": {
+    "$numberLong": "27"
+  },
+  "severityLevel": "severe",
+  "assessmentDate": {
+    "$date": "2025-11-02T14:22:30.548Z"
+  },
+  "difficulty_level": "extremely_difficult",
+  "cooldownActive": true,
+  "createdAt": {
+    "$date": "2025-11-02T14:22:30.551Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T14:22:30.551Z"
+  },
+  "isDeleted": false
+},
+{
+  "_id": {
+    "$oid": "690778afa0c12690205aa662"
+  },
+  "userId": {
+    "$oid": "690777d5a0c12690205aa65c"
+  },
+  "little_interest_pleasure_doing_things": "more_than_half_days",
+  "feeling_down_depressed_hopeless": "more_than_half_days",
+  "trouble_falling_staying_asleep_too_much": "more_than_half_days",
+  "feeling_tired_having_little_energy": "more_than_half_days",
+  "poor_appetite_overeating": "more_than_half_days",
+  "feeling_bad_about_yourself_failure": "more_than_half_days",
+  "trouble_concentrating_things": "more_than_half_days",
+  "moving_speaking_slowly_fidgety_restless": "more_than_half_days",
+  "thoughts_better_off_dead_hurting_yourself": "more_than_half_days",
+  "totalScore": {
+    "$numberLong": "18"
+  },
+  "severityLevel": "moderately_severe",
+  "assessmentDate": {
+    "$date": "2025-11-02T15:28:47.176Z"
+  },
+  "difficulty_level": "very_difficult",
+  "cooldownActive": true,
+  "createdAt": {
+    "$date": "2025-11-02T15:28:47.178Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:28:47.178Z"
+  },
+  "isDeleted": false
+}]

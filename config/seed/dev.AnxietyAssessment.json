@@ -1,0 +1,31 @@
+[{
+  "_id": {
+    "$oid": "69072f12804d83922b697472"
+  },
+  "userId": {
+    "$oid": "69072dd1804d83922b69746e"
+  },
+  "feeling_nervous_anxious_edge": "several_days",
+  "not_able_stop_control_worrying": "several_days",
+  "worrying_too_much_different_things": "several_days",
+  "trouble_relaxing": "several_days",
+  "restless_hard_sit_still": "several_days",
+  "easily_annoyed_irritable": "several_days",
+  "feeling_afraid_awful_happen": "several_days",
+  "totalScore": {
+    "$numberLong": "7"
+  },
+  "severityLevel": "mild",
+  "assessmentDate": {
+    "$date": "2025-11-02T10:14:42.541Z"
+  },
+  "difficulty_level": "somewhat_difficult",
+  "cooldownActive": true,
+  "createdAt": {
+    "$date": "2025-11-02T10:14:42.542Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T10:14:42.542Z"
+  },
+  "isDeleted": false
+}]
