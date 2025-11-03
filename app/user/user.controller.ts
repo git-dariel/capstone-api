@@ -4,6 +4,7 @@ import { config } from "../../config/error.config";
 import { Prisma, PrismaClient, Role } from "../../generated/prisma";
 import { exportStudentDataCsv } from "../../helper/csv.helper";
 import { getLogger } from "../../helper/logger";
+import { generateMentalHealthAssessmentReport } from "../../helper/word-document.helper";
 import { requireAdmin, requireAnyRole } from "../../middleware/rbac";
 import { AuthRequest } from "../../middleware/verifyToken";
 import cloudinaryService from "../../helper/cloudinary.helper";
@@ -667,6 +668,76 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const exportMentalHealthAssessment = requireAdmin(
+		async (req: AuthRequest, res: Response, _next: NextFunction) => {
+			const { studentId } = req.params;
+
+			if (!studentId) {
+				userLogger.error("Missing student ID for mental health assessment export");
+				res.status(400).json({ error: "Student ID is required" });
+				return;
+			}
+
+			userLogger.info(
+				`Mental health assessment report requested for student: ${studentId}, by user: ${req.userId}`,
+			);
+
+			try {
+				// Verify the student exists
+				const student = await prisma.student.findFirst({
+					where: {
+						id: studentId,
+						isDeleted: false,
+					},
+					include: {
+						person: {
+							select: {
+								firstName: true,
+								lastName: true,
+							},
+						},
+					},
+				});
+
+				if (!student) {
+					userLogger.error(`Student not found: ${studentId}`);
+					res.status(404).json({ error: "Student not found" });
+					return;
+				}
+
+				// Generate the mental health assessment report
+				const { buffer, fileName } = await generateMentalHealthAssessmentReport(
+					prisma,
+					studentId,
+					req.userId!,
+				);
+
+				userLogger.info(
+					`Mental health assessment report generated successfully for student: ${studentId}`,
+				);
+
+				// Set response headers for file download
+				res.setHeader(
+					"Content-Type",
+					"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				);
+				res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+				res.setHeader("Content-Length", buffer.length);
+
+				// Send the file buffer
+				res.send(buffer);
+			} catch (error: any) {
+				userLogger.error(
+					`Error generating mental health assessment report: ${error.message}`,
+				);
+				res.status(500).json({
+					error: "Failed to generate mental health assessment report",
+					details: error.message,
+				});
+			}
+		},
+	);
+
 	return {
 		getById,
 		getAll,
@@ -675,5 +746,6 @@ export const controller = (prisma: PrismaClient) => {
 		exportCsv,
 		uploadAvatar,
 		deleteAvatar,
+		exportMentalHealthAssessment,
 	};
 };
