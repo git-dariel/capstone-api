@@ -9,6 +9,7 @@ interface IController {
 	exportCsv(req: Request, res: Response, next: NextFunction): Promise<void>;
 	uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void>;
 	deleteAvatar(req: Request, res: Response, next: NextFunction): Promise<void>;
+	exportMentalHealthAssessment(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -38,6 +39,80 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.get("/export/csv", controller.exportCsv);
+
+	/**
+	 * @openapi
+	 * /api/user/export/mental-health-assessment/{studentId}:
+	 *   get:
+	 *     summary: Export mental health assessment report as Word document
+	 *     description: Generate and download a comprehensive mental health assessment report for a specific student in Word document format. Only accessible by guidance counselors (admin role).
+	 *     tags: [User]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: studentId
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: The ID of the student for whom to generate the mental health assessment report
+	 *         example: "60f1b2b3c8d4e50011234567"
+	 *     responses:
+	 *       200:
+	 *         description: Returns Word document file with mental health assessment report
+	 *         content:
+	 *           application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+	 *             schema:
+	 *               type: string
+	 *               format: binary
+	 *         headers:
+	 *           Content-Disposition:
+	 *             description: Filename for download
+	 *             schema:
+	 *               type: string
+	 *               example: "attachment; filename=\"Mental_Health_Assessment_John_Doe_2025-11-03.docx\""
+	 *       400:
+	 *         description: Bad request - Student ID is required
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student ID is required"
+	 *       401:
+	 *         description: Unauthorized - Authentication required
+	 *       403:
+	 *         description: Forbidden - Admin access required (guidance counselors only)
+	 *       404:
+	 *         description: Student not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student not found"
+	 *       500:
+	 *         description: Internal server error
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Failed to generate mental health assessment report"
+	 *                 details:
+	 *                   type: string
+	 *                   example: "Template file not found"
+	 */
+	routes.get(
+		"/export/mental-health-assessment/:studentId",
+		controller.exportMentalHealthAssessment,
+	);
 
 	/**
 	 * @openapi
