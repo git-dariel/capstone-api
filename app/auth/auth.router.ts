@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 
 interface IController {
 	register(req: Request, res: Response, next: NextFunction): Promise<void>;
+	registerUsingRegularEmail(req: Request, res: Response, next: NextFunction): Promise<void>;
 	registerAdmin(req: Request, res: Response, next: NextFunction): Promise<void>;
 	login(req: Request, res: Response, next: NextFunction): Promise<void>;
 	verifyEmail(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -206,6 +207,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.post("/register", controller.register);
+	routes.post("/register-regular-email", controller.registerUsingRegularEmail);
 
 	/**
 	 * @openapi
