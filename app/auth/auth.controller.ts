@@ -2,8 +2,8 @@ import bcrypt from "bcrypt";
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { PrismaClient, Role, Type } from "../../generated/prisma";
+import { initOTPEmailHelper, validateFirstYearStudentNumber } from "../../helper/auth.helper";
 import { getLogger } from "../../helper/logger";
-import { OTPEmailHelper, createGmailConfig } from "../../helper/email.helper";
 import { controller as personController } from "../person/person.controller";
 import { controller as studentController } from "../student/student.controller";
 
@@ -13,20 +13,6 @@ const authLogger = logger.child({ module: "auth" });
 export const controller = (prisma: PrismaClient) => {
 	const personCtrl = personController(prisma);
 	const studentCtrl = studentController(prisma);
-
-	// Initialize OTP Email Helper
-	const initOTPEmailHelper = () => {
-		const emailUser = process.env.EMAIL_USER;
-		const emailPassword = process.env.EMAIL_PASSWORD;
-
-		if (!emailUser || !emailPassword) {
-			authLogger.warn("Email credentials not configured. OTP emails will not be sent.");
-			return null;
-		}
-
-		const emailConfig = createGmailConfig(emailUser, emailPassword);
-		return new OTPEmailHelper(emailConfig);
-	};
 
 	const register = async (req: Request, res: Response, next: NextFunction) => {
 		const {
@@ -89,6 +75,264 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		try {
+			// Check if email already exists in either person or pending registration tables
+			const existingPerson = await prisma.person.findFirst({
+				where: {
+					email,
+					isDeleted: false,
+				},
+			});
+
+			if (existingPerson) {
+				authLogger.error(`Person with this email already exists: ${email}`);
+				res.status(400).json({ message: "Person with this email already exists" });
+				return;
+			}
+
+			// Check if student number already exists (if provided)
+			if (studentNumber) {
+				const existingStudent = await prisma.student.findFirst({
+					where: {
+						studentNumber,
+						isDeleted: false,
+					},
+				});
+
+				if (existingStudent) {
+					authLogger.error(`Student number already exists: ${studentNumber}`);
+					res.status(400).json({ message: "Student number already exists" });
+					return;
+				}
+
+				// Also check pending registrations for the same student number
+				const existingPendingStudent = await prisma.pendingRegistration.findFirst({
+					where: {
+						studentNumber,
+						isDeleted: false,
+					},
+				});
+
+				if (existingPendingStudent) {
+					authLogger.error(
+						`Student number already exists in pending registration: ${studentNumber}`,
+					);
+					res.status(400).json({ message: "Student number already exists" });
+					return;
+				}
+			}
+
+			// Check if there's already a pending registration for this email
+			const existingPendingRegistration = await prisma.pendingRegistration.findFirst({
+				where: {
+					email,
+					isDeleted: false,
+				},
+			});
+
+			if (existingPendingRegistration) {
+				// Check if OTP is still valid
+				if (new Date() <= existingPendingRegistration.emailOtpExpiry) {
+					authLogger.error(`Pending registration already exists for email: ${email}`);
+					res.status(400).json({
+						message:
+							"Registration already in progress. Please try signing in with your credentials to complete verification, or wait for the current verification code to expire.",
+					});
+					return;
+				} else {
+					// Delete expired pending registration
+					await prisma.pendingRegistration.delete({
+						where: { id: existingPendingRegistration.id },
+					});
+				}
+			}
+
+			const userNameToUse = userName || email;
+			const existingUserName = await prisma.user.findFirst({
+				where: {
+					userName: userNameToUse,
+					isDeleted: false,
+				},
+			});
+
+			if (existingUserName) {
+				authLogger.error(`Username already exists: ${userNameToUse}`);
+				res.status(400).json({
+					message: "Username already exists. Please choose a different username.",
+				});
+				return;
+			}
+
+			// Initialize OTP Email Helper
+			const otpEmailHelper = initOTPEmailHelper();
+
+			if (!otpEmailHelper) {
+				authLogger.error("Email service not configured");
+				res.status(500).json({
+					message: "Email service not available. Cannot send verification code.",
+				});
+				return;
+			}
+
+			// Generate OTP for email verification
+			const otp = otpEmailHelper.generateOTP();
+			const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+			// Hash the password before storing
+			const hashedPassword = await bcrypt.hash(password, 10);
+
+			// Create pending registration record instead of actual user
+			const pendingRegistration = await prisma.pendingRegistration.create({
+				data: {
+					email,
+					userName: userNameToUse,
+					password: hashedPassword,
+					role: (role as Role) || "user",
+					type: (type as Type) || "student",
+					firstName,
+					lastName,
+					...(middleName && { middleName }),
+					...(suffix && { suffix }),
+					...(contactNumber && { contactNumber }),
+					...(gender && { gender }),
+					...(birthDate && { birthDate: new Date(birthDate) }),
+					...(birthPlace && { birthPlace }),
+					...(age && { age }),
+					...(religion && { religion }),
+					...(civilStatus && { civilStatus }),
+					...(address && { address }),
+					...(guardian && { guardian }),
+					...(studentNumber && { studentNumber }),
+					...(program && { program }),
+					...(year && { year }),
+					emailOtp: otp,
+					emailOtpExpiry: otpExpiry,
+				},
+			});
+
+			// Send OTP email
+			try {
+				const emailResult = await otpEmailHelper.sendOTPEmail(
+					email,
+					otp,
+					firstName || undefined,
+				);
+
+				if (emailResult.success) {
+					authLogger.info(`OTP email sent successfully to ${email}`);
+				} else {
+					authLogger.error(`Failed to send OTP email to ${email}: ${emailResult.error}`);
+					// Delete the pending registration if email fails
+					await prisma.pendingRegistration.delete({
+						where: { id: pendingRegistration.id },
+					});
+					res.status(500).json({
+						message: "Failed to send verification email. Please try again.",
+					});
+					return;
+				}
+			} catch (emailError) {
+				authLogger.error(`Error sending OTP email to ${email}: ${emailError}`);
+				// Delete the pending registration if email fails
+				await prisma.pendingRegistration.delete({
+					where: { id: pendingRegistration.id },
+				});
+				res.status(500).json({
+					message: "Failed to send verification email. Please try again.",
+				});
+				return;
+			}
+
+			authLogger.info(`Pending registration created for email: ${email}`);
+
+			const responseData = {
+				message:
+					"Registration initiated. Please check your email for the verification code.",
+				emailVerificationRequired: true,
+				otpSent: true,
+			};
+
+			res.status(201).json(responseData);
+		} catch (error) {
+			authLogger.error(`Error during registration: ${error}`);
+			res.status(500).json({ message: "Error during registration" });
+		}
+	};
+
+	const registerUsingRegularEmail = async (req: Request, res: Response, next: NextFunction) => {
+		const {
+			email,
+			userName,
+			password,
+			role,
+			type,
+			firstName,
+			lastName,
+			middleName,
+			suffix,
+			contactNumber,
+			gender,
+			birthDate,
+			birthPlace,
+			age,
+			religion,
+			civilStatus,
+			address,
+			guardian,
+			studentNumber,
+			program,
+			year,
+			...otherData
+		} = req.body;
+
+		if (!email) {
+			authLogger.error("Email is required");
+			res.status(400).json({ message: "Email is required" });
+			return;
+		}
+
+		if (!password) {
+			authLogger.error("Password is required");
+			res.status(400).json({ message: "Password is required" });
+			return;
+		}
+
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		if (!emailRegex.test(email)) {
+			authLogger.error(`Invalid email format: ${email}`);
+			res.status(400).json({ message: "Invalid email format" });
+			return;
+		}
+
+		if (password.length < 6) {
+			authLogger.error("Password must be at least 6 characters long");
+			res.status(400).json({ message: "Password must be at least 6 characters long" });
+			return;
+		}
+
+		try {
+			// Validate student number from first-year database (CSV file)
+			// This is required for non-PUP email registrations
+			if (!studentNumber) {
+				authLogger.error("Student number is required for registration with non-PUP email");
+				res.status(400).json({
+					message:
+						"Student number is required for registration. Please provide your valid student number.",
+				});
+				return;
+			}
+
+			const isValidFirstYearStudent = validateFirstYearStudentNumber(studentNumber);
+			if (!isValidFirstYearStudent) {
+				authLogger.error(
+					`First-year student number validation failed for: ${studentNumber}`,
+				);
+				res.status(400).json({
+					message:
+						"Invalid student number. Your student number is not found in the first-year student database. Please verify and try again.",
+				});
+				return;
+			}
+
 			// Check if email already exists in either person or pending registration tables
 			const existingPerson = await prisma.person.findFirst({
 				where: {
@@ -561,10 +805,11 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		// Check if email is from PUP domain
-		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
+		if (!email.endsWith("@iskolarngbayan.pup.edu.ph") && !email.endsWith("@gmail.com")) {
 			authLogger.error(`Invalid email domain: ${email}`);
 			res.status(400).json({
-				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
+				message:
+					"Only PUP email addresses (@iskolarngbayan.pup.edu.ph) and Gmail addresses (@gmail.com) are allowed",
 			});
 			return;
 		}
@@ -815,15 +1060,6 @@ export const controller = (prisma: PrismaClient) => {
 		if (!otp) {
 			authLogger.error("OTP is required for verification");
 			res.status(400).json({ message: "OTP is required" });
-			return;
-		}
-
-		// Check if email is from PUP domain
-		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
-			authLogger.error(`Invalid email domain: ${email}`);
-			res.status(400).json({
-				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
-			});
 			return;
 		}
 
@@ -1095,15 +1331,6 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		// Check if email is from PUP domain
-		if (!email.endsWith("@iskolarngbayan.pup.edu.ph")) {
-			authLogger.error(`Invalid email domain: ${email}`);
-			res.status(400).json({
-				message: "Only PUP email addresses (@iskolarngbayan.pup.edu.ph) are allowed",
-			});
-			return;
-		}
-
 		try {
 			// First check if this is a pending registration
 			const pendingRegistration = await prisma.pendingRegistration.findFirst({
@@ -1249,31 +1476,12 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	// Helper function to clean up expired pending registrations
-	const cleanupExpiredPendingRegistrations = async () => {
-		try {
-			const deleted = await prisma.pendingRegistration.deleteMany({
-				where: {
-					emailOtpExpiry: {
-						lt: new Date(),
-					},
-				},
-			});
-
-			if (deleted.count > 0) {
-				authLogger.info(`Cleaned up ${deleted.count} expired pending registrations`);
-			}
-		} catch (error) {
-			authLogger.error(`Error cleaning up expired pending registrations: ${error}`);
-		}
-	};
-
 	return {
 		register,
+		registerUsingRegularEmail,
 		registerAdmin,
 		login,
 		verifyEmail,
 		resendOTP,
-		cleanupExpiredPendingRegistrations,
 	};
 };
