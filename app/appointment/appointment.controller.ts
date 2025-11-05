@@ -353,7 +353,7 @@ export const controller = (prisma: PrismaClient) => {
 						...(scheduleId && { scheduleId }),
 						title,
 						description,
-						appointmentType: appointmentType || "consultation",
+						appointmentType: appointmentType || "general_information",
 						requestedDate: new Date(requestedDate),
 						status: status || "pending", // Use provided status or default to pending
 						priority: priority || "normal",

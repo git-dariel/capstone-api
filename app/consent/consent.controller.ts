@@ -343,14 +343,6 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (!services) {
-			consentLogger.error("Services is required");
-			res.status(400).json({
-				error: "Services is required",
-			});
-			return;
-		}
-
 		// Validate enum values
 		if (referred && !Object.values(Referred).includes(referred)) {
 			consentLogger.error(`${config.ERROR.CONSENT.INVALID_REFERRED}: ${referred}`);

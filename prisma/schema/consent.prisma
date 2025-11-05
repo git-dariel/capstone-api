@@ -44,7 +44,7 @@ enum PhysicalSymptoms {
 
 enum LevelOfImportance {
   not_applicable
-  leat_important
+  least_important
   somewhat_important
   important
   very_important
@@ -93,7 +93,7 @@ model Consent {
   physical_problem            PhysicalProblem
   physical_symptoms           PhysicalSymptoms
   concerns                    PresentConcerns
-  services                    Services
+  services                    Services?
   isDeleted                   Boolean          @default(false)
   createdAt                   DateTime         @default(now())
   updatedAt                   DateTime         @updatedAt

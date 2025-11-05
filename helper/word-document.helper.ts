@@ -539,7 +539,7 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 		// Convert enum values to human-readable format
 		const concernMap: { [key: string]: string } = {
 			not_applicable: "Not Applicable",
-			leat_important: "Least Important", // Note: typo in enum, but keeping as is
+			least_important: "Least Important", // Note: typo in enum, but keeping as is
 			somewhat_important: "Somewhat Important",
 			important: "Important",
 			very_important: "Very Important",

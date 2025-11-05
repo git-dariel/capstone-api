@@ -7,12 +7,14 @@ enum AppointmentStatus {
 }
 
 enum AppointmentType {
-  consultation
-  counseling
-  academic_guidance
-  personal_guidance
-  crisis_intervention
-  follow_up
+  general_information
+  one_or_two_session_problem_solving
+  stress_management
+  group_counseling
+  substance_abuse_services
+  career_exploration
+  individual_counseling
+  referral_for_university
 }
 
 enum ScheduleStatus {
@@ -62,7 +64,7 @@ model Appointment {
   scheduleId         String?                 @db.ObjectId
   title              String? // Subject/title of the appointment
   description        String? // Student's description of what they want to discuss
-  appointmentType    AppointmentType         @default(consultation)
+  appointmentType    AppointmentType         @default(general_information)
   requestedDate      DateTime // When the appointment is scheduled for
   status             AppointmentStatus       @default(pending)
   priority           String?                 @default("normal") // normal, high, urgent
