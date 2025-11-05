@@ -105,17 +105,10 @@ export const controller = (prisma: PrismaClient) => {
 		inventoryLogger.info(`Getting inventory by student ID: ${studentId}`);
 
 		try {
-			const query: Prisma.IndividualInventoryFindFirstArgs = {
-				where: {
-					studentId,
-					isDeleted: false,
-					student: {
-						isDeleted: false,
-					},
-				},
-			};
+			let inventory;
 
 			if (fields) {
+				// Use select with field filtering
 				const fieldSelections = fields.split(",").reduce(
 					(acc, field) => {
 						const parts = field.trim().split(".");
@@ -137,19 +130,35 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
-				query.select = fieldSelections;
-			}
-
-			const inventory = await prisma.individualInventory.findFirst({
-				...query,
-				include: {
-					student: {
-						include: {
-							person: true,
+				inventory = await prisma.individualInventory.findFirst({
+					where: {
+						studentId,
+						isDeleted: false,
+						student: {
+							isDeleted: false,
 						},
 					},
-				},
-			});
+					select: fieldSelections,
+				});
+			} else {
+				// Use include when no field filtering is needed
+				inventory = await prisma.individualInventory.findFirst({
+					where: {
+						studentId,
+						isDeleted: false,
+						student: {
+							isDeleted: false,
+						},
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+					},
+				});
+			}
 
 			if (!inventory) {
 				inventoryLogger.info(`No inventory found for student ID: ${studentId}`);
@@ -815,7 +824,190 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			res.status(200).json(updatedInventory);
+			// ============================================================
+			// AUTO-GENERATE MENTAL HEALTH PREDICTION AFTER INVENTORY UPDATE
+			// ============================================================
+			let predictionResult = null;
+			try {
+				inventoryLogger.info(
+					`Auto-generating mental health prediction for inventory update: ${updatedInventory.id}`,
+				);
+
+				// Prepare data for mental health prediction using updated inventory data
+				const studentData: Partial<StudentData> = {
+					gender: updatedInventory.student?.person?.gender
+						? updatedInventory.student.person.gender.charAt(0).toUpperCase() +
+							updatedInventory.student.person.gender.slice(1)
+						: "Other",
+					age: updatedInventory.student?.person?.age || 20,
+					// Educational background from updated inventory
+					highSchoolAverage:
+						parseFloat(
+							updatedInventory.educational_background?.honors_received || "85",
+						) || 85,
+					natureOfSchooling: updatedInventory.nature_of_schooling?.continuous
+						? "continuous"
+						: "interrupted",
+					// Home and family background
+					parentsMaritalRelationship:
+						updatedInventory.home_and_family_background?.parents_martial_relationship ||
+						"others",
+					numberOfChildren:
+						updatedInventory.home_and_family_background
+							?.number_of_children_in_the_family_including_yourself || 1,
+					ordinalPosition:
+						updatedInventory.home_and_family_background?.ordinal_position ||
+						"1st child",
+					whoFinancesYourSchooling:
+						updatedInventory.home_and_family_background?.who_finances_your_schooling ||
+						"parents",
+					parentsTotalMonthlyIncome:
+						updatedInventory.home_and_family_background?.parents_total_montly_income
+							?.income || "below_five_thousand",
+					quietPlaceToStudy:
+						updatedInventory.home_and_family_background
+							?.do_you_have_quiet_place_to_study === "yes"
+							? "yes"
+							: "no",
+					natureOfResidence:
+						updatedInventory.home_and_family_background
+							?.nature_of_residence_while_attending_school || "family_home",
+					// Health status from updated inventory
+					visionProblems: updatedInventory.health?.physical?.your_vision ? "yes" : "no",
+					generalHealthProblems: updatedInventory.health?.physical?.your_general_health
+						? "yes"
+						: "no",
+					psychologicalConsultation:
+						updatedInventory.health?.psychological?.status === "yes" ? "yes" : "no",
+					// Interest and hobbies
+					favoriteSubject:
+						updatedInventory.interest_and_hobbies?.favorite_subject || "Math",
+					leastFavoriteSubject:
+						updatedInventory.interest_and_hobbies?.favorite_least_subject || "Math",
+					academicOrganizations:
+						updatedInventory.interest_and_hobbies?.academic === "match_club"
+							? "math_club"
+							: updatedInventory.interest_and_hobbies?.academic === "debating_club"
+								? "debating_club"
+								: updatedInventory.interest_and_hobbies?.academic === "science_club"
+									? "science_club"
+									: updatedInventory.interest_and_hobbies?.academic ===
+										  "quizzers_club"
+										? "quizzers_club"
+										: "none",
+					organizationPosition:
+						updatedInventory.interest_and_hobbies
+							?.occupational_position_organization === "officer"
+							? "officer"
+							: "member",
+				};
+
+				// Validate input data
+				if (studentData.age && (studentData.age < 10 || studentData.age > 100)) {
+					inventoryLogger.warn(`Invalid age during prediction: ${studentData.age}`);
+					// Continue without prediction rather than failing the update
+				} else if (
+					studentData.highSchoolAverage &&
+					(studentData.highSchoolAverage < 60 || studentData.highSchoolAverage > 100)
+				) {
+					inventoryLogger.warn(
+						`Invalid high school average during prediction: ${studentData.highSchoolAverage}`,
+					);
+					// Continue without prediction rather than failing the update
+				} else {
+					// Call the mental health predictor
+					const prediction =
+						await mentalHealthPredictor.predictMentalHealthRisk(studentData);
+
+					inventoryLogger.info(
+						`Auto-generated mental health prediction for student ${updatedInventory.studentId}: ${prediction.prediction} (confidence: ${prediction.confidence})`,
+					);
+
+					// Prepare prediction data for storage
+					const predictionData = {
+						academicPerformanceOutlook: prediction.prediction.toLowerCase() as
+							| "improved"
+							| "same"
+							| "declined",
+						confidence: prediction.confidence,
+						modelAccuracy: {
+							decisionTree: prediction.modelAccuracy.decisionTree,
+							randomForest: prediction.modelAccuracy.randomForest,
+						},
+						riskFactors: prediction.riskFactors,
+						mentalHealthRisk: {
+							level: prediction.mentalHealthRisk.level.toLowerCase() as
+								| "low"
+								| "moderate"
+								| "high"
+								| "critical",
+							description: prediction.mentalHealthRisk.description,
+							needsAttention: prediction.mentalHealthRisk.needsAttention,
+							urgency: prediction.mentalHealthRisk.urgency.toLowerCase() as
+								| "none"
+								| "monitor"
+								| "schedule"
+								| "immediate",
+							assessmentSummary: prediction.mentalHealthRisk.needsAttention
+								? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
+								: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
+							disclaimer:
+								"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
+						},
+						inputData: studentData,
+						recommendations: generateRecommendations(prediction),
+						predictionDate: new Date(),
+					};
+
+					// Update inventory with new prediction results
+					const inventoryWithPrediction = await prisma.individualInventory.update({
+						where: { id: updatedInventory.id },
+						data: {
+							mentalHealthPrediction: predictionData,
+							predictionGenerated: true,
+							predictionUpdatedAt: new Date(),
+						},
+						include: {
+							student: {
+								include: {
+									person: true,
+								},
+							},
+						},
+					});
+
+					predictionResult = {
+						prediction: prediction.prediction,
+						confidence: prediction.confidence,
+						modelAccuracy: prediction.modelAccuracy,
+						mentalHealthRisk: prediction.mentalHealthRisk,
+						riskFactors: prediction.riskFactors,
+					};
+
+					// Update response with prediction data
+					res.status(200).json({
+						message:
+							"Inventory updated successfully and mental health prediction generated",
+						inventory: inventoryWithPrediction,
+						prediction: predictionResult,
+					});
+					return;
+				}
+			} catch (predictionError) {
+				inventoryLogger.warn(
+					`Failed to auto-generate mental health prediction: ${predictionError}`,
+				);
+				// Continue with normal update response - prediction failure should not block inventory update
+			}
+
+			// Return updated inventory (with or without prediction)
+			res.status(200).json({
+				message: predictionResult
+					? "Inventory updated successfully and mental health prediction generated"
+					: "Inventory updated successfully",
+				inventory: updatedInventory,
+				...(predictionResult && { prediction: predictionResult }),
+			});
 		} catch (error) {
 			inventoryLogger.error(`${config.ERROR.INVENTORY.ERROR_UPDATING_INVENTORY}: ${error}`);
 			res.status(500).json({ error: config.ERROR.INVENTORY.INTERNAL_SERVER_ERROR });
