@@ -67,7 +67,7 @@ interface ExportFilters {
  * @param filters.studentId - Filter by specific student ID (exact match)
  * @param filters.firstName - Filter by first name (partial match, case insensitive)
  * @param filters.lastName - Filter by last name (partial match, case insensitive)
- * @param filters.year - Filter by year level (1st, 2nd, 3rd, 4th, 5th)
+ * @param filters.year - Filter by year level (1st, 2nd, 3rd, 4th, graduated)
  * @returns CSV content as string
  */
 export const exportStudentDataCsv = async (
@@ -253,9 +253,13 @@ export const exportStudentDataCsv = async (
 
 				// Get personal checklist problems assessment
 				if (user.personalProblemsChecklist) {
-					baseData.checklistRisk = user.personalProblemsChecklist.checklist_analysis?.riskLevel || "";
-					baseData.checklistProblems = user.personalProblemsChecklist.checklist_analysis?.totalProblemsChecked || 0;
-					baseData.checklistDate = user.personalProblemsChecklist.date_completed.toISOString();
+					baseData.checklistRisk =
+						user.personalProblemsChecklist.checklist_analysis?.riskLevel || "";
+					baseData.checklistProblems =
+						user.personalProblemsChecklist.checklist_analysis?.totalProblemsChecked ||
+						0;
+					baseData.checklistDate =
+						user.personalProblemsChecklist.date_completed.toISOString();
 				}
 			}
 

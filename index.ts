@@ -10,6 +10,7 @@ import openApiSpecs from "./docs/openApiSpecs";
 import { Role } from "./generated/prisma";
 import verifyRole from "./middleware/verifyRole";
 import verifyToken from "./middleware/verifyToken";
+import { initializeYearLevelCronJob } from "./services/student-year-level-cron.service";
 
 process.on("uncaughtException", (err) => {
 	console.error("=== UNCAUGHT EXCEPTION ===");
@@ -143,6 +144,14 @@ app.use(config.baseApiPath, checklist);
 server.listen(config.port, async () => {
 	await connectDb();
 	console.log(`Server is running on port ${config.port}. Socket.IO server initialized.`);
+
+	// Initialize student year level auto-increment cron job
+	try {
+		initializeYearLevelCronJob(prisma);
+		console.log("Student year level cron job initialized successfully.");
+	} catch (error) {
+		console.error("Failed to initialize student year level cron job:", error);
+	}
 });
 
 // Graceful shutdown

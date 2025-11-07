@@ -5,6 +5,7 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
+	updateYearLevels(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
@@ -504,6 +505,57 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.put("/:id", controller.remove);
+
+	/**
+	 * @openapi
+	 * /api/student/update-year-levels:
+	 *   post:
+	 *     summary: Manually update all student year levels
+	 *     description: Manually trigger the year level update job for all students. Updates year levels based on enrollment year extracted from student numbers.
+	 *     tags: [Student]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: Year levels updated successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Student year levels updated successfully"
+	 *                 success:
+	 *                   type: boolean
+	 *                   example: true
+	 *                 total:
+	 *                   type: number
+	 *                   example: 100
+	 *                 updated:
+	 *                   type: number
+	 *                   example: 25
+	 *                 skipped:
+	 *                   type: number
+	 *                   example: 75
+	 *                 errors:
+	 *                   type: number
+	 *                   example: 0
+	 *                 duration:
+	 *                   type: number
+	 *                   example: 1250
+	 *       500:
+	 *         description: Internal server error
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Failed to update student year levels"
+	 */
+	routes.post("/update-year-levels", controller.updateYearLevels);
 
 	route.use(path, routes);
 
