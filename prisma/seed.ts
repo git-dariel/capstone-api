@@ -354,7 +354,9 @@ async function main() {
 					student_signature: `${firstName.toUpperCase()} ${lastName.toUpperCase()}`,
 					predictionGenerated: true,
 					predictionUpdatedAt: new Date(),
-					mentalHealthPrediction: generateMentalHealthPrediction(gender),
+					mentalHealthPredictions: {
+						create: [generateMentalHealthPrediction(gender)],
+					},
 					person_to_be_contacted_in_case_of_accident_or_illness: {
 						firstName: faker.person.firstName(),
 						lastName,
@@ -557,7 +559,30 @@ async function main() {
 						]) as any,
 					},
 					test_results: undefined,
-					significant_notes_councilor_only: undefined,
+					significantNotes: {
+						create:
+							getRandomInt(0, 3) > 0
+								? [
+										{
+											date: new Date(),
+											incident: getRandomElement([
+												"Student appeared withdrawn during session",
+												"Student reported increased stress levels",
+												"Student showed improvement in coping mechanisms",
+												"Student discussed personal challenges",
+												"Student requested additional support",
+											]),
+											remarks: getRandomElement([
+												"Recommend follow-up session",
+												"Continue current support plan",
+												"Monitor for further developments",
+												"Positive progress observed",
+												"Consider referral to specialist",
+											]),
+										},
+									]
+								: [],
+					},
 				},
 			});
 

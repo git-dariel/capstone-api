@@ -495,10 +495,10 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (year && !["1st", "2nd", "3rd", "4th", "5th"].includes(String(year))) {
+		if (year && !["1st", "2nd", "3rd", "4th", "graduated"].includes(String(year))) {
 			userLogger.error(`Invalid year filter: ${year}`);
 			res.status(400).json({
-				error: "Invalid year filter. Must be one of: 1st, 2nd, 3rd, 4th, 5th",
+				error: "Invalid year filter. Must be one of: 1st, 2nd, 3rd, 4th, graduated",
 			});
 			return;
 		}

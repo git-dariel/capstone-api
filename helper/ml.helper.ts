@@ -27,6 +27,19 @@ export interface StudentData {
 	speechProblems?: string;
 	generalHealthProblems?: string;
 	psychologicalConsultation?: string;
+	// Psychological Health Details
+	psychologicalConsultationReason?: string;
+	psychiatristConsultation?: string;
+	psychiatristConsultationReason?: string;
+	counselorConsultation?: string;
+	counselorConsultationReason?: string;
+	// Test Results
+	testName?: string;
+	testResultScore?: number;
+	testPercentileRank?: number;
+	// Significant Notes/Incidents
+	significantIncidents?: string;
+	significantIncidentsRemarks?: string;
 	// Interests and Hobbies
 	favoriteSubject?: string;
 	leastFavoriteSubject?: string;
@@ -133,6 +146,11 @@ export class MentalHealthPredictor {
 		"Vision Problems",
 		"General Health Problems",
 		"Psychological Consultation",
+		"Psychiatrist Consultation",
+		"Counselor Consultation",
+		"Test Result Score",
+		"Test Percentile Rank",
+		"Has Significant Incidents",
 		"Academic Organizations",
 		"Organization Position",
 	];
@@ -609,6 +627,11 @@ export class MentalHealthPredictor {
 			visionProblems: normalizedFeatures[10] > 0.5 ? "yes" : "no",
 			generalHealthProblems: normalizedFeatures[11] > 0.5 ? "yes" : "no",
 			psychologicalConsultation: normalizedFeatures[12] > 0.5 ? "yes" : "no",
+			psychiatristConsultation: normalizedFeatures[13] > 0.5 ? "yes" : "no",
+			counselorConsultation: normalizedFeatures[14] > 0.5 ? "yes" : "no",
+			testResultScore: normalizedFeatures[15] * 100, // Denormalize from 0-1 to 0-100
+			testPercentileRank: normalizedFeatures[16] * 100, // Denormalize from 0-1 to 0-100
+			significantIncidents: normalizedFeatures[17] > 0.5 ? "yes" : "no",
 			academicOrganizations: "none", // Default
 			organizationPosition: "member", // Default
 		};
@@ -681,6 +704,27 @@ export class MentalHealthPredictor {
 		const healthEncoded = healthMap[student.generalHealthProblems || "no"] ?? 0;
 		const psychConsultEncoded = healthMap[student.psychologicalConsultation || "no"] ?? 0;
 
+		// Psychiatrist consultation encoding
+		const psychiatristEncoded = healthMap[student.psychiatristConsultation || "no"] ?? 0;
+
+		// Counselor consultation encoding
+		const counselorEncoded = healthMap[student.counselorConsultation || "no"] ?? 0;
+
+		// Test result score encoding (normalize to 0-100 scale)
+		const testScoreNormalized =
+			student.testResultScore && student.testResultScore > 0
+				? Math.min(student.testResultScore, 100) / 100
+				: 0.5;
+
+		// Test percentile rank encoding (normalize to 0-1 scale)
+		const testPercentileNormalized =
+			student.testPercentileRank && student.testPercentileRank > 0
+				? Math.min(student.testPercentileRank, 100) / 100
+				: 0.5;
+
+		// Significant incidents encoding
+		const hasSignificantIncidents = student.significantIncidents ? 1 : 0;
+
 		// Academic organization encoding
 		const orgMap: { [key: string]: number } = {
 			none: 0,
@@ -710,6 +754,11 @@ export class MentalHealthPredictor {
 			visionEncoded,
 			healthEncoded,
 			psychConsultEncoded,
+			psychiatristEncoded,
+			counselorEncoded,
+			testScoreNormalized,
+			testPercentileNormalized,
+			hasSignificantIncidents,
 			orgEncoded,
 			positionEncoded,
 		];
@@ -736,6 +785,16 @@ export class MentalHealthPredictor {
 			speechProblems: student.speechProblems || "no",
 			generalHealthProblems: student.generalHealthProblems || "no",
 			psychologicalConsultation: student.psychologicalConsultation || "no",
+			psychologicalConsultationReason: student.psychologicalConsultationReason || "",
+			psychiatristConsultation: student.psychiatristConsultation || "no",
+			psychiatristConsultationReason: student.psychiatristConsultationReason || "",
+			counselorConsultation: student.counselorConsultation || "no",
+			counselorConsultationReason: student.counselorConsultationReason || "",
+			testName: student.testName || "",
+			testResultScore: student.testResultScore || 0,
+			testPercentileRank: student.testPercentileRank || 0,
+			significantIncidents: student.significantIncidents || "",
+			significantIncidentsRemarks: student.significantIncidentsRemarks || "",
 			favoriteSubject: student.favoriteSubject || "Math",
 			leastFavoriteSubject: student.leastFavoriteSubject || "Math",
 			academicOrganizations: student.academicOrganizations || "none",
@@ -925,6 +984,14 @@ export class MentalHealthPredictor {
 			riskFactors.push("Below average academic performance");
 		}
 
+		// Test performance risk factors
+		if (studentData.testResultScore && studentData.testResultScore < 50) {
+			riskFactors.push("Low test performance score");
+		}
+		if (studentData.testPercentileRank && studentData.testPercentileRank < 25) {
+			riskFactors.push("Below 25th percentile in standardized tests");
+		}
+
 		// Educational continuity risk factors
 		if (studentData.natureOfSchooling === "interrupted") {
 			riskFactors.push("Interrupted schooling history");
@@ -964,9 +1031,44 @@ export class MentalHealthPredictor {
 			riskFactors.push("Physical health challenges");
 		}
 
-		// Mental health history
+		// Mental health history and psychological consultation
 		if (studentData.psychologicalConsultation === "yes") {
 			riskFactors.push("Previous psychological consultation");
+			if (studentData.psychologicalConsultationReason) {
+				riskFactors.push(
+					`Psychology consultation reason: ${studentData.psychologicalConsultationReason}`,
+				);
+			}
+		}
+
+		// Psychiatrist consultation indicates serious mental health concerns
+		if (studentData.psychiatristConsultation === "yes") {
+			riskFactors.push(
+				"Psychiatrist consultation history - significant mental health concern",
+			);
+			if (studentData.psychiatristConsultationReason) {
+				riskFactors.push(
+					`Psychiatric concern: ${studentData.psychiatristConsultationReason}`,
+				);
+			}
+		}
+
+		// Counselor consultation
+		if (studentData.counselorConsultation === "yes") {
+			riskFactors.push("Counselor consultation history");
+			if (studentData.counselorConsultationReason) {
+				riskFactors.push(
+					`Counselor consultation reason: ${studentData.counselorConsultationReason}`,
+				);
+			}
+		}
+
+		// Significant incidents/notes from guidance counselor
+		if (studentData.significantIncidents) {
+			riskFactors.push("Documented significant incidents or behavioral concerns");
+			if (studentData.significantIncidentsRemarks) {
+				riskFactors.push(`Incident notes: ${studentData.significantIncidentsRemarks}`);
+			}
 		}
 
 		// Social engagement
@@ -1012,10 +1114,14 @@ export class MentalHealthPredictor {
 		else if (prediction === "Same") riskScore += 1;
 		// 'Improved' adds 0
 
-		// Risk factor scoring based on new IIF variables
+		// CRITICAL FACTORS - Mental health, test performance, and documented incidents
 		const criticalFactors = [
 			"Below average academic performance",
 			"Previous psychological consultation",
+			"Psychiatrist consultation history",
+			"Documented significant incidents",
+			"Low test performance",
+			"Below 25th percentile",
 			"Financial constraints",
 			"Physical health challenges",
 		];
@@ -1025,23 +1131,36 @@ export class MentalHealthPredictor {
 			"Non-traditional family structure",
 			"Lack of proper study environment",
 			"Housing instability",
+			"Counselor consultation history",
 			"Limited academic social engagement",
 			"Large family size",
 			"Age-related adjustment challenges",
 		];
 
 		riskFactors.forEach((factor) => {
-			if (criticalFactors.some((critical) => factor.includes(critical.split(" ")[0]))) {
-				riskScore += 2;
+			if (
+				criticalFactors.some((critical) =>
+					factor.toLowerCase().includes(critical.toLowerCase()),
+				)
+			) {
+				riskScore += 3; // Higher weight for critical factors
 			} else if (
-				moderateFactors.some((moderate) => factor.includes(moderate.split(" ")[0]))
+				moderateFactors.some((moderate) =>
+					factor.toLowerCase().includes(moderate.toLowerCase()),
+				)
 			) {
 				riskScore += 1;
 			}
 		});
 
+		// Additional scoring based on test results
+		if (studentData.testResultScore && studentData.testResultScore < 50) riskScore += 3;
+		if (studentData.testPercentileRank && studentData.testPercentileRank < 25) riskScore += 2;
+
 		// Additional scoring based on specific IIF data points
 		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 75) riskScore += 2;
+		if (studentData.psychiatristConsultation === "yes") riskScore += 4; // High impact
+		if (studentData.significantIncidents) riskScore += 3; // Documented concerns
 		if (studentData.psychologicalConsultation === "yes" && prediction === "Declined")
 			riskScore += 2;
 		if (studentData.generalHealthProblems === "yes" && studentData.visionProblems === "yes")
@@ -1053,19 +1172,19 @@ export class MentalHealthPredictor {
 			riskScore += 2;
 
 		// Determine risk level and response
-		if (riskScore >= 8) {
+		if (riskScore >= 12) {
 			return {
 				level: "Critical",
 				description:
-					"Student shows multiple indicators of significant academic and personal challenges. Immediate professional intervention and comprehensive support recommended.",
+					"Student shows multiple indicators of significant academic, psychological, and personal challenges. Immediate professional intervention, psychological evaluation, and comprehensive support are strongly recommended. Consider referral to mental health services.",
 				needsAttention: true,
 				urgency: "Immediate",
 			};
-		} else if (riskScore >= 6) {
+		} else if (riskScore >= 8) {
 			return {
 				level: "High",
 				description:
-					"Student displays concerning patterns in academic performance and personal circumstances. Professional consultation and academic support strongly recommended.",
+					"Student displays concerning patterns in academic performance, test results, and/or psychological history. Professional psychological consultation and academic support strongly recommended. Follow-up counseling sessions advised.",
 				needsAttention: true,
 				urgency: "Schedule",
 			};

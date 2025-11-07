@@ -29,15 +29,26 @@ export const controller = (prisma: PrismaClient) => {
 		inventoryLogger.info(`${config.SUCCESS.INVENTORY.GETTING_BY_ID}: ${id}`);
 
 		try {
-			const query: Prisma.IndividualInventoryFindFirstArgs = {
-				where: {
-					id,
-					isDeleted: false,
-				},
-			};
+			let inventory;
 
 			if (fields) {
-				const fieldSelections = fields.split(",").reduce(
+				// Field mapping for backward compatibility
+				const fieldMapping: { [key: string]: string } = {
+					mentalHealthPrediction: "mentalHealthPredictions",
+					significant_notes_councilor_only: "significantNotes",
+				};
+
+				// Map old field names to new ones
+				const mappedFields = fields
+					.split(",")
+					.map((field) => {
+						const trimmedField = field.trim();
+						return fieldMapping[trimmedField] || trimmedField;
+					})
+					.join(",");
+
+				// Use select with field filtering
+				const fieldSelections = mappedFields.split(",").reduce(
 					(acc, field) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
@@ -58,19 +69,37 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
-				query.select = fieldSelections;
-			}
-
-			const inventory = await prisma.individualInventory.findFirst({
-				...query,
-				include: {
-					student: {
-						include: {
-							person: true,
+				inventory = await prisma.individualInventory.findFirst({
+					where: {
+						id,
+						isDeleted: false,
+					},
+					select: fieldSelections,
+				});
+			} else {
+				// Use include when no field filtering is needed
+				inventory = await prisma.individualInventory.findFirst({
+					where: {
+						id,
+						isDeleted: false,
+					},
+					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
+						mentalHealthPredictions: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
+						},
+						significantNotes: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
 						},
 					},
-				},
-			});
+				});
+			}
 
 			if (!inventory) {
 				inventoryLogger.error(`${config.ERROR.INVENTORY.NOT_FOUND}: ${id}`);
@@ -108,8 +137,23 @@ export const controller = (prisma: PrismaClient) => {
 			let inventory;
 
 			if (fields) {
+				// Field mapping for backward compatibility
+				const fieldMapping: { [key: string]: string } = {
+					mentalHealthPrediction: "mentalHealthPredictions",
+					significant_notes_councilor_only: "significantNotes",
+				};
+
+				// Map old field names to new ones
+				const mappedFields = fields
+					.split(",")
+					.map((field) => {
+						const trimmedField = field.trim();
+						return fieldMapping[trimmedField] || trimmedField;
+					})
+					.join(",");
+
 				// Use select with field filtering
-				const fieldSelections = fields.split(",").reduce(
+				const fieldSelections = mappedFields.split(",").reduce(
 					(acc, field) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
@@ -155,6 +199,14 @@ export const controller = (prisma: PrismaClient) => {
 							include: {
 								person: true,
 							},
+						},
+						mentalHealthPredictions: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
+						},
+						significantNotes: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
 						},
 					},
 				});
@@ -258,7 +310,22 @@ export const controller = (prisma: PrismaClient) => {
 			};
 
 			if (fields) {
-				const fieldSelections = fields.split(",").reduce(
+				// Field mapping for backward compatibility
+				const fieldMapping: { [key: string]: string } = {
+					mentalHealthPrediction: "mentalHealthPredictions",
+					significant_notes_councilor_only: "significantNotes",
+				};
+
+				// Map old field names to new ones
+				const mappedFields = fields
+					.split(",")
+					.map((field) => {
+						const trimmedField = field.trim();
+						return fieldMapping[trimmedField] || trimmedField;
+					})
+					.join(",");
+
+				const fieldSelections = mappedFields.split(",").reduce(
 					(acc, field) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
@@ -437,13 +504,13 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						},
 					}),
-				// Optional composite: significant_notes_councilor_only
+				// Significant notes - now an array with create relationship
 				...(significant_notes_councilor_only &&
 					(significant_notes_councilor_only.incident ||
 						significant_notes_councilor_only.remarks ||
 						significant_notes_councilor_only.date) && {
-						significant_notes_councilor_only: {
-							set: {
+						significantNotes: {
+							create: {
 								...significant_notes_councilor_only,
 								date:
 									significant_notes_councilor_only.date === ""
@@ -468,6 +535,10 @@ export const controller = (prisma: PrismaClient) => {
 						include: {
 							person: true,
 						},
+					},
+					significantNotes: {
+						where: { isDeleted: false },
+						orderBy: { createdAt: "desc" },
 					},
 				},
 			});
@@ -603,11 +674,25 @@ export const controller = (prisma: PrismaClient) => {
 					predictionDate: new Date(),
 				};
 
-				// Update inventory with prediction results
+				// Create new prediction record in the array to track history
+				await prisma.mentalHealthPredictionRecord.create({
+					data: {
+						inventoryId: inventory.id,
+						academicPerformanceOutlook: predictionData.academicPerformanceOutlook,
+						confidence: predictionData.confidence,
+						modelAccuracy: predictionData.modelAccuracy,
+						riskFactors: predictionData.riskFactors,
+						mentalHealthRisk: predictionData.mentalHealthRisk,
+						inputData: predictionData.inputData,
+						recommendations: predictionData.recommendations,
+						predictionDate: predictionData.predictionDate,
+					},
+				});
+
+				// Update inventory metadata for quick access
 				const updatedInventory = await prisma.individualInventory.update({
 					where: { id: inventory.id },
 					data: {
-						mentalHealthPrediction: predictionData,
 						predictionGenerated: true,
 						predictionUpdatedAt: new Date(),
 					},
@@ -686,6 +771,7 @@ export const controller = (prisma: PrismaClient) => {
 			interest_and_hobbies,
 			test_results,
 			significant_notes_councilor_only,
+			significantNotes,
 			student_signature,
 		} = req.body;
 
@@ -777,17 +863,38 @@ export const controller = (prisma: PrismaClient) => {
 								},
 							},
 						}),
+					// Handle significantNotes array updates (new format)
+					...(significantNotes &&
+						Array.isArray(significantNotes) && {
+							significantNotes: {
+								deleteMany: {}, // Delete all existing notes first
+								create: significantNotes
+									.filter((note) => note.incident || note.remarks || note.date)
+									.map((note) => ({
+										// Only include the fields allowed in SignificantNotesRecord create
+										date:
+											note.date === "" || !note.date
+												? null
+												: new Date(note.date),
+										incident: note.incident || null,
+										remarks: note.remarks || null,
+									})),
+							},
+						}),
+					// Handle legacy significant_notes_councilor_only (backward compatibility)
 					...(significant_notes_councilor_only &&
+						!significantNotes &&
 						(significant_notes_councilor_only.incident ||
 							significant_notes_councilor_only.remarks ||
 							significant_notes_councilor_only.date) && {
-							significant_notes_councilor_only: {
-								set: {
+							significantNotes: {
+								create: {
 									...significant_notes_councilor_only,
 									date:
-										significant_notes_councilor_only.date === ""
+										significant_notes_councilor_only.date === "" ||
+										!significant_notes_councilor_only.date
 											? null
-											: (significant_notes_councilor_only.date ?? null),
+											: new Date(significant_notes_councilor_only.date),
 								},
 							},
 						}),
@@ -799,9 +906,12 @@ export const controller = (prisma: PrismaClient) => {
 							person: true,
 						},
 					},
+					significantNotes: {
+						where: { isDeleted: false },
+						orderBy: { createdAt: "desc" },
+					},
 				},
 			});
-
 			inventoryLogger.info(`${config.SUCCESS.INVENTORY.UPDATE}: ${updatedInventory.id}`);
 
 			// Create notification for inventory update
@@ -959,11 +1069,25 @@ export const controller = (prisma: PrismaClient) => {
 						predictionDate: new Date(),
 					};
 
-					// Update inventory with new prediction results
+					// Create new prediction record in the array to track history
+					await prisma.mentalHealthPredictionRecord.create({
+						data: {
+							inventoryId: updatedInventory.id,
+							academicPerformanceOutlook: predictionData.academicPerformanceOutlook,
+							confidence: predictionData.confidence,
+							modelAccuracy: predictionData.modelAccuracy,
+							riskFactors: predictionData.riskFactors,
+							mentalHealthRisk: predictionData.mentalHealthRisk,
+							inputData: predictionData.inputData,
+							recommendations: predictionData.recommendations,
+							predictionDate: predictionData.predictionDate,
+						},
+					});
+
+					// Update inventory metadata for quick access
 					const inventoryWithPrediction = await prisma.individualInventory.update({
 						where: { id: updatedInventory.id },
 						data: {
-							mentalHealthPrediction: predictionData,
 							predictionGenerated: true,
 							predictionUpdatedAt: new Date(),
 						},
@@ -1073,6 +1197,16 @@ export const controller = (prisma: PrismaClient) => {
 			visionProblems,
 			generalHealthProblems,
 			psychologicalConsultation,
+			psychologicalConsultationReason,
+			psychiatristConsultation,
+			psychiatristConsultationReason,
+			counselorConsultation,
+			counselorConsultationReason,
+			testName,
+			testResultScore,
+			testPercentileRank,
+			significantIncidents,
+			significantIncidentsRemarks,
 			favoriteSubject,
 			leastFavoriteSubject,
 			academicOrganizations,
@@ -1111,6 +1245,13 @@ export const controller = (prisma: PrismaClient) => {
 				where: {
 					studentId,
 					isDeleted: false,
+				},
+				include: {
+					significantNotes: {
+						where: { isDeleted: false },
+						orderBy: { createdAt: "desc" },
+						take: 1,
+					},
 				},
 			});
 
@@ -1183,6 +1324,33 @@ export const controller = (prisma: PrismaClient) => {
 				psychologicalConsultation:
 					psychologicalConsultation ||
 					(existingInventory.health?.psychological?.status === "yes" ? "yes" : "no"),
+				psychologicalConsultationReason:
+					psychologicalConsultationReason ||
+					existingInventory.health?.psychological?.for_what ||
+					"",
+				psychiatristConsultation: psychiatristConsultation || "no",
+				psychiatristConsultationReason: psychiatristConsultationReason || "",
+				counselorConsultation: counselorConsultation || "no",
+				counselorConsultationReason: counselorConsultationReason || "",
+				// Test results
+				testName: testName || existingInventory.test_results?.name_of_test || "",
+				testResultScore:
+					testResultScore ||
+					(existingInventory.test_results?.rs
+						? parseInt(existingInventory.test_results.rs)
+						: 0),
+				testPercentileRank:
+					testPercentileRank ||
+					(existingInventory.test_results?.pr
+						? parseInt(existingInventory.test_results.pr)
+						: 0),
+				// Significant incidents
+				significantIncidents:
+					significantIncidents || existingInventory.significantNotes?.[0]?.incident || "",
+				significantIncidentsRemarks:
+					significantIncidentsRemarks ||
+					existingInventory.significantNotes?.[0]?.remarks ||
+					"",
 				// Interest and hobbies
 				favoriteSubject:
 					favoriteSubject ||
@@ -1298,11 +1466,25 @@ export const controller = (prisma: PrismaClient) => {
 				predictionDate: new Date(),
 			};
 
-			// Update existing inventory with new prediction results
+			// Create new prediction record in the array to track history
+			const newPredictionRecord = await prisma.mentalHealthPredictionRecord.create({
+				data: {
+					inventoryId: existingInventory.id,
+					academicPerformanceOutlook: predictionData.academicPerformanceOutlook,
+					confidence: predictionData.confidence,
+					modelAccuracy: predictionData.modelAccuracy,
+					riskFactors: predictionData.riskFactors,
+					mentalHealthRisk: predictionData.mentalHealthRisk,
+					inputData: predictionData.inputData,
+					recommendations: predictionData.recommendations,
+					predictionDate: predictionData.predictionDate,
+				},
+			});
+
+			// Update inventory metadata for quick access
 			const updatedInventory = await prisma.individualInventory.update({
 				where: { id: existingInventory.id },
 				data: {
-					mentalHealthPrediction: predictionData,
 					predictionGenerated: true,
 					predictionUpdatedAt: new Date(),
 				},
@@ -1311,6 +1493,15 @@ export const controller = (prisma: PrismaClient) => {
 						include: {
 							person: true,
 						},
+					},
+					mentalHealthPredictions: {
+						where: {
+							isDeleted: false,
+						},
+						orderBy: {
+							predictionDate: "desc",
+						},
+						take: 1, // Get most recent prediction for the response
 					},
 				},
 			});
@@ -1455,6 +1646,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const getPredictionByStudentId = async (req: Request, res: Response, _next: NextFunction) => {
 		const { studentId } = req.params;
+		const { limit = 5, offset = 0 } = req.query;
 
 		if (!studentId) {
 			inventoryLogger.error("Student ID is required");
@@ -1471,12 +1663,7 @@ export const controller = (prisma: PrismaClient) => {
 					isDeleted: false,
 					predictionGenerated: true,
 				},
-				select: {
-					id: true,
-					studentId: true,
-					mentalHealthPrediction: true,
-					predictionGenerated: true,
-					predictionUpdatedAt: true,
+				include: {
 					student: {
 						select: {
 							studentNumber: true,
@@ -1490,10 +1677,20 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						},
 					},
+					mentalHealthPredictions: {
+						where: {
+							isDeleted: false,
+						},
+						orderBy: {
+							predictionDate: "desc",
+						},
+						take: Math.min(parseInt(limit as string) || 5, 50),
+						skip: parseInt(offset as string) || 0,
+					},
 				},
 			});
 
-			if (!inventory) {
+			if (!inventory || inventory.mentalHealthPredictions.length === 0) {
 				inventoryLogger.info(`No prediction data found for student ID: ${studentId}`);
 				res.status(404).json({
 					error: "Mental health prediction not found for this student",
@@ -1502,6 +1699,9 @@ export const controller = (prisma: PrismaClient) => {
 				});
 				return;
 			}
+
+			// Get the latest prediction for quick summary
+			const latestPrediction = inventory.mentalHealthPredictions[0];
 
 			inventoryLogger.info(`Prediction data retrieved for student: ${inventory.id}`);
 			res.status(200).json({
@@ -1512,7 +1712,9 @@ export const controller = (prisma: PrismaClient) => {
 					program: inventory.student?.program,
 					name: `${inventory.student?.person?.firstName || ""} ${inventory.student?.person?.lastName || ""}`.trim(),
 				},
-				prediction: inventory.mentalHealthPrediction,
+				latestPrediction,
+				predictionHistory: inventory.mentalHealthPredictions,
+				predictionCount: inventory.mentalHealthPredictions.length,
 				predictionGenerated: inventory.predictionGenerated,
 				predictionUpdatedAt: inventory.predictionUpdatedAt,
 			});

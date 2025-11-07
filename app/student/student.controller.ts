@@ -3,6 +3,7 @@ import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { controller as personController } from "../person/person.controller";
+import { updateStudentYearLevels } from "../../services/student-year-level-cron.service";
 
 const logger = getLogger();
 const studentLogger = logger.child({ module: "student" });
@@ -696,11 +697,35 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const updateYearLevels = async (req: Request, res: Response, _next: NextFunction) => {
+		studentLogger.info("Manual year level update requested");
+
+		try {
+			const result = await updateStudentYearLevels(prisma);
+
+			studentLogger.info(
+				`Year level update completed. Updated: ${result.updated}, Skipped: ${result.skipped}, Errors: ${result.errors}`,
+			);
+
+			res.status(200).json({
+				message: "Student year levels updated successfully",
+				...result,
+			});
+		} catch (error) {
+			studentLogger.error(`Failed to update student year levels: ${error}`);
+			res.status(500).json({
+				error: "Failed to update student year levels",
+				details: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+
 	return {
 		getById,
 		getAll,
 		create,
 		update,
 		remove,
+		updateYearLevels,
 	};
 };
