@@ -2,10 +2,7 @@ import * as cron from "node-cron";
 import { PrismaClient } from "../generated/prisma";
 import { getLogger } from "../helper/logger";
 import {
-	calculateYearLevelFromStudentNumber,
-	calculateYearLevel,
-	extractEnrollmentYear,
-	YearLevel,
+	calculateYearLevelFromStudentNumber
 } from "../helper/student.helper";
 
 const logger = getLogger();
