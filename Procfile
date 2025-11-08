@@ -1,1 +1,1 @@
-web: npm run prisma-generate && npm run build && npm run prod
+web: NODE_ENV=production node --max-old-space-size=512 ./dist/server.ts

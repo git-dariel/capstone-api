@@ -3,33 +3,44 @@ const path = require("path");
 module.exports = {
 	entry: "./index.ts",
 	target: "node",
+	mode: "production",
+	devtool: false, // Disable source maps to save memory
 	externals: [
 		/^[a-z\-0-9]+$/, // Ignore node_modules folder
 	],
 	output: {
-		filename: "server.ts", // output file
+		filename: "server.ts",
 		path: path.join(__dirname, "dist"),
 		libraryTarget: "commonjs",
 	},
 	resolve: {
-		// Add in `.ts` and `.tsx` as a resolvable extension.
-		extensions: [".webpack.js", ".web.js", ".ts", ".tsx", ".js", ".json", ".yaml"],
+		extensions: [".ts", ".tsx", ".js", ".json"],
 		modules: ["./node_modules", "node_modules"],
-	},
-	resolveLoader: {
-		//root: [`${root}/node_modules`],
 	},
 	module: {
 		rules: [
 			{
-				// all files with a `.ts` or `.tsx` extension will be handled by `ts-loader`
 				test: /\.tsx?$/,
 				use: [
 					{
 						loader: "ts-loader",
+						options: {
+							transpileOnly: true, // Skip type checking during build
+							experimentalWatchApi: true,
+						},
 					},
 				],
+				exclude: /node_modules/,
 			},
 		],
+	},
+	optimization: {
+		minimize: true,
+		nodeEnv: false,
+	},
+	performance: {
+		hints: false,
+		maxEntrypointSize: 512000,
+		maxAssetSize: 512000,
 	},
 };
