@@ -30,6 +30,7 @@ enum PhysicalProblem {
 }
 
 enum PhysicalSymptoms {
+  none
   shortness_of_breath
   racing_heart
   headaches
@@ -91,7 +92,7 @@ model Consent {
   financial_status            Financial
   what_brings_you_to_guidance String?
   physical_problem            PhysicalProblem
-  physical_symptoms           PhysicalSymptoms
+  physical_symptoms           PhysicalSymptoms @default(none)
   concerns                    PresentConcerns
   services                    Services?
   isDeleted                   Boolean          @default(false)
