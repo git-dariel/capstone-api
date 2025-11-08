@@ -175,7 +175,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Generate OTP for email verification
 			const otp = otpEmailHelper.generateOTP();
-			const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+			const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
 
 			// Hash the password before storing
 			const hashedPassword = await bcrypt.hash(password, 10);
@@ -433,7 +433,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Generate OTP for email verification
 			const otp = otpEmailHelper.generateOTP();
-			const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+			const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
 
 			// Hash the password before storing
 			const hashedPassword = await bcrypt.hash(password, 10);
@@ -834,7 +834,7 @@ export const controller = (prisma: PrismaClient) => {
 					if (otpEmailHelper) {
 						// Generate new OTP
 						const newOtp = otpEmailHelper.generateOTP();
-						const newOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+						const newOtpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
 
 						// Update pending registration with new OTP
 						await prisma.pendingRegistration.update({
@@ -947,7 +947,7 @@ export const controller = (prisma: PrismaClient) => {
 				}
 
 				const newOtp = otpEmailHelper.generateOTP();
-				const newOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+				const newOtpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
 				await prisma.user.update({
 					where: { id: user.id },
@@ -1351,7 +1351,7 @@ export const controller = (prisma: PrismaClient) => {
 				}
 
 				const newOtp = otpEmailHelper.generateOTP();
-				const newOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+				const newOtpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
 
 				// Update pending registration with new OTP
 				await prisma.pendingRegistration.update({
@@ -1435,7 +1435,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const newOtp = otpEmailHelper.generateOTP();
-			const newOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+			const newOtpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
 
 			// Update user with new OTP
 			await prisma.user.update({
