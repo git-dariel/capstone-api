@@ -3,7 +3,7 @@ services:
       name: mental-health-api
       env: node
       plan: standard
-      buildCommand: "npm install && npm run prisma-generate && npm run build"
+      buildCommand: "NODE_ENV=production npm install && npm run prisma-generate && npm run build"
       startCommand: "npm run prod"
       envVars:
           - key: NODE_ENV

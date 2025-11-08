@@ -9,14 +9,14 @@
 		"test": "mocha --require ts-node/register tests/**/*.spec.ts --exit",
 		"build": "NODE_ENV=production node --max-old-space-size=512 ./node_modules/webpack/bin/webpack.js --config webpack.config.js",
 		"prod": "NODE_ENV=production node ./dist/server.ts",
-		"postinstall": "if [ \"$NODE_ENV\" != \"production\" ]; then prisma generate; fi",
+		"postinstall": "if [ \"$NODE_ENV\" != \"production\" ]; then npm run prepare; fi",
 		"prisma-docs": "npx prisma studio",
 		"prisma-migrate": "npx prisma migrate dev",
 		"prisma-generate": "npx prisma generate",
 		"prisma-format": "npx prisma format",
 		"prisma-seed": "npx prisma db seed",
 		"prisma-reset": "npx prisma migrate reset --force",
-		"prepare": "husky",
+		"prepare": "if [ \"$NODE_ENV\" != \"production\" ]; then husky; fi",
 		"generate-data": "ts-node scripts/generate-data.ts"
 	},
 	"prisma": {

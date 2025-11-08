@@ -2,7 +2,7 @@
 
 ## Problem
 
-The API was experiencing "JavaScript heap out of memory" errors during deployment on Render.
+The API was experiencing "JavaScript heap out of memory" errors during deployment on Render, and build failures due to husky not being available in production.
 
 ## Root Causes
 
@@ -10,17 +10,18 @@ The API was experiencing "JavaScript heap out of memory" errors during deploymen
 2. **Prisma generation during build** - Running during npm install multiplied memory usage
 3. **No explicit memory allocation** - Node.js default heap was insufficient
 4. **Source maps enabled** - Adding unnecessary memory overhead during build
+5. **husky prepare hook running in production** - Dev dependency failing during npm install when NODE_ENV not set early enough
 
 ## Solutions Implemented
 
 ### 1. **Updated Procfile**
 
 ```
-web: NODE_ENV=production node --max-old-space-size=512 ./dist/server.ts
+web: NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts
 ```
 
-- Allocates 512MB of heap memory explicitly
-- Sets production environment to skip unnecessary operations
+- Sets NODE_ENV before Node.js starts
+- Allocates 512MB of heap memory explicitly via NODE_OPTIONS
 - Runs pre-built binary directly (no build on startup)
 
 ### 2. **Optimized webpack.config.js**
@@ -36,40 +37,55 @@ web: NODE_ENV=production node --max-old-space-size=512 ./dist/server.ts
 ```json
 "build": "NODE_ENV=production node --max-old-space-size=512 ./node_modules/webpack/bin/webpack.js --config webpack.config.js"
 "prod": "NODE_ENV=production node ./dist/server.ts"
-"postinstall": "if [ \"$NODE_ENV\" != \"production\" ]; then prisma generate; fi"
+"postinstall": "if [ \"$NODE_ENV\" != \"production\" ]; then npm run prepare; fi"
+"prepare": "if [ \"$NODE_ENV\" != \"production\" ]; then husky; fi"
 ```
 
-- Build script now allocates 512MB to webpack
-- Skips prisma generation during production installs
+- Build script allocates 512MB to webpack
+- Skips husky and prisma generation during production installs
 - Sets NODE_ENV consistently
+- Only runs husky in development environments
 
 ### 4. **render.yaml Configuration**
 
-Created explicit Render configuration for:
+Created explicit Render configuration:
 
-- Build command: Separate npm install, prisma-generate, and build steps
-- Start command: Run production binary
-- Environment variables: NODE_ENV and NODE_OPTIONS
+```yaml
+buildCommand: "NODE_ENV=production npm install && npm run prisma-generate && npm run build"
+startCommand: "npm run prod"
+envVars:
+    - key: NODE_ENV
+      value: production
+    - key: NODE_OPTIONS
+      value: "--max-old-space-size=512"
+```
+
+- Sets NODE_ENV=production early in build command
+- Separates npm install, prisma-generate, and build steps
+- Defines environment variables for runtime
 - Health check path for monitoring
 
 ## Deployment Steps for Render
 
-### Option A: Using Dashboard
+### Option A: Using Dashboard (Recommended)
 
 1. Create new Web Service on Render
 2. Connect your GitHub repository
-3. In Service Settings, add environment variables:
+3. In Service Settings, add these environment variables:
 
     - `NODE_ENV`: `production`
     - `NODE_OPTIONS`: `--max-old-space-size=512`
     - `DATABASE_URL`: Your MongoDB connection string
     - `JWT_SECRET`: Your JWT secret
-    - Other required env vars from `.env`
+    - `EMAIL_USER`: Your email
+    - `EMAIL_PASSWORD`: Your app password
+    - `CLOUDINARY_*`: Your Cloudinary credentials
+    - Other required vars from `.env`
 
 4. Set Build Command:
 
     ```
-    npm install && npm run prisma-generate && npm run build
+    NODE_ENV=production npm install && npm run prisma-generate && npm run build
     ```
 
 5. Set Start Command:
@@ -85,16 +101,55 @@ Created explicit Render configuration for:
 1. Push `render.yaml` to your repository
 2. In Render dashboard, select "New" → "Web Service"
 3. Connect your repo
-4. Render will auto-detect `render.yaml` and apply configurations
+4. Render will auto-detect `render.yaml` and apply configurations automatically
+
+## Troubleshooting Build Failures
+
+### Error: "husky: not found"
+
+**Cause**: NODE_ENV not set to production during npm install
+
+**Solution**: Ensure your build command starts with `NODE_ENV=production`
+
+### Error: "JavaScript heap out of memory"
+
+**Solution 1**: Increase NODE_OPTIONS in environment variables:
+
+```
+NODE_OPTIONS="--max-old-space-size=1024"
+```
+
+**Solution 2**: Update render.yaml buildCommand:
+
+```yaml
+buildCommand: "NODE_ENV=production npm install --legacy-peer-deps && npm run prisma-generate && npm run build"
+```
+
+### Error: "prisma generate failed"
+
+**Cause**: Prisma schema not accessible or DATABASE_URL not set
+
+**Solution**:
+
+- Set DATABASE_URL environment variable in Render dashboard
+- Ensure .prisma/generated directory is in .gitignore (check if needed)
+
+### Error: "Port binding issue"
+
+**Solution**: Render assigns port dynamically via PORT environment variable
+
+- Your app already handles this: `process.env.PORT || 5000`
+- Make sure binding to `0.0.0.0` not localhost
+- Check `index.ts` line with `server.listen(config.port, ...)`
 
 ## Memory Optimization Tips
 
 ### If Still Running Out of Memory:
 
-1. **Increase heap size** (current is 512MB):
+1. **Further increase heap size**:
 
     ```
-    NODE_OPTIONS="--max-old-space-size=1024"
+    NODE_OPTIONS="--max-old-space-size=2048"
     ```
 
 2. **Split webpack output**:

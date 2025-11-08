@@ -1,1 +1,1 @@
-web: NODE_ENV=production node --max-old-space-size=512 ./dist/server.ts
+web: NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts
