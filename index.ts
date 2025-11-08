@@ -11,6 +11,7 @@ import { Role } from "./generated/prisma";
 import verifyRole from "./middleware/verifyRole";
 import verifyToken from "./middleware/verifyToken";
 import { initializeYearLevelCronJob } from "./services/student-year-level-cron.service";
+import { initializePendingRegistrationCleanupCronJob } from "./services/pending-registration-cleanup-cron.service";
 
 process.on("uncaughtException", (err) => {
 	console.error("=== UNCAUGHT EXCEPTION ===");
@@ -151,6 +152,14 @@ server.listen(config.port, async () => {
 		console.log("Student year level cron job initialized successfully.");
 	} catch (error) {
 		console.error("Failed to initialize student year level cron job:", error);
+	}
+
+	// Initialize pending registration cleanup cron job
+	try {
+		initializePendingRegistrationCleanupCronJob(prisma);
+		console.log("Pending registration cleanup cron job initialized successfully.");
+	} catch (error) {
+		console.error("Failed to initialize pending registration cleanup cron job:", error);
 	}
 });
 
