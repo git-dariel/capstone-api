@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"start": "if [ \"$NODE_ENV\" = \"production\" ]; then NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts; else nodemon index.ts; fi",
+		"start": "if [ \"$NODE_ENV\" = \"production\" ]; then if [ ! -d \"./dist\" ]; then npm run build; fi && NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts; else nodemon index.ts; fi",
 		"lint": "eslint app/**/*.ts index.ts",
 		"format": "eslint app/**/*.ts index.ts --fix",
 		"test": "mocha --require ts-node/register tests/**/*.spec.ts --exit",

@@ -14,16 +14,17 @@ The API was experiencing "JavaScript heap out of memory" errors during deploymen
 
 ## Solutions Implemented
 
-### 1. **Smart npm start Script**
+### 1. **Smart npm start Script (Now with Auto-Build Fallback)**
 
 ```json
-"start": "if [ \"$NODE_ENV\" = \"production\" ]; then NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts; else nodemon index.ts; fi"
+"start": "if [ \"$NODE_ENV\" = \"production\" ]; then if [ ! -d \"./dist\" ]; then npm run build; fi && NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts; else nodemon index.ts; fi"
 ```
 
 - Detects NODE_ENV and runs appropriate command
-- Production: Runs pre-built binary with memory allocation
+- Production: Checks if dist folder exists, builds if needed, then starts server
 - Development: Runs with nodemon for live reload
-- Fallback for when Render ignores render.yaml
+- **Fallback protection**: Even if build command doesn't run, npm start will build automatically
+- More resilient to Render configuration issues
 
 ### 2. **Updated Procfile**
 
