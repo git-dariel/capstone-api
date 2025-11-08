@@ -14,7 +14,18 @@ The API was experiencing "JavaScript heap out of memory" errors during deploymen
 
 ## Solutions Implemented
 
-### 1. **Updated Procfile**
+### 1. **Smart npm start Script**
+
+```json
+"start": "if [ \"$NODE_ENV\" = \"production\" ]; then NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts; else nodemon index.ts; fi"
+```
+
+- Detects NODE_ENV and runs appropriate command
+- Production: Runs pre-built binary with memory allocation
+- Development: Runs with nodemon for live reload
+- Fallback for when Render ignores render.yaml
+
+### 2. **Updated Procfile**
 
 ```
 web: NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts
@@ -23,8 +34,9 @@ web: NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/serve
 - Sets NODE_ENV before Node.js starts
 - Allocates 512MB of heap memory explicitly via NODE_OPTIONS
 - Runs pre-built binary directly (no build on startup)
+- Used as fallback when render.yaml not recognized
 
-### 2. **Optimized webpack.config.js**
+### 3. **Optimized webpack.config.js**
 
 - Added `mode: "production"` for optimized build
 - Disabled source maps with `devtool: false`
@@ -32,11 +44,11 @@ web: NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/serve
 - Added proper `exclude: /node_modules/` to avoid processing unnecessary files
 - Configured minimization and performance hints
 
-### 3. **Enhanced package.json Scripts**
+### 4. **Enhanced package.json Scripts**
 
 ```json
 "build": "NODE_ENV=production node --max-old-space-size=512 ./node_modules/webpack/bin/webpack.js --config webpack.config.js"
-"prod": "NODE_ENV=production node ./dist/server.ts"
+"prod": "NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts"
 "postinstall": "if [ \"$NODE_ENV\" != \"production\" ]; then npm run prepare; fi"
 "prepare": "if [ \"$NODE_ENV\" != \"production\" ]; then husky; fi"
 ```
@@ -45,14 +57,15 @@ web: NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/serve
 - Skips husky and prisma generation during production installs
 - Sets NODE_ENV consistently
 - Only runs husky in development environments
+- npm start intelligently switches between dev and prod modes
 
-### 4. **render.yaml Configuration**
+### 5. **render.yaml Configuration**
 
-Created explicit Render configuration:
+Updated Render configuration:
 
 ```yaml
-buildCommand: "NODE_ENV=production npm install && npm run prisma-generate && npm run build"
-startCommand: "npm run prod"
+buildCommand: "NODE_ENV=production npm ci --omit=dev && npm run prisma-generate && npm run build"
+startCommand: "NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts"
 envVars:
     - key: NODE_ENV
       value: production
@@ -60,18 +73,34 @@ envVars:
       value: "--max-old-space-size=512"
 ```
 
-- Sets NODE_ENV=production early in build command
-- Separates npm install, prisma-generate, and build steps
-- Defines environment variables for runtime
-- Health check path for monitoring
+**Key improvements:**
+
+- Uses `npm ci` instead of `npm install` for faster, more reliable builds
+- Adds `--omit=dev` to skip dev dependencies in production build
+- Sets NODE_ENV=production in both build and start commands
+- Defines environment variables explicitly for runtime
 
 ## Deployment Steps for Render
 
-### Option A: Using Dashboard (Recommended)
+### Quick Setup (Recommended - Uses render.yaml)
+
+1. Ensure you've pushed latest changes including `render.yaml` to GitHub
+2. In Render dashboard, click "New" → "Web Service"
+3. Connect your GitHub repository
+4. Render will auto-detect `render.yaml` configuration
+5. Add any environment variables not in render.yaml:
+    - `DATABASE_URL`: Your MongoDB connection string
+    - `JWT_SECRET`: Your JWT secret
+    - `EMAIL_USER`, `EMAIL_PASSWORD`: Email credentials
+    - `CLOUDINARY_*`: Cloudinary credentials
+    - Any other secrets from `.env`
+6. Deploy!
+
+### Manual Setup (If render.yaml not recognized)
 
 1. Create new Web Service on Render
 2. Connect your GitHub repository
-3. In Service Settings, add these environment variables:
+3. In Service Settings, set environment variables:
 
     - `NODE_ENV`: `production`
     - `NODE_OPTIONS`: `--max-old-space-size=512`
@@ -79,37 +108,43 @@ envVars:
     - `JWT_SECRET`: Your JWT secret
     - `EMAIL_USER`: Your email
     - `EMAIL_PASSWORD`: Your app password
-    - `CLOUDINARY_*`: Your Cloudinary credentials
+    - `CLOUDINARY_API_KEY`: Cloudinary API key
+    - `CLOUDINARY_API_SECRET`: Cloudinary API secret
+    - `CLOUDINARY_CLOUD_NAME`: Cloudinary cloud name
     - Other required vars from `.env`
 
 4. Set Build Command:
 
     ```
-    NODE_ENV=production npm install && npm run prisma-generate && npm run build
+    NODE_ENV=production npm ci --omit=dev && npm run prisma-generate && npm run build
     ```
 
-5. Set Start Command:
+5. Leave Start Command as default (will use `npm start` which auto-detects NODE_ENV)
 
-    ```
-    npm run prod
-    ```
+    - OR set to: `NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts`
 
 6. Deploy!
 
-### Option B: Using render.yaml
+## Troubleshooting Build & Deployment Failures
 
-1. Push `render.yaml` to your repository
-2. In Render dashboard, select "New" → "Web Service"
-3. Connect your repo
-4. Render will auto-detect `render.yaml` and apply configurations automatically
+### Error: "nodemon: not found"
 
-## Troubleshooting Build Failures
+**Cause**: npm install used instead of production build command, or NODE_ENV not set
+
+**Solution**:
+
+- The smart `npm start` script should handle this automatically
+- If still occurring, verify NODE_ENV=production is set in Render environment variables
+- Check that the buildCommand sets NODE_ENV before npm install
 
 ### Error: "husky: not found"
 
 **Cause**: NODE_ENV not set to production during npm install
 
-**Solution**: Ensure your build command starts with `NODE_ENV=production`
+**Solution**:
+
+- Ensure build command starts with `NODE_ENV=production`
+- The postinstall hook will skip husky when NODE_ENV=production
 
 ### Error: "JavaScript heap out of memory"
 
@@ -119,10 +154,10 @@ envVars:
 NODE_OPTIONS="--max-old-space-size=1024"
 ```
 
-**Solution 2**: Update render.yaml buildCommand:
+**Solution 2**: If still failing, try:
 
-```yaml
-buildCommand: "NODE_ENV=production npm install --legacy-peer-deps && npm run prisma-generate && npm run build"
+```bash
+NODE_ENV=production npm ci --legacy-peer-deps --omit=dev && npm run prisma-generate && npm run build
 ```
 
 ### Error: "prisma generate failed"
@@ -131,38 +166,57 @@ buildCommand: "NODE_ENV=production npm install --legacy-peer-deps && npm run pri
 
 **Solution**:
 
-- Set DATABASE_URL environment variable in Render dashboard
-- Ensure .prisma/generated directory is in .gitignore (check if needed)
+- Set DATABASE_URL environment variable in Render dashboard (required for schema generation)
+- Ensure your Prisma schema is committed to git
+- Check that `.env` is NOT in .gitignore (unless you have DATABASE_URL set in Render)
 
 ### Error: "Port binding issue"
 
 **Solution**: Render assigns port dynamically via PORT environment variable
 
 - Your app already handles this: `process.env.PORT || 5000`
+- Render will assign a port like 10000, 10001, etc.
 - Make sure binding to `0.0.0.0` not localhost
-- Check `index.ts` line with `server.listen(config.port, ...)`
+- Verify `index.ts` server.listen properly handles the dynamic PORT
+
+### Deployment keeps restarting
+
+**Cause**: Often due to app crash after start
+
+**Solution**:
+
+1. Check Render logs for specific error messages
+2. Verify all required environment variables are set
+3. Test locally: `NODE_ENV=production npm run build && npm run prod`
+4. Check database connection with your DATABASE_URL
 
 ## Memory Optimization Tips
 
 ### If Still Running Out of Memory:
 
-1. **Further increase heap size**:
+1. **Increase heap size further**:
 
     ```
     NODE_OPTIONS="--max-old-space-size=2048"
     ```
 
-2. **Split webpack output**:
+2. **Use npm ci instead of npm install**:
+
+    ```
+    NODE_ENV=production npm ci --omit=dev
+    ```
+
+3. **Split webpack output**:
 
     - Create multiple entry points
     - Use tree-shaking to remove unused code
 
-3. **Lazy load dependencies**:
+4. **Lazy load dependencies**:
 
     - Consider only loading heavy ML libraries when needed
     - The `canvas` package is especially memory-intensive
 
-4. **Monitor in Render**:
+5. **Monitor in Render**:
     - Check "Logs" tab in Render dashboard
     - Watch for OOM errors in real-time
 
