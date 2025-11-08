@@ -3,12 +3,12 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"start": "if [ \"$NODE_ENV\" = \"production\" ]; then if [ ! -d \"./dist\" ]; then npm run build; fi && NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts; else nodemon index.ts; fi",
+		"start": "if [ \"$NODE_ENV\" = \"production\" ]; then if [ ! -d \"./dist\" ]; then npm run build; fi && NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.js; else nodemon index.ts; fi",
 		"lint": "eslint app/**/*.ts index.ts",
 		"format": "eslint app/**/*.ts index.ts --fix",
 		"test": "mocha --require ts-node/register tests/**/*.spec.ts --exit",
-		"build": "NODE_ENV=production node --max-old-space-size=512 ./node_modules/webpack/bin/webpack.js --config webpack.config.js",
-		"prod": "NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts",
+		"build": "NODE_ENV=production node --max-old-space-size=512 node_modules/.bin/webpack --config webpack.config.js",
+		"prod": "NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.js",
 		"postinstall": "if [ \"$NODE_ENV\" != \"production\" ]; then npm run prepare; fi",
 		"prisma-docs": "npx prisma studio",
 		"prisma-migrate": "npx prisma migrate dev",
@@ -34,8 +34,6 @@
 		"authentication"
 	],
 	"devDependencies": {
-		"@logtail/node": "^0.5.2",
-		"@logtail/winston": "^0.5.2",
 		"@types/chai": "^5.2.1",
 		"@types/cookie-parser": "^1.4.8",
 		"@types/express": "^5.0.3",
@@ -58,19 +56,12 @@
 		"mocha": "^11.1.0",
 		"mongodb": "^6.17.0",
 		"nodemon": "^3.1.9",
-		"npm": "^11.2.0",
-		"prisma": "^6.5.0",
-		"swagger-jsdoc": "^6.2.8",
-		"swagger-ui-express": "^5.0.1",
-		"ts-loader": "^9.5.2",
-		"ts-node": "^10.9.2",
-		"tsx": "^4.19.3",
-		"typescript": "^5.8.3",
-		"webpack": "^5.96.1",
-		"webpack-cli": "^5.1.4"
+		"npm": "^11.2.0"
 	},
 	"dependencies": {
 		"@faker-js/faker": "^8.4.1",
+		"@logtail/node": "^0.5.2",
+		"@logtail/winston": "^0.5.2",
 		"@prisma/client": "^6.5.0",
 		"@types/bcrypt": "^5.0.2",
 		"@types/node-cron": "^3.0.11",
@@ -94,8 +85,17 @@
 		"node-cron": "^4.2.1",
 		"nodemailer": "^7.0.3",
 		"pizzip": "^3.2.0",
+		"prisma": "^6.5.0",
 		"random-forest": "^0.0.7",
 		"socket.io": "^4.8.1",
+		"swagger-jsdoc": "^6.2.8",
+		"swagger-ui-express": "^5.0.1",
+		"ts-loader": "^9.5.2",
+		"ts-node": "^10.9.2",
+		"tsx": "^4.19.3",
+		"typescript": "^5.8.3",
+		"webpack": "^5.96.1",
+		"webpack-cli": "^5.1.4",
 		"winston": "^3.17.0"
 	}
 }

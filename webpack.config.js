@@ -6,10 +6,16 @@ module.exports = {
 	mode: "production",
 	devtool: false, // Disable source maps to save memory
 	externals: [
-		/^[a-z\-0-9]+$/, // Ignore node_modules folder
+		// Exclude all node_modules from bundle
+		function (context, request, callback) {
+			if (/^[a-z][a-z/.\-0-9]*$/i.test(request)) {
+				return callback(null, "commonjs " + request);
+			}
+			callback();
+		},
 	],
 	output: {
-		filename: "server.ts",
+		filename: "server.js",
 		path: path.join(__dirname, "dist"),
 		libraryTarget: "commonjs",
 	},

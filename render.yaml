@@ -3,8 +3,8 @@ services:
       name: mental-health-api
       env: node
       plan: standard
-      buildCommand: "NODE_ENV=production npm ci --omit=dev && npm run prisma-generate && npm run build"
-      startCommand: "NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.ts"
+      buildCommand: "NODE_ENV=production npm ci && npm run prisma-generate && npm run build"
+      startCommand: "NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 node ./dist/server.js"
       envVars:
           - key: NODE_ENV
             value: production
