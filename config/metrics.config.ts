@@ -39,6 +39,66 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 					},
 				}),
+
+			totalStudentByProgram: async () => {
+				const studentsWithProgram = await prisma.student.findMany({
+					where: {
+						isDeleted: false,
+						person: {
+							users: {
+								some: filter.userFilter || {},
+							},
+						},
+					},
+					select: {
+						id: true,
+						program: true,
+					},
+				});
+
+				// Count unique students per program
+				const programCounts: Record<string, number> = {};
+				studentsWithProgram.forEach((student) => {
+					if (student.program) {
+						programCounts[student.program] = (programCounts[student.program] || 0) + 1;
+					}
+				});
+
+				return Object.entries(programCounts).map(([program, count]) => ({
+					program,
+					count,
+				}));
+			},
+
+			totalStudentByYear: async () => {
+				const studentsWithYear = await prisma.student.findMany({
+					where: {
+						isDeleted: false,
+						person: {
+							users: {
+								some: filter.userFilter || {},
+							},
+						},
+					},
+					select: {
+						id: true,
+						year: true,
+					},
+				});
+
+				// Count unique students per year level
+				const yearCounts: Record<string, number> = {};
+				studentsWithYear.forEach((student) => {
+					if (student.year) {
+						yearCounts[student.year] = (yearCounts[student.year] || 0) + 1;
+					}
+				});
+
+				return Object.entries(yearCounts).map(([year, count]) => ({
+					year,
+					count,
+				}));
+			},
 		},
 		Anxiety: {
 			totalAnxiety: async () => {
