@@ -269,7 +269,19 @@ export const fetchMentalHealthAssessmentData = async (
 						},
 					},
 				},
-				individualInventory: true,
+				individualInventory: {
+					include: {
+						mentalHealthPredictions: {
+							where: { isDeleted: false },
+							orderBy: { predictionDate: "desc" },
+							take: 1, // Get only the latest prediction
+						},
+						significantNotes: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
+						},
+					},
+				},
 				consent: true,
 			},
 		});
@@ -333,7 +345,12 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 	);
 
 	// Enhanced debugging for Mental Health Prediction
-	const predictionDebug = inventory.mentalHealthPrediction || {};
+	// Get the latest prediction from the array
+	const latestPredictionForDebug = inventory.mentalHealthPredictions?.[0] || null;
+	const predictionDebug = latestPredictionForDebug || {};
+	docLogger.info(
+		`Mental Health Predictions count: ${inventory.mentalHealthPredictions?.length || 0}`,
+	);
 	docLogger.info(`Mental Health Prediction keys: ${Object.keys(predictionDebug).join(", ")}`);
 	docLogger.info(`Confidence: ${predictionDebug.confidence || "Not found"}`);
 	docLogger.info(
@@ -489,8 +506,9 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 	// Format interest and hobbies
 	const interests = inventory.interest_and_hobbies || {};
 
-	// Get mental health prediction data from inventory
-	const prediction = inventory.mentalHealthPrediction || {};
+	// Get mental health prediction data from inventory - use latest from array
+	const latestPrediction = inventory.mentalHealthPredictions?.[0] || null;
+	const prediction = latestPrediction || {};
 
 	// Determine the most recent/severe assessment for the summary
 	let primaryAssessment = null;
@@ -655,7 +673,7 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 			? interests.what_are_your_hobbies.join(", ")
 			: String(interests.what_are_your_hobbies || ""),
 
-		// Mental Health Prediction
+		// Mental Health Prediction - from latest prediction record
 		risk_level: prediction.mentalHealthRisk?.level || "",
 		urgency: prediction.mentalHealthRisk?.urgency || "",
 		description: prediction.mentalHealthRisk?.description || "",
