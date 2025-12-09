@@ -900,6 +900,134 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const graduateStudent = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+
+		if (!id) {
+			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.STUDENT.USER_ID_REQUIRED });
+			return;
+		}
+
+		studentLogger.info(`Graduating student: ${id}`);
+
+		try {
+			const existingStudent = await prisma.student.findFirst({
+				where: {
+					id,
+					isDeleted: false,
+				},
+				include: {
+					person: true,
+				},
+			});
+
+			if (!existingStudent) {
+				studentLogger.error(`${config.ERROR.STUDENT.NOT_FOUND}: ${id}`);
+				res.status(404).json({ error: config.ERROR.STUDENT.NOT_FOUND });
+				return;
+			}
+
+			// Check if student is already graduated
+			if (existingStudent.year === "graduated") {
+				studentLogger.info(`Student ${id} is already graduated`);
+				res.status(400).json({ error: "Student is already graduated" });
+				return;
+			}
+
+			// Update student year to "graduated"
+			const graduatedStudent = await prisma.student.update({
+				where: { id },
+				data: {
+					year: "graduated",
+					status: "senior", // Set status to senior when graduated
+				},
+				include: {
+					person: true,
+				},
+			});
+
+			studentLogger.info(`Student ${id} graduated successfully`);
+			res.status(200).json({
+				message: "Student graduated successfully",
+				student: graduatedStudent,
+			});
+		} catch (error) {
+			studentLogger.error(`Error graduating student ${id}: ${error}`);
+			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
+		}
+	};
+
+	const graduateMultipleStudents = async (req: Request, res: Response, _next: NextFunction) => {
+		const { studentIds } = req.body;
+
+		if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+			studentLogger.error("Student IDs array is required");
+			res.status(400).json({ error: "Student IDs array is required" });
+			return;
+		}
+
+		studentLogger.info(`Graduating ${studentIds.length} students`);
+
+		try {
+			const results = {
+				successful: 0,
+				failed: 0,
+				errors: [] as string[],
+			};
+
+			// Process students in batches
+			for (const studentId of studentIds) {
+				try {
+					const existingStudent = await prisma.student.findFirst({
+						where: {
+							id: studentId,
+							isDeleted: false,
+						},
+					});
+
+					if (!existingStudent) {
+						results.failed++;
+						results.errors.push(`Student ${studentId} not found`);
+						continue;
+					}
+
+					if (existingStudent.year === "graduated") {
+						results.failed++;
+						results.errors.push(`Student ${studentId} is already graduated`);
+						continue;
+					}
+
+					await prisma.student.update({
+						where: { id: studentId },
+						data: {
+							year: "graduated",
+							status: "senior",
+						},
+					});
+
+					results.successful++;
+				} catch (error) {
+					results.failed++;
+					results.errors.push(`Failed to graduate student ${studentId}: ${error}`);
+					studentLogger.error(`Error graduating student ${studentId}: ${error}`);
+				}
+			}
+
+			studentLogger.info(
+				`Batch graduation completed. Successful: ${results.successful}, Failed: ${results.failed}`,
+			);
+
+			res.status(200).json({
+				message: "Batch graduation completed",
+				results,
+			});
+		} catch (error) {
+			studentLogger.error(`Error in batch graduation: ${error}`);
+			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
+		}
+	};
+
 	return {
 		getById,
 		getAll,
@@ -908,5 +1036,7 @@ export const controller = (prisma: PrismaClient) => {
 		remove,
 		updateYearLevels,
 		uploadStudentsCSV,
+		graduateStudent,
+		graduateMultipleStudents,
 	};
 };

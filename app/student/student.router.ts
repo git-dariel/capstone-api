@@ -12,6 +12,8 @@ interface IController {
 	updateYearLevels(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 	uploadStudentsCSV(req: Request, res: Response, next: NextFunction): Promise<void>;
+	graduateStudent(req: Request, res: Response, next: NextFunction): Promise<void>;
+	graduateMultipleStudents(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -639,6 +641,100 @@ export const router = (route: Router, controller: IController): Router => {
 		verifyRole([Role.admin, Role.super_admin]),
 		multerHelper.uploadSingle,
 		controller.uploadStudentsCSV,
+	);
+
+	/**
+	 * @openapi
+	 * /api/student/{id}/graduate:
+	 *   patch:
+	 *     summary: Graduate a student
+	 *     description: Mark a student as graduated by setting their year to "graduated"
+	 *     tags: [Student]
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Student ID
+	 *     responses:
+	 *       200:
+	 *         description: Student graduated successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                 student:
+	 *                   $ref: '#/components/schemas/Student'
+	 *       400:
+	 *         description: Student is already graduated or missing ID
+	 *       404:
+	 *         description: Student not found
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.patch(
+		"/:id/graduate",
+		verifyToken,
+		verifyRole([Role.admin, Role.super_admin]),
+		controller.graduateStudent,
+	);
+
+	/**
+	 * @openapi
+	 * /api/student/graduate-batch:
+	 *   post:
+	 *     summary: Graduate multiple students
+	 *     description: Mark multiple students as graduated by setting their year to "graduated"
+	 *     tags: [Student]
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - studentIds
+	 *             properties:
+	 *               studentIds:
+	 *                 type: array
+	 *                 items:
+	 *                   type: string
+	 *                 description: Array of student IDs to graduate
+	 *     responses:
+	 *       200:
+	 *         description: Batch graduation completed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                 results:
+	 *                   type: object
+	 *                   properties:
+	 *                     successful:
+	 *                       type: number
+	 *                     failed:
+	 *                       type: number
+	 *                     errors:
+	 *                       type: array
+	 *                       items:
+	 *                         type: string
+	 *       400:
+	 *         description: Student IDs array is required
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.post(
+		"/graduate-batch",
+		verifyToken,
+		verifyRole([Role.admin, Role.super_admin]),
+		controller.graduateMultipleStudents,
 	);
 
 	route.use(path, routes);
