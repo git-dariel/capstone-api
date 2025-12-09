@@ -4,6 +4,7 @@ import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { controller as personController } from "../person/person.controller";
 import { updateStudentYearLevels } from "../../services/student-year-level-cron.service";
+import { parse } from "csv-parse/sync";
 
 const logger = getLogger();
 const studentLogger = logger.child({ module: "student" });
@@ -720,6 +721,185 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const uploadStudentsCSV = async (req: Request, res: Response, _next: NextFunction) => {
+		studentLogger.info("CSV upload request received");
+
+		// Verify user type is guidance (admin/super_admin users are guidance users)
+		const authReq = req as any;
+		if (!authReq.userId) {
+			studentLogger.error("User not authenticated");
+			res.status(401).json({ error: "Authentication required" });
+			return;
+		}
+
+		// Check if user is guidance type
+		const user = await prisma.user.findUnique({
+			where: { id: authReq.userId },
+			select: { type: true, role: true },
+		});
+
+		if (!user || user.type !== "guidance") {
+			studentLogger.error(`Access denied for user type: ${user?.type}`);
+			res.status(403).json({ error: "Only guidance users can upload student CSV files" });
+			return;
+		}
+
+		if (!req.file) {
+			studentLogger.error("No CSV file provided");
+			res.status(400).json({ error: "CSV file is required" });
+			return;
+		}
+
+		if (req.file.mimetype !== "text/csv") {
+			studentLogger.error(`Invalid file type: ${req.file.mimetype}`);
+			res.status(400).json({ error: "File must be a CSV" });
+			return;
+		}
+
+		try {
+			const csvContent = req.file.buffer.toString("utf-8");
+
+			// Parse CSV with validation
+			const records = parse(csvContent, {
+				columns: true,
+				skip_empty_lines: true,
+				trim: true,
+			}) as any[];
+
+			if (records.length === 0) {
+				studentLogger.error("CSV file is empty or contains no valid records");
+				res.status(400).json({ error: "CSV file contains no valid records" });
+				return;
+			}
+
+			// Validate CSV format - should have STUDENT NUMBER, FIRSTNAME, and LASTNAME columns
+			const requiredColumns = ["STUDENT NUMBER", "FIRSTNAME", "LASTNAME"];
+			const csvColumns = Object.keys(records[0]);
+
+			const missingColumns = requiredColumns.filter((col) => !csvColumns.includes(col));
+			if (missingColumns.length > 0) {
+				studentLogger.error(`Missing required columns: ${missingColumns.join(", ")}`);
+				res.status(400).json({
+					error: `CSV must contain the following columns: ${requiredColumns.join(", ")}. MIDDLENAME is optional.`,
+					missingColumns,
+				});
+				return;
+			}
+
+			const results = {
+				total: 0,
+				successful: 0,
+				skipped: 0,
+				errors: [] as any[],
+			};
+
+			// Process records in batches for better performance
+			const batchSize = 50;
+			for (let i = 0; i < records.length; i += batchSize) {
+				const batch = records.slice(i, i + batchSize);
+
+				await prisma.$transaction(
+					async (tx) => {
+						for (const record of batch) {
+							results.total++;
+
+							const studentNumber = record["STUDENT NUMBER"]?.trim();
+							const firstName = record["FIRSTNAME"]?.trim();
+							const lastName = record["LASTNAME"]?.trim();
+							const middleName = record["MIDDLENAME"]?.trim() || null;
+
+							// Skip empty rows - require student number, first name, and last name
+							if (!studentNumber || !firstName || !lastName) {
+								results.skipped++;
+								continue;
+							}
+
+							try {
+								// Check if student already exists
+								const existingStudent = await tx.student.findFirst({
+									where: {
+										studentNumber,
+										isDeleted: false,
+									},
+								});
+
+								if (existingStudent) {
+									results.skipped++;
+									studentLogger.info(
+										`Student ${studentNumber} already exists, skipping`,
+									);
+									continue;
+								}
+
+								// Create person record
+								const person = await tx.person.create({
+									data: {
+										firstName,
+										lastName,
+										middleName: middleName || null,
+										isDeleted: false,
+									},
+								});
+
+								// Create student record
+								await tx.student.create({
+									data: {
+										studentNumber,
+										program: "To be assigned", // Default program
+										year: "1st", // Default year for first year students
+										status: "freshman",
+										person: {
+											connect: {
+												id: person.id,
+											},
+										},
+										isDeleted: false,
+									},
+								});
+
+								results.successful++;
+								studentLogger.info(
+									`Successfully created student: ${studentNumber} - ${firstName} ${middleName || ""} ${lastName}`
+										.trim()
+										.replace(/\s+/g, " "),
+								);
+							} catch (error) {
+								results.errors.push({
+									studentNumber,
+									firstName,
+									lastName,
+									middleName,
+									error: error instanceof Error ? error.message : String(error),
+								});
+								studentLogger.error(
+									`Failed to create student ${studentNumber}: ${error}`,
+								);
+							}
+						}
+					},
+					{
+						timeout: 60000, // 60 second timeout for large batches
+					},
+				);
+			}
+
+			studentLogger.info(
+				`CSV upload completed. Total: ${results.total}, Successful: ${results.successful}, Skipped: ${results.skipped}, Errors: ${results.errors.length}`,
+			);
+
+			res.status(200).json({
+				message: "CSV upload completed",
+				results,
+			});
+		} catch (error) {
+			studentLogger.error(`CSV upload failed: ${error}`);
+			res.status(500).json({
+				error: "Failed to process CSV file",
+				details: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+
 	return {
 		getById,
 		getAll,
@@ -727,5 +907,6 @@ export const controller = (prisma: PrismaClient) => {
 		update,
 		remove,
 		updateYearLevels,
+		uploadStudentsCSV,
 	};
 };
