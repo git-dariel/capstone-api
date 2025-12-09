@@ -1821,27 +1821,27 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											where: { type: "student", isDeleted: false },
 											include: {
 												anxietyAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												stressAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												depressionAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												suicideAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												personalProblemsChecklist: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 												},
 											},
 										},
@@ -1856,7 +1856,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						);
 						// Fallback: fetch students without person filter and filter in memory
 						const allStudents = await prisma.student.findMany({
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							skip,
 							take: limit * 2, // Get more to account for filtering
 							orderBy: { studentNumber: "asc" },
@@ -1867,27 +1867,27 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											where: { type: "student", isDeleted: false },
 											include: {
 												anxietyAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												stressAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												depressionAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												suicideAssessments: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 													orderBy: { assessmentDate: "desc" },
 													take: 1,
 												},
 												personalProblemsChecklist: {
-													where: getActiveStudentFilter(),
+													where: { isDeleted: false },
 												},
 											},
 										},
@@ -2329,23 +2329,23 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					where: { id: userId, isDeleted: false },
 					include: {
 						anxietyAssessments: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { assessmentDate: "desc" },
 						},
 						stressAssessments: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { assessmentDate: "desc" },
 						},
 						depressionAssessments: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { assessmentDate: "desc" },
 						},
 						suicideAssessments: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { assessmentDate: "desc" },
 						},
 						personalProblemsChecklist: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 						},
 						person: true,
 					},
@@ -3385,7 +3385,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											person: {
 												include: {
 													students: {
-														where: getActiveStudentFilter(),
+														where: { isDeleted: false },
 													},
 												},
 											},
@@ -3406,7 +3406,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											person: {
 												include: {
 													students: {
-														where: getActiveStudentFilter(),
+														where: { isDeleted: false },
 													},
 												},
 											},
@@ -3427,7 +3427,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											person: {
 												include: {
 													students: {
-														where: getActiveStudentFilter(),
+														where: { isDeleted: false },
 													},
 												},
 											},
@@ -3448,7 +3448,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											person: {
 												include: {
 													students: {
-														where: getActiveStudentFilter(),
+														where: { isDeleted: false },
 													},
 												},
 											},
@@ -3469,7 +3469,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 											person: {
 												include: {
 													students: {
-														where: getActiveStudentFilter(),
+														where: { isDeleted: false },
 													},
 												},
 											},
@@ -3518,7 +3518,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									person: {
 										include: {
 											students: {
-												where: getActiveStudentFilter(),
+												where: { isDeleted: false },
 											},
 										},
 									},
@@ -3537,7 +3537,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									person: {
 										include: {
 											students: {
-												where: getActiveStudentFilter(),
+												where: { isDeleted: false },
 											},
 										},
 									},
@@ -3556,7 +3556,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									person: {
 										include: {
 											students: {
-												where: getActiveStudentFilter(),
+												where: { isDeleted: false },
 											},
 										},
 									},
@@ -3575,7 +3575,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									person: {
 										include: {
 											students: {
-												where: getActiveStudentFilter(),
+												where: { isDeleted: false },
 											},
 										},
 									},
@@ -3594,7 +3594,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									person: {
 										include: {
 											students: {
-												where: getActiveStudentFilter(),
+												where: { isDeleted: false },
 											},
 										},
 									},
@@ -3852,7 +3852,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 					include: {
 						mentalHealthPredictions: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { predictionDate: "desc" },
 							take: 1,
 						},
@@ -4008,7 +4008,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							},
 						},
 						mentalHealthPredictions: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { predictionDate: "desc" },
 							take: 1,
 						},
@@ -4100,7 +4100,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							},
 						},
 						mentalHealthPredictions: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { predictionDate: "desc" },
 							take: 1,
 						},
@@ -4194,7 +4194,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							},
 						},
 						mentalHealthPredictions: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { predictionDate: "desc" },
 							take: 1,
 						},
@@ -4653,7 +4653,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							},
 						},
 						mentalHealthPredictions: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { predictionDate: "desc" },
 							take: 1,
 						},
@@ -4784,7 +4784,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					},
 					include: {
 						mentalHealthPredictions: {
-							where: getActiveStudentFilter(),
+							where: { isDeleted: false },
 							orderBy: { predictionDate: "desc" },
 							take: 1,
 						},

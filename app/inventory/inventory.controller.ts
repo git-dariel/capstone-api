@@ -4,6 +4,12 @@ import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
 import { createNotificationHelper } from "../../helper/notification.helper";
+import {
+	calculateInventoryReminder,
+	getReminderMessage,
+	getReminderSeverity,
+	formatTimeRemaining,
+} from "../../helper/inventory-reminder.helper";
 
 const logger = getLogger();
 const inventoryLogger = logger.child({ module: "inventory" });
@@ -73,6 +79,12 @@ export const controller = (prisma: PrismaClient) => {
 					where: {
 						id,
 						isDeleted: false,
+						student: {
+							isDeleted: false,
+							person: {
+								isDeleted: false,
+							},
+						},
 					},
 					select: fieldSelections,
 				});
@@ -82,6 +94,12 @@ export const controller = (prisma: PrismaClient) => {
 					where: {
 						id,
 						isDeleted: false,
+						student: {
+							isDeleted: false,
+							person: {
+								isDeleted: false,
+							},
+						},
 					},
 					include: {
 						student: {
@@ -180,6 +198,9 @@ export const controller = (prisma: PrismaClient) => {
 						isDeleted: false,
 						student: {
 							isDeleted: false,
+							person: {
+								isDeleted: false,
+							},
 						},
 					},
 					select: fieldSelections,
@@ -192,6 +213,9 @@ export const controller = (prisma: PrismaClient) => {
 						isDeleted: false,
 						student: {
 							isDeleted: false,
+							person: {
+								isDeleted: false,
+							},
 						},
 					},
 					include: {
@@ -276,6 +300,13 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const whereClause: Prisma.IndividualInventoryWhereInput = {
 				isDeleted: false,
+				// Ensure we only get inventories with valid student references
+				student: {
+					isDeleted: false,
+					person: {
+						isDeleted: false,
+					},
+				},
 				...(query
 					? {
 							OR: [
@@ -290,7 +321,6 @@ export const controller = (prisma: PrismaClient) => {
 						}
 					: {}),
 			};
-
 			const findManyQuery: Prisma.IndividualInventoryFindManyArgs = {
 				where: whereClause,
 				skip,
@@ -1724,6 +1754,75 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getReminderInfoByStudentId = async (req: Request, res: Response, _next: NextFunction) => {
+		const { studentId } = req.params;
+
+		if (!studentId) {
+			inventoryLogger.error("Student ID is required for reminder info");
+			res.status(400).json({ error: "Student ID is required" });
+			return;
+		}
+
+		inventoryLogger.info(`Getting inventory reminder info for student ID: ${studentId}`);
+
+		try {
+			// Get the inventory with mental health predictions
+			const inventory = await prisma.individualInventory.findFirst({
+				where: {
+					studentId,
+					isDeleted: false,
+					student: {
+						isDeleted: false,
+						person: {
+							isDeleted: false,
+						},
+					},
+				},
+				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+					mentalHealthPredictions: {
+						where: { isDeleted: false },
+						orderBy: { createdAt: "desc" },
+					},
+				},
+			});
+
+			if (!inventory) {
+				inventoryLogger.warn(`No inventory found for student ID: ${studentId}`);
+				res.status(404).json({ error: "Inventory not found for this student" });
+				return;
+			}
+
+			// Calculate reminder information
+			const reminderInfo = calculateInventoryReminder(inventory);
+			const message = getReminderMessage(reminderInfo);
+			const severity = getReminderSeverity(reminderInfo);
+			const timeRemaining = formatTimeRemaining(reminderInfo);
+
+			const responseData = {
+				reminderInfo,
+				message,
+				severity,
+				timeRemaining,
+				studentId,
+			};
+
+			inventoryLogger.info(
+				`Successfully calculated reminder info for student ID: ${studentId}`,
+			);
+			res.status(200).json(responseData);
+		} catch (error) {
+			inventoryLogger.error(`Error getting reminder info for student ID: ${error}`);
+			res.status(500).json({
+				error: "Internal server error while calculating reminder info",
+			});
+		}
+	};
+
 	return {
 		getById,
 		getByStudentId,
@@ -1733,5 +1832,6 @@ export const controller = (prisma: PrismaClient) => {
 		remove,
 		predictMentalHealth,
 		getPredictionByStudentId,
+		getReminderInfoByStudentId,
 	};
 };
