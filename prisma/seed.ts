@@ -217,17 +217,10 @@ const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 	};
 
 	const mentalHealthPredictions = {
-		primaryConcern,
-		priority,
 		anxiety: generateConcernData("anxiety"),
 		depression: generateConcernData("depression"),
 		stress: generateConcernData("stress"),
 		suicide: generateConcernData("suicide"),
-		allAssessments: {
-			overallRisk: getRandomElement(riskLevels),
-			assessmentSummary: `Comprehensive mental health assessment completed. Primary concern identified as ${primaryConcern}.`,
-			lastUpdated: new Date().toISOString(),
-		},
 	};
 
 	const selectedRecommendations = [
@@ -235,6 +228,69 @@ const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 		getRandomElement(recommendationsOptions),
 		getRandomElement(recommendationsOptions),
 	];
+
+	// Generate ML Predictions (binary classification: Low Risk or High Risk)
+	const generateMLPrediction = (condition: string) => {
+		// Randomly determine if it's High Risk (30% chance) or Low Risk (70% chance)
+		const isHighRisk = getRandomInt(1, 10) <= 3;
+		const riskLevel = isHighRisk ? "high risk" : "low risk";
+		const riskScore = isHighRisk ? 1 : 0;
+		const confidence = Math.round((0.75 + Math.random() * 0.2) * 100) / 100; // 0.75 to 0.95
+
+		const mlRiskFactors = [
+			"Demographic factors matching high-risk profiles",
+			"Educational background indicators",
+			"Family structure and support patterns",
+			"Financial stress indicators",
+			"Living situation challenges",
+			"Health history patterns",
+			"Academic engagement levels",
+			"Social support indicators",
+		];
+
+		const mlRecommendations = [
+			"Consider proactive mental health screening",
+			"Maintain regular check-ins with counseling services",
+			"Engage in preventive mental health activities",
+			"Monitor for early warning signs",
+			"Build strong support networks",
+			"Develop effective coping strategies",
+		];
+
+		return {
+			riskLevel,
+			riskScore,
+			confidence,
+			prediction: isHighRisk ? "High Risk" : "Low Risk",
+			explanation: `Machine learning model trained on historical student outcome data predicts ${riskLevel} for ${condition} based on patterns in similar student profiles.`,
+			modelBasis:
+				"Trained on actual student mental health outcome data using decision tree and random forest algorithms",
+			riskFactors: [getRandomElement(mlRiskFactors), getRandomElement(mlRiskFactors)],
+			recommendations: [
+				getRandomElement(mlRecommendations),
+				getRandomElement(mlRecommendations),
+				getRandomElement(mlRecommendations),
+			],
+			immediateAction: isHighRisk
+				? "Schedule a consultation with counseling services for early intervention"
+				: null,
+		};
+	};
+
+	const mlModelAccuracy = {
+		anxiety: Math.round((0.75 + Math.random() * 0.15) * 100) / 100, // 0.75 to 0.90
+		depression: Math.round((0.73 + Math.random() * 0.17) * 100) / 100, // 0.73 to 0.90
+		stress: Math.round((0.74 + Math.random() * 0.16) * 100) / 100, // 0.74 to 0.90
+	};
+
+	const mlPredictions = {
+		anxiety: generateMLPrediction("anxiety"),
+		depression: generateMLPrediction("depression"),
+		stress: generateMLPrediction("stress"),
+		modelAccuracy: mlModelAccuracy,
+		trainingDataSize: getRandomInt(200, 500),
+		lastTrainingDate: new Date(Date.now() - getRandomInt(1, 30) * 24 * 60 * 60 * 1000), // Within last 30 days
+	};
 
 	return {
 		academicPerformanceOutlook: prediction.toLowerCase() as "improved" | "same" | "declined",
@@ -254,6 +310,7 @@ const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 			disclaimer: "This field is deprecated. Use mentalHealthPredictions for current data.",
 		},
 		mentalHealthPredictions,
+		mlPredictions,
 		inputData: {
 			gender: studentGender === "male" ? "Male" : "Female",
 			age: getRandomInt(18, 26),

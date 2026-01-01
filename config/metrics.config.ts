@@ -24,6 +24,150 @@ const getActiveStudentFilter = () => ({
 	},
 });
 
+// Utility function to find the highest risk level from mental health assessments (for clinical predictions)
+const findHighestRiskLevel = (assessments: any): string => {
+	let highestRisk = "low";
+	const riskPriority: { [key: string]: number } = {
+		low: 0,
+		moderate: 1,
+		high: 2,
+		critical: 3,
+	};
+
+	if (assessments.anxiety?.riskLevel) {
+		const anxietyRisk = assessments.anxiety.riskLevel.toLowerCase();
+		if (riskPriority[anxietyRisk] > riskPriority[highestRisk]) {
+			highestRisk = anxietyRisk;
+		}
+	}
+
+	if (assessments.depression?.riskLevel) {
+		const depressionRisk = assessments.depression.riskLevel.toLowerCase();
+		if (riskPriority[depressionRisk] > riskPriority[highestRisk]) {
+			highestRisk = depressionRisk;
+		}
+	}
+
+	if (assessments.stress?.riskLevel) {
+		const stressRisk = assessments.stress.riskLevel.toLowerCase();
+		if (riskPriority[stressRisk] > riskPriority[highestRisk]) {
+			highestRisk = stressRisk;
+		}
+	}
+
+	if (assessments.suicide?.riskLevel) {
+		const suicideRisk = assessments.suicide.riskLevel.toLowerCase();
+		if (riskPriority[suicideRisk] > riskPriority[highestRisk]) {
+			highestRisk = suicideRisk;
+		}
+	}
+
+	return highestRisk;
+};
+
+// Utility function to find risk level from ML predictions using count-based prioritization
+// Priority logic:
+// 1. Count High Risk, Moderate Risk, and Low Risk conditions
+// 2. Pick from the category that has MORE conditions
+// 3. If counts are equal, prefer High Risk > Moderate Risk > Low Risk
+// 4. Within the chosen category, prioritize: Depression > Anxiety > Stress
+// Returns: "low", "moderate", or "high" (normalized to lowercase, no "risk" suffix)
+const findMLRiskLevel = (mlPredictions: any): string => {
+	if (!mlPredictions || !mlPredictions.anxiety) {
+		return "low"; // Default to low if ML predictions are unavailable
+	}
+
+	// Check if it's the positive message format (all low risk)
+	if (
+		"message" in mlPredictions &&
+		"status" in mlPredictions &&
+		mlPredictions.status === "all_low_risk"
+	) {
+		return "low";
+	}
+
+	// Helper function to check if a condition is High Risk (case-insensitive)
+	const isHighRisk = (condition: any): boolean => {
+		if (!condition) return false;
+		const riskLevel = condition.riskLevel?.toLowerCase() || "";
+		const prediction = condition.prediction?.toLowerCase() || "";
+		return riskLevel.includes("high") || prediction.includes("high");
+	};
+
+	// Helper function to check if a condition is Moderate Risk (case-insensitive)
+	const isModerateRisk = (condition: any): boolean => {
+		if (!condition) return false;
+		const riskLevel = condition.riskLevel?.toLowerCase() || "";
+		const prediction = condition.prediction?.toLowerCase() || "";
+		return (
+			(riskLevel.includes("moderate") || prediction.includes("moderate")) &&
+			!isHighRisk(condition)
+		);
+	};
+
+	// Helper function to check if a condition is Low Risk (case-insensitive)
+	const isLowRisk = (condition: any): boolean => {
+		if (!condition) return false;
+		const riskLevel = condition.riskLevel?.toLowerCase() || "";
+		const prediction = condition.prediction?.toLowerCase() || "";
+		return (
+			(riskLevel.includes("low") || prediction.includes("low")) &&
+			!isHighRisk(condition) &&
+			!isModerateRisk(condition)
+		);
+	};
+
+	// Categorize all conditions
+	const conditions = [
+		{ name: "depression", data: mlPredictions.depression },
+		{ name: "anxiety", data: mlPredictions.anxiety },
+		{ name: "stress", data: mlPredictions.stress },
+	].filter((c) => c.data);
+
+	const highRiskConditions = conditions.filter((c) => isHighRisk(c.data));
+	const moderateRiskConditions = conditions.filter((c) => isModerateRisk(c.data));
+	const lowRiskConditions = conditions.filter((c) => isLowRisk(c.data));
+
+	// Determine which category to pick from based on count
+	// Pick from the category with MORE conditions
+	// If counts are equal, prefer High Risk > Moderate Risk > Low Risk
+	let selectedCondition: { name: string; data: any } | undefined;
+
+	if (
+		highRiskConditions.length >= moderateRiskConditions.length &&
+		highRiskConditions.length >= lowRiskConditions.length &&
+		highRiskConditions.length > 0
+	) {
+		// Pick from High Risk (Depression > Anxiety > Stress)
+		selectedCondition =
+			highRiskConditions.find((c) => c.name === "depression") ||
+			highRiskConditions.find((c) => c.name === "anxiety") ||
+			highRiskConditions.find((c) => c.name === "stress");
+		return "high";
+	} else if (
+		moderateRiskConditions.length > highRiskConditions.length &&
+		moderateRiskConditions.length >= lowRiskConditions.length &&
+		moderateRiskConditions.length > 0
+	) {
+		// Pick from Moderate Risk (Depression > Anxiety > Stress)
+		selectedCondition =
+			moderateRiskConditions.find((c) => c.name === "depression") ||
+			moderateRiskConditions.find((c) => c.name === "anxiety") ||
+			moderateRiskConditions.find((c) => c.name === "stress");
+		return "moderate";
+	} else if (lowRiskConditions.length > 0) {
+		// Pick from Low Risk (Depression > Anxiety > Stress)
+		selectedCondition =
+			lowRiskConditions.find((c) => c.name === "depression") ||
+			lowRiskConditions.find((c) => c.name === "anxiety") ||
+			lowRiskConditions.find((c) => c.name === "stress");
+		return "low";
+	}
+
+	// Fallback: if no conditions found, default to low
+	return "low";
+};
+
 export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 	return {
 		User: {
@@ -3853,7 +3997,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -3863,32 +4007,16 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					"Low Risk": 0,
 					"Moderate Risk": 0,
 					"High Risk": 0,
-					"Critical Risk": 0,
 				};
 
 				inventories.forEach((inventory) => {
 					const latestPrediction = inventory.mentalHealthPredictions[0];
-					if (latestPrediction?.mentalHealthPredictions) {
-						// Get the primary concern and its risk level
-						const primaryConcern =
-							latestPrediction.mentalHealthPredictions.primaryConcern;
-						let concernData = null;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
-						if (primaryConcern === "anxiety")
-							concernData = latestPrediction.mentalHealthPredictions.anxiety;
-						else if (primaryConcern === "depression")
-							concernData = latestPrediction.mentalHealthPredictions.depression;
-						else if (primaryConcern === "stress")
-							concernData = latestPrediction.mentalHealthPredictions.stress;
-						else if (primaryConcern === "suicide")
-							concernData = latestPrediction.mentalHealthPredictions.suicide;
-
-						const risk = concernData?.riskLevel;
-
-						if (risk === "low") riskCounts["Low Risk"]++;
-						else if (risk === "moderate") riskCounts["Moderate Risk"]++;
-						else if (risk === "high") riskCounts["High Risk"]++;
-						else if (risk === "critical") riskCounts["Critical Risk"]++;
+						if (riskLevel === "low") riskCounts["Low Risk"]++;
+						else if (riskLevel === "moderate") riskCounts["Moderate Risk"]++;
+						else if (riskLevel === "high") riskCounts["High Risk"]++;
 					}
 				});
 
@@ -4024,7 +4152,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4037,7 +4165,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (riskLower.includes("low")) normalizedRiskLevel = "low";
 					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
 					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
-					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
 				}
 
 				const programRiskCounts: Record<string, Record<string, number>> = {};
@@ -4046,25 +4173,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					const program = inventory.student?.program || "Unknown";
 					const latestPrediction = inventory.mentalHealthPredictions[0];
 
-					if (latestPrediction?.mentalHealthPredictions) {
-						// Get the primary concern and its risk level
-						const primaryConcern =
-							latestPrediction.mentalHealthPredictions.primaryConcern;
-						let concernData = null;
-
-						if (primaryConcern === "anxiety")
-							concernData = latestPrediction.mentalHealthPredictions.anxiety;
-						else if (primaryConcern === "depression")
-							concernData = latestPrediction.mentalHealthPredictions.depression;
-						else if (primaryConcern === "stress")
-							concernData = latestPrediction.mentalHealthPredictions.stress;
-						else if (primaryConcern === "suicide")
-							concernData = latestPrediction.mentalHealthPredictions.suicide;
-
-						const risk = concernData?.riskLevel;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
 						// If risk level filter is set, only count matching risk levels
-						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+						if (normalizedRiskLevel && riskLevel !== normalizedRiskLevel) {
 							return; // Skip this inventory if it doesn't match the filter
 						}
 
@@ -4073,14 +4186,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								"Low Risk": 0,
 								"Moderate Risk": 0,
 								"High Risk": 0,
-								"Critical Risk": 0,
 							};
 						}
 
-						if (risk === "low") programRiskCounts[program]["Low Risk"]++;
-						else if (risk === "moderate") programRiskCounts[program]["Moderate Risk"]++;
-						else if (risk === "high") programRiskCounts[program]["High Risk"]++;
-						else if (risk === "critical") programRiskCounts[program]["Critical Risk"]++;
+						if (riskLevel === "low") programRiskCounts[program]["Low Risk"]++;
+						else if (riskLevel === "moderate")
+							programRiskCounts[program]["Moderate Risk"]++;
+						else if (riskLevel === "high") programRiskCounts[program]["High Risk"]++;
 					}
 				});
 
@@ -4130,7 +4242,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4143,7 +4255,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (riskLower.includes("low")) normalizedRiskLevel = "low";
 					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
 					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
-					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
 				}
 
 				const yearRiskCounts: Record<string, Record<string, number>> = {};
@@ -4152,25 +4263,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					const year = inventory.student?.year || "Unknown";
 					const latestPrediction = inventory.mentalHealthPredictions[0];
 
-					if (latestPrediction?.mentalHealthPredictions) {
-						// Get the primary concern and its risk level
-						const primaryConcern =
-							latestPrediction.mentalHealthPredictions.primaryConcern;
-						let concernData = null;
-
-						if (primaryConcern === "anxiety")
-							concernData = latestPrediction.mentalHealthPredictions.anxiety;
-						else if (primaryConcern === "depression")
-							concernData = latestPrediction.mentalHealthPredictions.depression;
-						else if (primaryConcern === "stress")
-							concernData = latestPrediction.mentalHealthPredictions.stress;
-						else if (primaryConcern === "suicide")
-							concernData = latestPrediction.mentalHealthPredictions.suicide;
-
-						const risk = concernData?.riskLevel;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
 						// If risk level filter is set, only count matching risk levels
-						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+						if (normalizedRiskLevel && riskLevel !== normalizedRiskLevel) {
 							return; // Skip this inventory if it doesn't match the filter
 						}
 
@@ -4179,14 +4276,12 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								"Low Risk": 0,
 								"Moderate Risk": 0,
 								"High Risk": 0,
-								"Critical Risk": 0,
 							};
 						}
 
-						if (risk === "low") yearRiskCounts[year]["Low Risk"]++;
-						else if (risk === "moderate") yearRiskCounts[year]["Moderate Risk"]++;
-						else if (risk === "high") yearRiskCounts[year]["High Risk"]++;
-						else if (risk === "critical") yearRiskCounts[year]["Critical Risk"]++;
+						if (riskLevel === "low") yearRiskCounts[year]["Low Risk"]++;
+						else if (riskLevel === "moderate") yearRiskCounts[year]["Moderate Risk"]++;
+						else if (riskLevel === "high") yearRiskCounts[year]["High Risk"]++;
 					}
 				});
 
@@ -4238,7 +4333,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4251,7 +4346,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (riskLower.includes("low")) normalizedRiskLevel = "low";
 					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
 					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
-					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
 				}
 
 				const genderRiskCounts: Record<string, Record<string, number>> = {};
@@ -4260,25 +4354,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					const gender = inventory.student?.person?.gender || "Unknown";
 					const latestPrediction = inventory.mentalHealthPredictions[0];
 
-					if (latestPrediction?.mentalHealthPredictions) {
-						// Get the primary concern and its risk level
-						const primaryConcern =
-							latestPrediction.mentalHealthPredictions.primaryConcern;
-						let concernData = null;
-
-						if (primaryConcern === "anxiety")
-							concernData = latestPrediction.mentalHealthPredictions.anxiety;
-						else if (primaryConcern === "depression")
-							concernData = latestPrediction.mentalHealthPredictions.depression;
-						else if (primaryConcern === "stress")
-							concernData = latestPrediction.mentalHealthPredictions.stress;
-						else if (primaryConcern === "suicide")
-							concernData = latestPrediction.mentalHealthPredictions.suicide;
-
-						const risk = concernData?.riskLevel;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
 						// If risk level filter is set, only count matching risk levels
-						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+						if (normalizedRiskLevel && riskLevel !== normalizedRiskLevel) {
 							return; // Skip this inventory if it doesn't match the filter
 						}
 
@@ -4287,14 +4367,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								"Low Risk": 0,
 								"Moderate Risk": 0,
 								"High Risk": 0,
-								"Critical Risk": 0,
 							};
 						}
 
-						if (risk === "low") genderRiskCounts[gender]["Low Risk"]++;
-						else if (risk === "moderate") genderRiskCounts[gender]["Moderate Risk"]++;
-						else if (risk === "high") genderRiskCounts[gender]["High Risk"]++;
-						else if (risk === "critical") genderRiskCounts[gender]["Critical Risk"]++;
+						if (riskLevel === "low") genderRiskCounts[gender]["Low Risk"]++;
+						else if (riskLevel === "moderate")
+							genderRiskCounts[gender]["Moderate Risk"]++;
+						else if (riskLevel === "high") genderRiskCounts[gender]["High Risk"]++;
 					}
 				});
 
@@ -4711,7 +4790,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4786,21 +4865,12 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						// Filter by risk level if specified
 						if (normalizedRiskLevel) {
 							const latestPrediction = inventory.mentalHealthPredictions?.[0];
-							const primaryConcern =
-								latestPrediction?.mentalHealthPredictions?.primaryConcern;
-							let concernData = null;
-
-							if (primaryConcern === "anxiety")
-								concernData = latestPrediction?.mentalHealthPredictions?.anxiety;
-							else if (primaryConcern === "depression")
-								concernData = latestPrediction?.mentalHealthPredictions?.depression;
-							else if (primaryConcern === "stress")
-								concernData = latestPrediction?.mentalHealthPredictions?.stress;
-							else if (primaryConcern === "suicide")
-								concernData = latestPrediction?.mentalHealthPredictions?.suicide;
-
-							const risk = concernData?.riskLevel;
-							if (risk !== normalizedRiskLevel) return false;
+							if (latestPrediction?.mlPredictions) {
+								const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+								if (riskLevel !== normalizedRiskLevel) return false;
+							} else {
+								return false; // No ML predictions available
+							}
 						}
 
 						// Filter by BMI category if specified
@@ -4813,20 +4883,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					})
 					.map((inventory) => {
 						const latestPrediction = inventory.mentalHealthPredictions?.[0];
-						const primaryConcern =
-							latestPrediction?.mentalHealthPredictions?.primaryConcern;
-						let concernData = null;
+						let riskLevel = "low";
 
-						if (primaryConcern === "anxiety")
-							concernData = latestPrediction?.mentalHealthPredictions?.anxiety;
-						else if (primaryConcern === "depression")
-							concernData = latestPrediction?.mentalHealthPredictions?.depression;
-						else if (primaryConcern === "stress")
-							concernData = latestPrediction?.mentalHealthPredictions?.stress;
-						else if (primaryConcern === "suicide")
-							concernData = latestPrediction?.mentalHealthPredictions?.suicide;
-
-						const risk = concernData?.riskLevel;
+						if (latestPrediction?.mlPredictions) {
+							riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+						}
 
 						return {
 							id: inventory.id,
@@ -4838,8 +4899,8 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							program: inventory.student?.program || "N/A",
 							year: inventory.student?.year || "N/A",
 							gender: inventory.student?.person?.gender || "N/A",
-							mentalHealthPrediction: risk
-								? `${risk.charAt(0).toUpperCase()}${risk.slice(1)} Risk`
+							mentalHealthPrediction: riskLevel
+								? `${riskLevel.charAt(0).toUpperCase()}${riskLevel.slice(1)} Risk`
 								: "N/A",
 							bmiCategory: calculateBMICategory(inventory.height, inventory.weight),
 							createdAt: inventory.createdAt,
@@ -4870,7 +4931,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4878,24 +4939,14 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 
 				const totalRecords = inventories.length;
 
-				// Count high risk (includes high and critical)
+				// Count high risk using ML predictions
 				const highRiskCount = inventories.filter((inv) => {
 					const latestPrediction = inv.mentalHealthPredictions?.[0];
-					const primaryConcern =
-						latestPrediction?.mentalHealthPredictions?.primaryConcern;
-					let concernData = null;
-
-					if (primaryConcern === "anxiety")
-						concernData = latestPrediction?.mentalHealthPredictions?.anxiety;
-					else if (primaryConcern === "depression")
-						concernData = latestPrediction?.mentalHealthPredictions?.depression;
-					else if (primaryConcern === "stress")
-						concernData = latestPrediction?.mentalHealthPredictions?.stress;
-					else if (primaryConcern === "suicide")
-						concernData = latestPrediction?.mentalHealthPredictions?.suicide;
-
-					const risk = concernData?.riskLevel;
-					return risk === "high" || risk === "critical";
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+						return riskLevel === "high";
+					}
+					return false;
 				}).length;
 
 				// Calculate completion rate (inventories with predictions)

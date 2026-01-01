@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { parse } from "csv-parse/sync";
 import { createCanvas, CanvasRenderingContext2D } from "canvas";
+import { mentalHealthMLTrainer, IIFFeatures } from "./ml-trainer.helper";
 
 // Import ML libraries using require
 const DecisionTreeClassifier = require("ml-cart").DecisionTreeClassifier;
@@ -13,13 +14,16 @@ export interface StudentData {
 	// Educational Background
 	highSchoolAverage?: number;
 	natureOfSchooling?: string; // continuous or interrupted
+	honorsReceived?: string;
 	// Home and Family Background
 	parentsMaritalRelationship?: string;
 	numberOfChildren?: number;
 	ordinalPosition?: string;
 	whoFinancesYourSchooling?: string;
 	parentsTotalMonthlyIncome?: string;
+	weeklyAllowance?: number;
 	quietPlaceToStudy?: string;
+	shareRoom?: string;
 	natureOfResidence?: string;
 	// Health Status
 	visionProblems?: string;
@@ -31,6 +35,7 @@ export interface StudentData {
 	psychologicalConsultationReason?: string;
 	psychiatristConsultation?: string;
 	psychiatristConsultationReason?: string;
+	psychologistConsultation?: string;
 	counselorConsultation?: string;
 	counselorConsultationReason?: string;
 	// Test Results
@@ -63,13 +68,25 @@ export interface PredictionResult {
 		needsAttention: boolean;
 		urgency: "None" | "Monitor" | "Schedule" | "Immediate";
 	};
-	// NEW: Focused mental health prediction - shows only the primary concern
-	mentalHealthPredictions: any; // Flexible type to handle dynamic primary concern
-	// NEW: Primary mental health concern identification
-	primaryMentalHealthConcern?: {
-		type: "anxiety" | "depression" | "stress" | "suicide";
-		priority: "Critical" | "High" | "Moderate" | "Low";
-		reason: string;
+	// Evidence-based clinical assessments
+	mentalHealthPredictions: {
+		anxiety: MentalHealthRiskAssessment;
+		depression: MentalHealthRiskAssessment;
+		stress: MentalHealthRiskAssessment;
+		suicide: MentalHealthRiskAssessment;
+	};
+	// NEW: Machine Learning Predictions from actual outcome data
+	mlPredictions: {
+		anxiety: MLPredictionResult;
+		depression: MLPredictionResult;
+		stress: MLPredictionResult;
+		modelAccuracy: {
+			anxiety: number;
+			depression: number;
+			stress: number;
+		};
+		trainingDataSize: number;
+		lastTrainingDate: Date;
 	};
 }
 
@@ -85,6 +102,18 @@ export interface MentalHealthRiskAssessment {
 	recommendations: string[];
 	warningSignsToWatch: string[];
 	immediateAction?: string;
+}
+
+export interface MLPredictionResult {
+	riskLevel: "Low Risk" | "Moderate Risk" | "High Risk";
+	riskScore: number; // 0 = Low Risk, 1 = Moderate Risk, 2 = High Risk
+	confidence: number; // Model accuracy
+	prediction: string; // "Low Risk", "Moderate Risk", or "High Risk"
+	explanation: string;
+	modelBasis: string;
+	riskFactors: string[];
+	recommendations: string[];
+	immediateAction: string | null;
 }
 
 interface TrainingData {
@@ -364,7 +393,7 @@ export class MentalHealthPredictor {
 	}
 
 	/**
-	 * Predict mental health risk for a student using trained ML models
+	 * Predict mental health risk for a student using trained ML models and clinical assessments
 	 */
 	public async predictMentalHealthRisk(
 		studentData: Partial<StudentData>,
@@ -435,22 +464,8 @@ export class MentalHealthPredictor {
 			suicide: this.assessSuicideRisk(normalizedInput),
 		};
 
-		// Determine the most critical mental health issue that needs attention
-		const primaryMentalHealthConcern = this.determinePrimaryMentalHealthConcern(
-			allMentalHealthAssessments,
-		);
-
-		// Create focused mental health predictions showing only the primary concern
-		const mentalHealthPredictions: any = {
-			primaryConcern: primaryMentalHealthConcern.type,
-			priority: primaryMentalHealthConcern.priority,
-			[primaryMentalHealthConcern.type]:
-				allMentalHealthAssessments[
-					primaryMentalHealthConcern.type as keyof typeof allMentalHealthAssessments
-				],
-			// Keep all assessments for internal use but only show the primary one
-			_allAssessments: allMentalHealthAssessments, // Internal use only
-		};
+		// Machine Learning Predictions from actual outcome data
+		const mlPredictions = await this.performMLPredictions(normalizedInput);
 
 		return {
 			prediction: finalPrediction,
@@ -458,8 +473,8 @@ export class MentalHealthPredictor {
 			modelAccuracy: this.modelAccuracy,
 			riskFactors,
 			mentalHealthRisk,
-			mentalHealthPredictions,
-			primaryMentalHealthConcern, // Add this for easy access
+			mentalHealthPredictions: allMentalHealthAssessments,
+			mlPredictions,
 		};
 	}
 
@@ -1141,6 +1156,407 @@ export class MentalHealthPredictor {
 		}
 
 		return riskFactors;
+	}
+
+	/**
+	 * Generate ML-based risk factors, recommendations, and immediate actions
+	 * based on actual ML prediction results and student profile
+	 */
+	private generateMLBasedInsights(
+		condition: "anxiety" | "depression" | "stress",
+		prediction: "Low Risk" | "Moderate Risk" | "High Risk",
+		studentData: StudentData,
+	): {
+		riskFactors: string[];
+		recommendations: string[];
+		immediateAction: string | null;
+	} {
+		const riskFactors: string[] = [];
+		const recommendations: string[] = [];
+		let immediateAction: string | null = null;
+
+		if (prediction === "High Risk") {
+			// Generate risk factors based on student profile and ML prediction
+			if (studentData.psychologicalConsultation === "yes") {
+				riskFactors.push("Previous psychological consultation history");
+			}
+			if (studentData.psychiatristConsultation === "yes") {
+				riskFactors.push("Previous psychiatrist consultation");
+			}
+			if (
+				studentData.parentsMaritalRelationship === "single_parent" ||
+				studentData.parentsMaritalRelationship === "married_but_separated"
+			) {
+				riskFactors.push("Family structure challenges");
+			}
+			if (
+				studentData.parentsTotalMonthlyIncome === "below_five_thousand" ||
+				studentData.parentsTotalMonthlyIncome === "five_thousand_to_ten_thousand"
+			) {
+				riskFactors.push("Financial constraints");
+			}
+			if (studentData.quietPlaceToStudy === "no") {
+				riskFactors.push("Lack of quiet study environment");
+			}
+			if (studentData.natureOfSchooling === "interrupted") {
+				riskFactors.push("Interrupted educational history");
+			}
+			if (studentData.generalHealthProblems === "yes") {
+				riskFactors.push("General health concerns");
+			}
+			if (studentData.academicOrganizations === "none") {
+				riskFactors.push("Limited social/academic engagement");
+			}
+
+			// Condition-specific risk factors
+			if (condition === "anxiety") {
+				riskFactors.push(
+					"ML model identified patterns similar to students with high anxiety",
+				);
+				recommendations.push(
+					"Consider anxiety management techniques (deep breathing, mindfulness)",
+				);
+				recommendations.push("Schedule consultation with mental health counselor");
+				recommendations.push("Practice regular stress-reduction activities");
+				recommendations.push("Establish consistent sleep and exercise routines");
+				immediateAction =
+					"If experiencing severe anxiety symptoms (panic attacks, inability to function), seek immediate professional help or contact crisis support services.";
+			} else if (condition === "depression") {
+				riskFactors.push(
+					"ML model identified patterns similar to students with depression",
+				);
+				recommendations.push("Seek professional mental health evaluation");
+				recommendations.push("Engage in regular physical activity and social connections");
+				recommendations.push("Consider counseling or therapy services");
+				recommendations.push("Maintain consistent daily routines and self-care");
+				immediateAction =
+					"If experiencing thoughts of self-harm or suicide, contact crisis support immediately (National Suicide Prevention Lifeline, campus counseling, or emergency services).";
+			} else if (condition === "stress") {
+				riskFactors.push(
+					"ML model identified patterns similar to students with high stress",
+				);
+				recommendations.push("Implement time management and prioritization strategies");
+				recommendations.push("Practice relaxation techniques (meditation, yoga)");
+				recommendations.push("Seek academic support and counseling services");
+				recommendations.push("Ensure adequate rest and work-life balance");
+				immediateAction =
+					"If stress is significantly impacting daily functioning, schedule urgent consultation with campus counseling services.";
+			}
+
+			// General recommendations for high risk
+			if (studentData.quietPlaceToStudy === "no") {
+				recommendations.push(
+					"Identify and utilize quiet study spaces (library, study rooms)",
+				);
+			}
+			if (studentData.academicOrganizations === "none") {
+				recommendations.push(
+					"Consider joining student organizations or study groups for social support",
+				);
+			}
+		} else if (prediction === "Moderate Risk") {
+			// Moderate Risk - provide preventive guidance
+			riskFactors.push(
+				"ML model identified some risk factors that warrant attention and monitoring",
+			);
+
+			// Condition-specific moderate risk factors
+			if (studentData.psychologicalConsultation === "yes") {
+				riskFactors.push("Previous psychological consultation history");
+			}
+			if (
+				studentData.parentsMaritalRelationship === "single_parent" ||
+				studentData.parentsMaritalRelationship === "married_but_separated"
+			) {
+				riskFactors.push("Family structure challenges");
+			}
+			if (
+				studentData.parentsTotalMonthlyIncome === "below_five_thousand" ||
+				studentData.parentsTotalMonthlyIncome === "five_thousand_to_ten_thousand"
+			) {
+				riskFactors.push("Financial constraints");
+			}
+			if (studentData.quietPlaceToStudy === "no") {
+				riskFactors.push("Lack of quiet study environment");
+			}
+			if (studentData.natureOfSchooling === "interrupted") {
+				riskFactors.push("Interrupted educational history");
+			}
+			if (studentData.generalHealthProblems === "yes") {
+				riskFactors.push("General health concerns");
+			}
+
+			// Condition-specific recommendations for moderate risk
+			if (condition === "anxiety") {
+				recommendations.push("Consider preventive anxiety management strategies");
+				recommendations.push("Practice stress-reduction techniques regularly");
+				recommendations.push(
+					"Monitor anxiety levels and seek support if symptoms increase",
+				);
+				recommendations.push("Maintain regular sleep and exercise routines");
+			} else if (condition === "depression") {
+				recommendations.push("Engage in regular physical activity and social connections");
+				recommendations.push("Consider preventive counseling or wellness programs");
+				recommendations.push("Monitor mood and seek professional help if symptoms worsen");
+				recommendations.push("Maintain consistent daily routines");
+			} else if (condition === "stress") {
+				recommendations.push("Implement time management strategies");
+				recommendations.push("Practice relaxation techniques (meditation, deep breathing)");
+				recommendations.push("Seek academic support if needed");
+				recommendations.push("Maintain work-life balance");
+			}
+
+			// General recommendations for moderate risk
+			if (studentData.quietPlaceToStudy === "no") {
+				recommendations.push(
+					"Consider finding quiet study spaces to reduce environmental stress",
+				);
+			}
+			if (studentData.academicOrganizations === "none") {
+				recommendations.push(
+					"Consider joining student organizations for social support and connection",
+				);
+			}
+
+			immediateAction = null; // No immediate action needed, but monitor closely
+		} else {
+			// Low Risk - focus on maintaining good mental health
+			riskFactors.push(
+				"ML model indicates low risk based on protective factors in your profile",
+			);
+
+			recommendations.push(
+				`Continue maintaining current positive factors that contribute to good ${condition} management`,
+			);
+			recommendations.push("Stay engaged with academic and social activities");
+			recommendations.push("Maintain regular self-care practices");
+			recommendations.push(
+				"Continue monitoring your mental health and seek support if needed",
+			);
+
+			// Protective factors
+			if (studentData.quietPlaceToStudy === "yes") {
+				recommendations.push(
+					"Maintain your quiet study environment as it supports your well-being",
+				);
+			}
+			if (studentData.academicOrganizations !== "none") {
+				recommendations.push(
+					"Continue your involvement in academic organizations for social connection",
+				);
+			}
+			if (studentData.natureOfSchooling === "continuous") {
+				recommendations.push("Your continuous educational path is a positive factor");
+			}
+
+			immediateAction = null; // No immediate action needed for low risk
+		}
+
+		// Ensure we have at least some content
+		if (riskFactors.length === 0) {
+			riskFactors.push(`ML prediction: ${prediction} for ${condition}`);
+		}
+		if (recommendations.length === 0) {
+			recommendations.push("Continue monitoring your mental health");
+		}
+
+		return { riskFactors, recommendations, immediateAction };
+	}
+
+	/**
+	 * MACHINE LEARNING PREDICTIONS using trained models from actual outcome data
+	 */
+	private async performMLPredictions(studentData: StudentData): Promise<{
+		anxiety: MLPredictionResult;
+		depression: MLPredictionResult;
+		stress: MLPredictionResult;
+		modelAccuracy: {
+			anxiety: number;
+			depression: number;
+			stress: number;
+		};
+		trainingDataSize: number;
+		lastTrainingDate: Date;
+	}> {
+		try {
+			// Convert StudentData to IIFFeatures format
+			// IMPORTANT: Use actual values from studentData, avoid defaults that bias toward Low Risk
+			const iifFeatures: IIFFeatures = {
+				age: studentData.age ?? 20,
+				gender: studentData.gender ?? "Other",
+				highSchoolAverage: studentData.highSchoolAverage ?? 85,
+				natureOfSchooling: studentData.natureOfSchooling ?? "continuous",
+				honorsReceived: studentData.honorsReceived ?? "None",
+				parentsMaritalRelationship: studentData.parentsMaritalRelationship ?? "others",
+				numberOfChildren: studentData.numberOfChildren ?? 1,
+				ordinalPosition: studentData.ordinalPosition ?? "1st child",
+				whoFinancesSchooling: studentData.whoFinancesYourSchooling ?? "parents",
+				parentsTotalMonthlyIncome:
+					studentData.parentsTotalMonthlyIncome ?? "below_five_thousand",
+				weeklyAllowance: studentData.weeklyAllowance ?? 500,
+				// CRITICAL FIX: Don't default to protective "yes" - use neutral/risk default
+				quietPlaceToStudy: studentData.quietPlaceToStudy ?? "no",
+				shareRoom: studentData.shareRoom ?? "no",
+				natureOfResidence: studentData.natureOfResidence ?? "family_home",
+				visionProblems: studentData.visionProblems ?? "no",
+				hearingProblems: studentData.hearingProblems ?? "no",
+				speechProblems: studentData.speechProblems ?? "no",
+				generalHealthProblems: studentData.generalHealthProblems ?? "no",
+				// Critical: Preserve "yes" values for consultations (risk factors)
+				psychiatristConsultation: studentData.psychiatristConsultation ?? "no",
+				psychologistConsultation: studentData.psychologistConsultation ?? "no",
+				counselorConsultation: studentData.counselorConsultation ?? "no",
+				favoriteSubject: studentData.favoriteSubject ?? "Math",
+				leastFavoriteSubject: studentData.leastFavoriteSubject ?? "Math",
+				hobbies: "Reading", // Default
+				academicOrganizations: studentData.academicOrganizations ?? "none",
+				organizationPosition: studentData.organizationPosition ?? "member",
+			};
+
+			// Get ML predictions from trained models
+			const mlResults = await mentalHealthMLTrainer.predictMentalHealthRisk(iifFeatures);
+			const modelInfo = mentalHealthMLTrainer.getModelInfo();
+
+			// Generate ML-based insights for each condition
+			const anxietyInsights = this.generateMLBasedInsights(
+				"anxiety",
+				mlResults.anxiety.prediction as "Low Risk" | "Moderate Risk" | "High Risk",
+				studentData,
+			);
+			const depressionInsights = this.generateMLBasedInsights(
+				"depression",
+				mlResults.depression.prediction as "Low Risk" | "Moderate Risk" | "High Risk",
+				studentData,
+			);
+			const stressInsights = this.generateMLBasedInsights(
+				"stress",
+				mlResults.stress.prediction as "Low Risk" | "Moderate Risk" | "High Risk",
+				studentData,
+			);
+
+			// Helper function to generate explanation based on risk level
+			const generateExplanation = (
+				risk: number,
+				prediction: string,
+				condition: string,
+				trainingDataSize: number,
+			): string => {
+				if (risk === 2) {
+					return `Machine learning model predicts ${prediction.toUpperCase()} for ${condition} based on patterns learned from ${trainingDataSize} student records with actual mental health outcomes. The model identified significant risk patterns in your profile similar to students who experienced severe ${condition} symptoms.`;
+				} else if (risk === 1) {
+					return `Machine learning model predicts ${prediction.toUpperCase()} for ${condition} based on patterns learned from ${trainingDataSize} student records with actual mental health outcomes. The model identified some risk factors in your profile that warrant attention and preventive measures.`;
+				} else {
+					return `Machine learning model predicts ${prediction.toUpperCase()} for ${condition} based on patterns learned from ${trainingDataSize} student records with actual mental health outcomes. Your profile shows protective factors similar to students who maintained good mental health.`;
+				}
+			};
+
+			return {
+				anxiety: {
+					riskLevel: mlResults.anxiety.prediction as
+						| "Low Risk"
+						| "Moderate Risk"
+						| "High Risk",
+					riskScore: mlResults.anxiety.risk,
+					confidence: mlResults.anxiety.confidence,
+					prediction: mlResults.anxiety.prediction,
+					explanation: generateExplanation(
+						mlResults.anxiety.risk,
+						mlResults.anxiety.prediction,
+						"anxiety",
+						modelInfo.totalTrainingData,
+					),
+					modelBasis: `Trained on ${modelInfo.totalTrainingData} student records with validated mental health outcomes using Decision Tree and Random Forest algorithms. Model accuracy: ${(mlResults.modelAccuracy.anxiety * 100).toFixed(1)}%`,
+					riskFactors: anxietyInsights.riskFactors,
+					recommendations: anxietyInsights.recommendations,
+					immediateAction: anxietyInsights.immediateAction,
+				},
+				depression: {
+					riskLevel: mlResults.depression.prediction as
+						| "Low Risk"
+						| "Moderate Risk"
+						| "High Risk",
+					riskScore: mlResults.depression.risk,
+					confidence: mlResults.depression.confidence,
+					prediction: mlResults.depression.prediction,
+					explanation: generateExplanation(
+						mlResults.depression.risk,
+						mlResults.depression.prediction,
+						"depression",
+						modelInfo.totalTrainingData,
+					),
+					modelBasis: `Trained on ${modelInfo.totalTrainingData} student records with validated mental health outcomes using Decision Tree and Random Forest algorithms. Model accuracy: ${(mlResults.modelAccuracy.depression * 100).toFixed(1)}%`,
+					riskFactors: depressionInsights.riskFactors,
+					recommendations: depressionInsights.recommendations,
+					immediateAction: depressionInsights.immediateAction,
+				},
+				stress: {
+					riskLevel: mlResults.stress.prediction as
+						| "Low Risk"
+						| "Moderate Risk"
+						| "High Risk",
+					riskScore: mlResults.stress.risk,
+					confidence: mlResults.stress.confidence,
+					prediction: mlResults.stress.prediction,
+					explanation: generateExplanation(
+						mlResults.stress.risk,
+						mlResults.stress.prediction,
+						"stress",
+						modelInfo.totalTrainingData,
+					),
+					modelBasis: `Trained on ${modelInfo.totalTrainingData} student records with validated mental health outcomes using Decision Tree and Random Forest algorithms. Model accuracy: ${(mlResults.modelAccuracy.stress * 100).toFixed(1)}%`,
+					riskFactors: stressInsights.riskFactors,
+					recommendations: stressInsights.recommendations,
+					immediateAction: stressInsights.immediateAction,
+				},
+				modelAccuracy: mlResults.modelAccuracy,
+				trainingDataSize: modelInfo.totalTrainingData,
+				lastTrainingDate: modelInfo.lastUpdated,
+			};
+		} catch (error) {
+			console.warn("ML prediction failed, using fallback:", error);
+			// Fallback to indicate ML is unavailable
+			return {
+				anxiety: {
+					riskLevel: "Low Risk",
+					riskScore: 0,
+					confidence: 0,
+					prediction: "ML Model Unavailable",
+					explanation:
+						"Machine learning prediction is currently unavailable. Please refer to clinical assessment results.",
+					modelBasis: "ML models are being initialized or updated.",
+					riskFactors: ["ML model unavailable - refer to clinical assessment"],
+					recommendations: ["Please refer to clinical assessment recommendations"],
+					immediateAction: null,
+				},
+				depression: {
+					riskLevel: "Low Risk",
+					riskScore: 0,
+					confidence: 0,
+					prediction: "ML Model Unavailable",
+					explanation:
+						"Machine learning prediction is currently unavailable. Please refer to clinical assessment results.",
+					modelBasis: "ML models are being initialized or updated.",
+					riskFactors: ["ML model unavailable - refer to clinical assessment"],
+					recommendations: ["Please refer to clinical assessment recommendations"],
+					immediateAction: null,
+				},
+				stress: {
+					riskLevel: "Low Risk",
+					riskScore: 0,
+					confidence: 0,
+					prediction: "ML Model Unavailable",
+					explanation:
+						"Machine learning prediction is currently unavailable. Please refer to clinical assessment results.",
+					modelBasis: "ML models are being initialized or updated.",
+					riskFactors: ["ML model unavailable - refer to clinical assessment"],
+					recommendations: ["Please refer to clinical assessment recommendations"],
+					immediateAction: null,
+				},
+				modelAccuracy: { anxiety: 0, depression: 0, stress: 0 },
+				trainingDataSize: 0,
+				lastTrainingDate: new Date(),
+			};
+		}
 	}
 
 	/**

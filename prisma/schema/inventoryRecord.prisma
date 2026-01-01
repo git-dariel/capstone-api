@@ -93,6 +93,7 @@ enum Doctors {
   psychiatrist
   psychologist
   councelor
+  none
 }
 
 enum AcademicHobbies {
@@ -294,18 +295,31 @@ type SpecificMentalHealthRisk {
 }
 
 type MentalHealthPredictions {
-  // Primary concern information
-  primaryConcern String? // "anxiety", "depression", "stress", or "suicide"
-  priority       String? // "Low", "Moderate", "High", or "Critical"
-  
-  // Individual assessments (only primary concern will be populated)
-  anxiety     SpecificMentalHealthRisk?
-  depression  SpecificMentalHealthRisk?
-  stress      SpecificMentalHealthRisk?
-  suicide     SpecificMentalHealthRisk?
-  
-  // Store all assessments for comprehensive analysis (internal use)
-  allAssessments Json?
+  anxiety     SpecificMentalHealthRisk
+  depression  SpecificMentalHealthRisk
+  stress      SpecificMentalHealthRisk
+  suicide     SpecificMentalHealthRisk
+}
+
+type MLPredictionResult {
+  riskLevel      String
+  riskScore      Int
+  confidence     Float
+  prediction     String
+  explanation    String
+  modelBasis     String
+  riskFactors    String[]
+  recommendations String[]
+  immediateAction String?
+}
+
+type MLPredictions {
+  anxiety           MLPredictionResult
+  depression        MLPredictionResult
+  stress            MLPredictionResult
+  modelAccuracy     Json
+  trainingDataSize  Int
+  lastTrainingDate  DateTime
 }
 
 model MentalHealthPredictionRecord {
@@ -317,8 +331,10 @@ model MentalHealthPredictionRecord {
   modelAccuracy              ModelAccuracy
   riskFactors                String[]
   mentalHealthRisk           MentalHealthRisk
-  // NEW: Specific mental health predictions
+  // Clinical mental health assessments
   mentalHealthPredictions    MentalHealthPredictions?
+  // NEW: Machine Learning predictions from actual outcome data
+  mlPredictions              MLPredictions?
   inputData                  Json
   recommendations            String[]
   predictionDate             DateTime                   @default(now())

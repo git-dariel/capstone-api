@@ -1,21 +1,198 @@
-import { Request, Response, NextFunction } from "express";
-import { PrismaClient, Prisma } from "../../generated/prisma";
-import { getLogger } from "../../helper/logger";
+import { NextFunction, Request, Response } from "express";
 import { config } from "../../config/error.config";
-import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
-import { createNotificationHelper } from "../../helper/notification.helper";
+import { Prisma, PrismaClient } from "../../generated/prisma";
 import {
 	calculateInventoryReminder,
+	formatTimeRemaining,
 	getReminderMessage,
 	getReminderSeverity,
-	formatTimeRemaining,
 } from "../../helper/inventory-reminder.helper";
+import { getLogger } from "../../helper/logger";
+import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
+import { createNotificationHelper } from "../../helper/notification.helper";
 
 const logger = getLogger();
 const inventoryLogger = logger.child({ module: "inventory" });
 
 export const controller = (prisma: PrismaClient) => {
 	const notificationHelper = createNotificationHelper(prisma);
+
+	/**
+	 * Format ML predictions to show only one condition based on priority
+	 * Priority logic:
+	 * 1. Count High Risk, Moderate Risk, and Low Risk conditions
+	 * 2. Pick from the category that has MORE conditions
+	 * 3. If counts are equal, prefer High Risk > Moderate Risk > Low Risk
+	 * 4. Within the chosen category, prioritize: Depression > Anxiety > Stress
+	 * 5. If all are Low Risk, return positive message
+	 */
+	const formatMLPredictions = (mlPredictions: any) => {
+		if (!mlPredictions || !mlPredictions.anxiety) {
+			return mlPredictions; // Return as-is if ML is unavailable
+		}
+
+		// Helper function to check if a condition is High Risk (case-insensitive)
+		const isHighRisk = (condition: any): boolean => {
+			if (!condition) return false;
+			const riskLevel = condition.riskLevel?.toLowerCase() || "";
+			const prediction = condition.prediction?.toLowerCase() || "";
+			return riskLevel.includes("high") || prediction.includes("high");
+		};
+
+		// Helper function to check if a condition is Moderate Risk (case-insensitive)
+		const isModerateRisk = (condition: any): boolean => {
+			if (!condition) return false;
+			const riskLevel = condition.riskLevel?.toLowerCase() || "";
+			const prediction = condition.prediction?.toLowerCase() || "";
+			return (
+				(riskLevel.includes("moderate") || prediction.includes("moderate")) &&
+				!isHighRisk(condition)
+			);
+		};
+
+		// Categorize all conditions
+		const conditions = [
+			{ name: "depression", data: mlPredictions.depression },
+			{ name: "anxiety", data: mlPredictions.anxiety },
+			{ name: "stress", data: mlPredictions.stress },
+		].filter((c) => c.data); // Filter out null/undefined
+
+		let highRiskConditions: { name: string; data: any }[] = [];
+		let moderateRiskConditions: { name: string; data: any }[] = [];
+		let lowRiskConditions: { name: string; data: any }[] = [];
+
+		conditions.forEach((c) => {
+			if (isHighRisk(c.data)) {
+				highRiskConditions.push(c);
+			} else if (isModerateRisk(c.data)) {
+				moderateRiskConditions.push(c);
+			} else {
+				lowRiskConditions.push(c);
+			}
+		});
+
+		// Check if all are Low Risk
+		if (highRiskConditions.length === 0 && moderateRiskConditions.length === 0) {
+			// All are Low Risk - return positive message
+			return {
+				message:
+					"✅ Great news! Based on our machine learning analysis of your profile, you are not prone to anxiety, depression, or stress. Your profile shows protective factors similar to students who maintained good mental health. Continue maintaining your current positive habits and self-care practices.",
+				status: "all_low_risk",
+				anxiety: {
+					riskLevel: mlPredictions.anxiety.riskLevel,
+					recommendations: mlPredictions.anxiety.recommendations,
+				},
+				depression: {
+					riskLevel: mlPredictions.depression.riskLevel,
+					recommendations: mlPredictions.depression.recommendations,
+				},
+				stress: {
+					riskLevel: mlPredictions.stress.riskLevel,
+					recommendations: mlPredictions.stress.recommendations,
+				},
+				modelAccuracy: mlPredictions.modelAccuracy,
+				trainingDataSize: mlPredictions.trainingDataSize,
+				lastTrainingDate: mlPredictions.lastTrainingDate,
+			};
+		}
+
+		// Determine which category to pick from based on count
+		// Pick from the category with MORE conditions
+		// If counts are equal, prefer High Risk > Moderate Risk > Low Risk
+		let selectedCondition: { name: string; data: any } | undefined;
+		let selectedCategory: "high" | "moderate" | "low" = "low";
+
+		if (
+			highRiskConditions.length > moderateRiskConditions.length &&
+			highRiskConditions.length > lowRiskConditions.length
+		) {
+			// High Risk has the most - pick from High Risk
+			selectedCategory = "high";
+			selectedCondition =
+				highRiskConditions.find((c) => c.name === "depression") ||
+				highRiskConditions.find((c) => c.name === "anxiety") ||
+				highRiskConditions.find((c) => c.name === "stress");
+		} else if (
+			moderateRiskConditions.length > highRiskConditions.length &&
+			moderateRiskConditions.length > lowRiskConditions.length
+		) {
+			// Moderate Risk has the most - pick from Moderate Risk
+			selectedCategory = "moderate";
+			selectedCondition =
+				moderateRiskConditions.find((c) => c.name === "depression") ||
+				moderateRiskConditions.find((c) => c.name === "anxiety") ||
+				moderateRiskConditions.find((c) => c.name === "stress");
+		} else if (
+			lowRiskConditions.length > highRiskConditions.length &&
+			lowRiskConditions.length > moderateRiskConditions.length
+		) {
+			// Low Risk has the most - pick from Low Risk
+			selectedCategory = "low";
+			selectedCondition =
+				lowRiskConditions.find((c) => c.name === "depression") ||
+				lowRiskConditions.find((c) => c.name === "anxiety") ||
+				lowRiskConditions.find((c) => c.name === "stress");
+		} else {
+			// Counts are equal or tied - use priority: High Risk > Moderate Risk > Low Risk
+			if (highRiskConditions.length > 0) {
+				selectedCategory = "high";
+				selectedCondition =
+					highRiskConditions.find((c) => c.name === "depression") ||
+					highRiskConditions.find((c) => c.name === "anxiety") ||
+					highRiskConditions.find((c) => c.name === "stress");
+			} else if (moderateRiskConditions.length > 0) {
+				selectedCategory = "moderate";
+				selectedCondition =
+					moderateRiskConditions.find((c) => c.name === "depression") ||
+					moderateRiskConditions.find((c) => c.name === "anxiety") ||
+					moderateRiskConditions.find((c) => c.name === "stress");
+			} else {
+				selectedCategory = "low";
+				selectedCondition =
+					lowRiskConditions.find((c) => c.name === "depression") ||
+					lowRiskConditions.find((c) => c.name === "anxiety") ||
+					lowRiskConditions.find((c) => c.name === "stress");
+			}
+		}
+
+		// Return the selected condition
+		if (selectedCondition && selectedCondition.data) {
+			return {
+				[selectedCondition.name]: {
+					...selectedCondition.data,
+					riskPercentage:
+						selectedCondition.data.riskPercentage ||
+						`${(selectedCondition.data.confidence * 100).toFixed(1)}%`,
+				},
+				modelAccuracy: mlPredictions.modelAccuracy,
+				trainingDataSize: mlPredictions.trainingDataSize,
+				lastTrainingDate: mlPredictions.lastTrainingDate,
+			};
+		}
+
+		// Fallback: return all low risk message
+		return {
+			message:
+				"✅ Great news! Based on our machine learning analysis of your profile, you are not prone to anxiety, depression, or stress. Your profile shows protective factors similar to students who maintained good mental health. Continue maintaining your current positive habits and self-care practices.",
+			status: "all_low_risk",
+			anxiety: {
+				riskLevel: mlPredictions.anxiety.riskLevel,
+				recommendations: mlPredictions.anxiety.recommendations,
+			},
+			depression: {
+				riskLevel: mlPredictions.depression.riskLevel,
+				recommendations: mlPredictions.depression.recommendations,
+			},
+			stress: {
+				riskLevel: mlPredictions.stress.riskLevel,
+				recommendations: mlPredictions.stress.recommendations,
+			},
+			modelAccuracy: mlPredictions.modelAccuracy,
+			trainingDataSize: mlPredictions.trainingDataSize,
+			lastTrainingDate: mlPredictions.lastTrainingDate,
+		};
+	};
+
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		const { fields } = req.query;
@@ -611,6 +788,7 @@ export const controller = (prisma: PrismaClient) => {
 					natureOfSchooling: inventory.nature_of_schooling?.continuous
 						? "continuous"
 						: "interrupted",
+					honorsReceived: inventory.educational_background?.honors_received || "None",
 					// Home and family background
 					parentsMaritalRelationship:
 						inventory.home_and_family_background?.parents_martial_relationship ||
@@ -626,9 +804,17 @@ export const controller = (prisma: PrismaClient) => {
 					parentsTotalMonthlyIncome:
 						inventory.home_and_family_background?.parents_total_montly_income?.income ||
 						"below_five_thousand",
+					weeklyAllowance:
+						inventory.home_and_family_background?.how_much_is_your_weekly_allowance ||
+						500,
 					quietPlaceToStudy:
 						inventory.home_and_family_background?.do_you_have_quiet_place_to_study ===
 						"yes"
+							? "yes"
+							: "no",
+					shareRoom:
+						inventory.home_and_family_background?.do_you_share_your_room_with_anyone
+							?.status === "yes"
 							? "yes"
 							: "no",
 					natureOfResidence:
@@ -636,11 +822,31 @@ export const controller = (prisma: PrismaClient) => {
 							?.nature_of_residence_while_attending_school || "family_home",
 					// Health status
 					visionProblems: inventory.health?.physical?.your_vision ? "yes" : "no",
+					hearingProblems: inventory.health?.physical?.your_hearing ? "yes" : "no",
+					speechProblems: inventory.health?.physical?.your_speech ? "yes" : "no",
 					generalHealthProblems: inventory.health?.physical?.your_general_health
 						? "yes"
 						: "no",
+					// Map psychological consultation type correctly
 					psychologicalConsultation:
 						inventory.health?.psychological?.status === "yes" ? "yes" : "no",
+					psychiatristConsultation:
+						inventory.health?.psychological?.status === "yes" &&
+						inventory.health?.psychological?.consulted === "psychiatrist"
+							? "yes"
+							: "no",
+					psychologistConsultation:
+						inventory.health?.psychological?.status === "yes" &&
+						inventory.health?.psychological?.consulted === "psychologist"
+							? "yes"
+							: "no",
+					counselorConsultation:
+						inventory.health?.psychological?.status === "yes" &&
+						inventory.health?.psychological?.consulted === "councelor"
+							? "yes"
+							: "no",
+					psychologicalConsultationReason:
+						inventory.health?.psychological?.for_what || "",
 					// Interest and hobbies
 					favoriteSubject: inventory.interest_and_hobbies?.favorite_subject || "Math",
 					leastFavoriteSubject:
@@ -700,45 +906,163 @@ export const controller = (prisma: PrismaClient) => {
 						disclaimer:
 							"⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 					},
-					// NEW: Focused mental health prediction - stores only primary concern
-					mentalHealthPredictions: (() => {
-						const primaryType = prediction.primaryMentalHealthConcern?.type;
-						if (
-							!primaryType ||
-							!prediction.mentalHealthPredictions[primaryType] ||
-							!prediction.primaryMentalHealthConcern
-						) {
-							return null;
-						}
-
-						const assessment = prediction.mentalHealthPredictions[primaryType];
-						return {
-							primaryConcern: primaryType,
-							priority: prediction.primaryMentalHealthConcern.priority,
-							[primaryType]: {
-								riskLevel: assessment.riskLevel.toLowerCase() as
+					// Clinical mental health assessments
+					mentalHealthPredictions: {
+						anxiety: {
+							riskLevel:
+								prediction.mentalHealthPredictions.anxiety.riskLevel.toLowerCase() as
 									| "low"
 									| "moderate"
 									| "high"
 									| "critical",
-								riskScore: assessment.riskScore,
-								maxScore: assessment.maxScore,
-								riskPercentage: assessment.riskPercentage,
-								isProne: assessment.isProne,
-								riskFactors: assessment.riskFactors,
-								protectiveFactors: assessment.protectiveFactors,
-								explanation: assessment.explanation,
-								recommendations: assessment.recommendations,
-								warningSignsToWatch: assessment.warningSignsToWatch,
-								immediateAction: assessment.immediateAction,
-							},
-							// Store all assessments for comprehensive analysis (internal use)
-							allAssessments: prediction.mentalHealthPredictions._allAssessments,
-						};
-					})() as any,
+							riskScore: prediction.mentalHealthPredictions.anxiety.riskScore,
+							maxScore: prediction.mentalHealthPredictions.anxiety.maxScore,
+							riskPercentage:
+								prediction.mentalHealthPredictions.anxiety.riskPercentage,
+							isProne: prediction.mentalHealthPredictions.anxiety.isProne,
+							riskFactors: prediction.mentalHealthPredictions.anxiety.riskFactors,
+							protectiveFactors:
+								prediction.mentalHealthPredictions.anxiety.protectiveFactors,
+							explanation: prediction.mentalHealthPredictions.anxiety.explanation,
+							recommendations:
+								prediction.mentalHealthPredictions.anxiety.recommendations,
+							warningSignsToWatch:
+								prediction.mentalHealthPredictions.anxiety.warningSignsToWatch,
+							immediateAction:
+								prediction.mentalHealthPredictions.anxiety.immediateAction,
+						},
+						depression: {
+							riskLevel:
+								prediction.mentalHealthPredictions.depression.riskLevel.toLowerCase() as
+									| "low"
+									| "moderate"
+									| "high"
+									| "critical",
+							riskScore: prediction.mentalHealthPredictions.depression.riskScore,
+							maxScore: prediction.mentalHealthPredictions.depression.maxScore,
+							riskPercentage:
+								prediction.mentalHealthPredictions.depression.riskPercentage,
+							isProne: prediction.mentalHealthPredictions.depression.isProne,
+							riskFactors: prediction.mentalHealthPredictions.depression.riskFactors,
+							protectiveFactors:
+								prediction.mentalHealthPredictions.depression.protectiveFactors,
+							explanation: prediction.mentalHealthPredictions.depression.explanation,
+							recommendations:
+								prediction.mentalHealthPredictions.depression.recommendations,
+							warningSignsToWatch:
+								prediction.mentalHealthPredictions.depression.warningSignsToWatch,
+							immediateAction:
+								prediction.mentalHealthPredictions.depression.immediateAction,
+						},
+						stress: {
+							riskLevel:
+								prediction.mentalHealthPredictions.stress.riskLevel.toLowerCase() as
+									| "low"
+									| "moderate"
+									| "high"
+									| "critical",
+							riskScore: prediction.mentalHealthPredictions.stress.riskScore,
+							maxScore: prediction.mentalHealthPredictions.stress.maxScore,
+							riskPercentage:
+								prediction.mentalHealthPredictions.stress.riskPercentage,
+							isProne: prediction.mentalHealthPredictions.stress.isProne,
+							riskFactors: prediction.mentalHealthPredictions.stress.riskFactors,
+							protectiveFactors:
+								prediction.mentalHealthPredictions.stress.protectiveFactors,
+							explanation: prediction.mentalHealthPredictions.stress.explanation,
+							recommendations:
+								prediction.mentalHealthPredictions.stress.recommendations,
+							warningSignsToWatch:
+								prediction.mentalHealthPredictions.stress.warningSignsToWatch,
+							immediateAction:
+								prediction.mentalHealthPredictions.stress.immediateAction,
+						},
+						suicide: {
+							riskLevel:
+								prediction.mentalHealthPredictions.suicide.riskLevel.toLowerCase() as
+									| "low"
+									| "moderate"
+									| "high"
+									| "critical",
+							riskScore: prediction.mentalHealthPredictions.suicide.riskScore,
+							maxScore: prediction.mentalHealthPredictions.suicide.maxScore,
+							riskPercentage:
+								prediction.mentalHealthPredictions.suicide.riskPercentage,
+							isProne: prediction.mentalHealthPredictions.suicide.isProne,
+							riskFactors: prediction.mentalHealthPredictions.suicide.riskFactors,
+							protectiveFactors:
+								prediction.mentalHealthPredictions.suicide.protectiveFactors,
+							explanation: prediction.mentalHealthPredictions.suicide.explanation,
+							recommendations:
+								prediction.mentalHealthPredictions.suicide.recommendations,
+							warningSignsToWatch:
+								prediction.mentalHealthPredictions.suicide.warningSignsToWatch,
+							immediateAction:
+								prediction.mentalHealthPredictions.suicide.immediateAction,
+						},
+					},
 					inputData: studentData,
 					recommendations: generateRecommendations(prediction),
 					predictionDate: new Date(),
+					// NEW: Machine Learning Predictions from actual outcome data
+					mlPredictions: prediction.mlPredictions
+						? {
+								anxiety: {
+									riskLevel:
+										prediction.mlPredictions.anxiety.riskLevel.toLowerCase() as
+											| "low risk"
+											| "moderate risk"
+											| "high risk",
+									riskScore: prediction.mlPredictions.anxiety.riskScore,
+									confidence: prediction.mlPredictions.anxiety.confidence,
+									prediction: prediction.mlPredictions.anxiety.prediction,
+									explanation: prediction.mlPredictions.anxiety.explanation,
+									modelBasis: prediction.mlPredictions.anxiety.modelBasis,
+									riskFactors: prediction.mlPredictions.anxiety.riskFactors,
+									recommendations:
+										prediction.mlPredictions.anxiety.recommendations,
+									immediateAction:
+										prediction.mlPredictions.anxiety.immediateAction,
+								},
+								depression: {
+									riskLevel:
+										prediction.mlPredictions.depression.riskLevel.toLowerCase() as
+											| "low risk"
+											| "moderate risk"
+											| "high risk",
+									riskScore: prediction.mlPredictions.depression.riskScore,
+									confidence: prediction.mlPredictions.depression.confidence,
+									prediction: prediction.mlPredictions.depression.prediction,
+									explanation: prediction.mlPredictions.depression.explanation,
+									modelBasis: prediction.mlPredictions.depression.modelBasis,
+									riskFactors: prediction.mlPredictions.depression.riskFactors,
+									recommendations:
+										prediction.mlPredictions.depression.recommendations,
+									immediateAction:
+										prediction.mlPredictions.depression.immediateAction,
+								},
+								stress: {
+									riskLevel:
+										prediction.mlPredictions.stress.riskLevel.toLowerCase() as
+											| "low risk"
+											| "moderate risk"
+											| "high risk",
+									riskScore: prediction.mlPredictions.stress.riskScore,
+									confidence: prediction.mlPredictions.stress.confidence,
+									prediction: prediction.mlPredictions.stress.prediction,
+									explanation: prediction.mlPredictions.stress.explanation,
+									modelBasis: prediction.mlPredictions.stress.modelBasis,
+									riskFactors: prediction.mlPredictions.stress.riskFactors,
+									recommendations:
+										prediction.mlPredictions.stress.recommendations,
+									immediateAction:
+										prediction.mlPredictions.stress.immediateAction,
+								},
+								modelAccuracy: prediction.mlPredictions.modelAccuracy,
+								trainingDataSize: prediction.mlPredictions.trainingDataSize,
+								lastTrainingDate: prediction.mlPredictions.lastTrainingDate,
+							}
+						: null,
 				};
 
 				// Create new prediction record in the array to track history
@@ -751,6 +1075,7 @@ export const controller = (prisma: PrismaClient) => {
 						riskFactors: predictionData.riskFactors,
 						mentalHealthRisk: predictionData.mentalHealthRisk,
 						mentalHealthPredictions: predictionData.mentalHealthPredictions,
+						mlPredictions: predictionData.mlPredictions,
 						inputData: predictionData.inputData,
 						recommendations: predictionData.recommendations,
 						predictionDate: predictionData.predictionDate,
@@ -780,57 +1105,59 @@ export const controller = (prisma: PrismaClient) => {
 					disclaimer:
 						"⚠️ IMPORTANT NOTICE: This mental health assessment is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
 					inventory: updatedInventory,
-					academicPerformancePrediction: {
-						academicPerformanceOutlook: prediction.prediction,
-						confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
-						modelAccuracy: {
-							decisionTree: `${(prediction.modelAccuracy.decisionTree * 100).toFixed(1)}%`,
-							randomForest: `${(prediction.modelAccuracy.randomForest * 100).toFixed(1)}%`,
-						},
-						riskFactors: prediction.riskFactors,
-						mentalHealthRisk: {
-							level: prediction.mentalHealthRisk.level,
-							description: prediction.mentalHealthRisk.description,
-							needsAttention: prediction.mentalHealthRisk.needsAttention,
-							urgency: prediction.mentalHealthRisk.urgency,
-							assessmentSummary: prediction.mentalHealthRisk.needsAttention
-								? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
-								: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
-							disclaimer:
-								"⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
-						},
-						inputData: studentData,
-						recommendations: generateRecommendations(prediction),
-					},
-					// NEW: Focused mental health risk assessment - shows primary concern only
-					primaryMentalHealthConcern: prediction.primaryMentalHealthConcern || null,
-					mentalHealthRiskAssessment: (() => {
-						const primaryType = prediction.primaryMentalHealthConcern?.type;
-						if (
-							!primaryType ||
-							!prediction.mentalHealthPredictions[primaryType] ||
-							!prediction.primaryMentalHealthConcern
-						) {
-							return null;
-						}
-
-						const assessment = prediction.mentalHealthPredictions[primaryType];
-						return {
-							type: primaryType,
-							priority: prediction.primaryMentalHealthConcern.priority,
-							reason: prediction.primaryMentalHealthConcern.reason,
-							riskLevel: assessment.riskLevel,
-							riskPercentage: `${assessment.riskPercentage.toFixed(1)}%`,
-							isProne: assessment.isProne,
-							riskScore: `${assessment.riskScore}/${assessment.maxScore}`,
-							explanation: assessment.explanation,
-							riskFactors: assessment.riskFactors,
-							protectiveFactors: assessment.protectiveFactors,
-							recommendations: assessment.recommendations,
-							warningSignsToWatch: assessment.warningSignsToWatch,
-							immediateAction: assessment.immediateAction,
-						};
-					})(),
+					// NEW: Machine Learning Predictions with enhanced details
+					// Only show High Risk conditions, or positive message if all Low Risk
+					mlPredictions: prediction.mlPredictions
+						? formatMLPredictions({
+								anxiety: {
+									riskLevel: prediction.mlPredictions.anxiety.riskLevel,
+									riskPercentage: `${(prediction.mlPredictions.anxiety.confidence * 100).toFixed(1)}%`,
+									prediction: prediction.mlPredictions.anxiety.prediction,
+									explanation: prediction.mlPredictions.anxiety.explanation,
+									modelBasis: prediction.mlPredictions.anxiety.modelBasis,
+									riskFactors: prediction.mlPredictions.anxiety.riskFactors,
+									recommendations:
+										prediction.mlPredictions.anxiety.recommendations,
+									immediateAction:
+										prediction.mlPredictions.anxiety.immediateAction,
+								},
+								depression: {
+									riskLevel: prediction.mlPredictions.depression.riskLevel,
+									riskPercentage: `${(prediction.mlPredictions.depression.confidence * 100).toFixed(1)}%`,
+									prediction: prediction.mlPredictions.depression.prediction,
+									explanation: prediction.mlPredictions.depression.explanation,
+									modelBasis: prediction.mlPredictions.depression.modelBasis,
+									riskFactors: prediction.mlPredictions.depression.riskFactors,
+									recommendations:
+										prediction.mlPredictions.depression.recommendations,
+									immediateAction:
+										prediction.mlPredictions.depression.immediateAction,
+								},
+								stress: {
+									riskLevel: prediction.mlPredictions.stress.riskLevel,
+									riskPercentage: `${(prediction.mlPredictions.stress.confidence * 100).toFixed(1)}%`,
+									prediction: prediction.mlPredictions.stress.prediction,
+									explanation: prediction.mlPredictions.stress.explanation,
+									modelBasis: prediction.mlPredictions.stress.modelBasis,
+									riskFactors: prediction.mlPredictions.stress.riskFactors,
+									recommendations:
+										prediction.mlPredictions.stress.recommendations,
+									immediateAction:
+										prediction.mlPredictions.stress.immediateAction,
+								},
+								modelAccuracy: {
+									anxiety: `${(prediction.mlPredictions.modelAccuracy.anxiety * 100).toFixed(1)}%`,
+									depression: `${(prediction.mlPredictions.modelAccuracy.depression * 100).toFixed(1)}%`,
+									stress: `${(prediction.mlPredictions.modelAccuracy.stress * 100).toFixed(1)}%`,
+								},
+								trainingDataSize: prediction.mlPredictions.trainingDataSize,
+								lastTrainingDate: prediction.mlPredictions.lastTrainingDate,
+							})
+						: {
+								message:
+									"ML predictions are being initialized. Please try again in a few moments.",
+								status: "initializing",
+							},
 				});
 			} catch (predictionError) {
 				// If prediction fails, still return successful inventory creation
@@ -1055,6 +1382,8 @@ export const controller = (prisma: PrismaClient) => {
 					natureOfSchooling: updatedInventory.nature_of_schooling?.continuous
 						? "continuous"
 						: "interrupted",
+					honorsReceived:
+						updatedInventory.educational_background?.honors_received || "None",
 					// Home and family background
 					parentsMaritalRelationship:
 						updatedInventory.home_and_family_background?.parents_martial_relationship ||
@@ -1071,9 +1400,17 @@ export const controller = (prisma: PrismaClient) => {
 					parentsTotalMonthlyIncome:
 						updatedInventory.home_and_family_background?.parents_total_montly_income
 							?.income || "below_five_thousand",
+					weeklyAllowance:
+						updatedInventory.home_and_family_background
+							?.how_much_is_your_weekly_allowance || 500,
 					quietPlaceToStudy:
 						updatedInventory.home_and_family_background
 							?.do_you_have_quiet_place_to_study === "yes"
+							? "yes"
+							: "no",
+					shareRoom:
+						updatedInventory.home_and_family_background
+							?.do_you_share_your_room_with_anyone?.status === "yes"
 							? "yes"
 							: "no",
 					natureOfResidence:
@@ -1081,11 +1418,31 @@ export const controller = (prisma: PrismaClient) => {
 							?.nature_of_residence_while_attending_school || "family_home",
 					// Health status from updated inventory
 					visionProblems: updatedInventory.health?.physical?.your_vision ? "yes" : "no",
+					hearingProblems: updatedInventory.health?.physical?.your_hearing ? "yes" : "no",
+					speechProblems: updatedInventory.health?.physical?.your_speech ? "yes" : "no",
 					generalHealthProblems: updatedInventory.health?.physical?.your_general_health
 						? "yes"
 						: "no",
+					// Map psychological consultation type correctly
 					psychologicalConsultation:
 						updatedInventory.health?.psychological?.status === "yes" ? "yes" : "no",
+					psychiatristConsultation:
+						updatedInventory.health?.psychological?.status === "yes" &&
+						updatedInventory.health?.psychological?.consulted === "psychiatrist"
+							? "yes"
+							: "no",
+					psychologistConsultation:
+						updatedInventory.health?.psychological?.status === "yes" &&
+						updatedInventory.health?.psychological?.consulted === "psychologist"
+							? "yes"
+							: "no",
+					counselorConsultation:
+						updatedInventory.health?.psychological?.status === "yes" &&
+						updatedInventory.health?.psychological?.consulted === "councelor"
+							? "yes"
+							: "no",
+					psychologicalConsultationReason:
+						updatedInventory.health?.psychological?.for_what || "",
 					// Interest and hobbies
 					favoriteSubject:
 						updatedInventory.interest_and_hobbies?.favorite_subject || "Math",
@@ -1161,45 +1518,169 @@ export const controller = (prisma: PrismaClient) => {
 							disclaimer:
 								"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 						},
-						// NEW: Focused mental health prediction - stores only primary concern
-						mentalHealthPredictions: (() => {
-							const primaryType = prediction.primaryMentalHealthConcern?.type;
-							if (
-								!primaryType ||
-								!prediction.mentalHealthPredictions[primaryType] ||
-								!prediction.primaryMentalHealthConcern
-							) {
-								return null;
-							}
-
-							const assessment = prediction.mentalHealthPredictions[primaryType];
-							return {
-								primaryConcern: primaryType,
-								priority: prediction.primaryMentalHealthConcern.priority,
-								[primaryType]: {
-									riskLevel: assessment.riskLevel.toLowerCase() as
+						// Clinical mental health assessments
+						mentalHealthPredictions: {
+							anxiety: {
+								riskLevel:
+									prediction.mentalHealthPredictions.anxiety.riskLevel.toLowerCase() as
 										| "low"
 										| "moderate"
 										| "high"
 										| "critical",
-									riskScore: assessment.riskScore,
-									maxScore: assessment.maxScore,
-									riskPercentage: assessment.riskPercentage,
-									isProne: assessment.isProne,
-									riskFactors: assessment.riskFactors,
-									protectiveFactors: assessment.protectiveFactors,
-									explanation: assessment.explanation,
-									recommendations: assessment.recommendations,
-									warningSignsToWatch: assessment.warningSignsToWatch,
-									immediateAction: assessment.immediateAction,
-								},
-								// Store all assessments for comprehensive analysis (internal use)
-								_allAssessments: prediction.mentalHealthPredictions._allAssessments,
-							};
-						})() as any,
+								riskScore: prediction.mentalHealthPredictions.anxiety.riskScore,
+								maxScore: prediction.mentalHealthPredictions.anxiety.maxScore,
+								riskPercentage:
+									prediction.mentalHealthPredictions.anxiety.riskPercentage,
+								isProne: prediction.mentalHealthPredictions.anxiety.isProne,
+								riskFactors: prediction.mentalHealthPredictions.anxiety.riskFactors,
+								protectiveFactors:
+									prediction.mentalHealthPredictions.anxiety.protectiveFactors,
+								explanation: prediction.mentalHealthPredictions.anxiety.explanation,
+								recommendations:
+									prediction.mentalHealthPredictions.anxiety.recommendations,
+								warningSignsToWatch:
+									prediction.mentalHealthPredictions.anxiety.warningSignsToWatch,
+								immediateAction:
+									prediction.mentalHealthPredictions.anxiety.immediateAction,
+							},
+							depression: {
+								riskLevel:
+									prediction.mentalHealthPredictions.depression.riskLevel.toLowerCase() as
+										| "low"
+										| "moderate"
+										| "high"
+										| "critical",
+								riskScore: prediction.mentalHealthPredictions.depression.riskScore,
+								maxScore: prediction.mentalHealthPredictions.depression.maxScore,
+								riskPercentage:
+									prediction.mentalHealthPredictions.depression.riskPercentage,
+								isProne: prediction.mentalHealthPredictions.depression.isProne,
+								riskFactors:
+									prediction.mentalHealthPredictions.depression.riskFactors,
+								protectiveFactors:
+									prediction.mentalHealthPredictions.depression.protectiveFactors,
+								explanation:
+									prediction.mentalHealthPredictions.depression.explanation,
+								recommendations:
+									prediction.mentalHealthPredictions.depression.recommendations,
+								warningSignsToWatch:
+									prediction.mentalHealthPredictions.depression
+										.warningSignsToWatch,
+								immediateAction:
+									prediction.mentalHealthPredictions.depression.immediateAction,
+							},
+							stress: {
+								riskLevel:
+									prediction.mentalHealthPredictions.stress.riskLevel.toLowerCase() as
+										| "low"
+										| "moderate"
+										| "high"
+										| "critical",
+								riskScore: prediction.mentalHealthPredictions.stress.riskScore,
+								maxScore: prediction.mentalHealthPredictions.stress.maxScore,
+								riskPercentage:
+									prediction.mentalHealthPredictions.stress.riskPercentage,
+								isProne: prediction.mentalHealthPredictions.stress.isProne,
+								riskFactors: prediction.mentalHealthPredictions.stress.riskFactors,
+								protectiveFactors:
+									prediction.mentalHealthPredictions.stress.protectiveFactors,
+								explanation: prediction.mentalHealthPredictions.stress.explanation,
+								recommendations:
+									prediction.mentalHealthPredictions.stress.recommendations,
+								warningSignsToWatch:
+									prediction.mentalHealthPredictions.stress.warningSignsToWatch,
+								immediateAction:
+									prediction.mentalHealthPredictions.stress.immediateAction,
+							},
+							suicide: {
+								riskLevel:
+									prediction.mentalHealthPredictions.suicide.riskLevel.toLowerCase() as
+										| "low"
+										| "moderate"
+										| "high"
+										| "critical",
+								riskScore: prediction.mentalHealthPredictions.suicide.riskScore,
+								maxScore: prediction.mentalHealthPredictions.suicide.maxScore,
+								riskPercentage:
+									prediction.mentalHealthPredictions.suicide.riskPercentage,
+								isProne: prediction.mentalHealthPredictions.suicide.isProne,
+								riskFactors: prediction.mentalHealthPredictions.suicide.riskFactors,
+								protectiveFactors:
+									prediction.mentalHealthPredictions.suicide.protectiveFactors,
+								explanation: prediction.mentalHealthPredictions.suicide.explanation,
+								recommendations:
+									prediction.mentalHealthPredictions.suicide.recommendations,
+								warningSignsToWatch:
+									prediction.mentalHealthPredictions.suicide.warningSignsToWatch,
+								immediateAction:
+									prediction.mentalHealthPredictions.suicide.immediateAction,
+							},
+						},
 						inputData: studentData,
 						recommendations: generateRecommendations(prediction),
 						predictionDate: new Date(),
+						// NEW: Machine Learning Predictions from actual outcome data
+						// Store FULL mlPredictions object (not formatted - formatting is only for display)
+						mlPredictions: prediction.mlPredictions
+							? {
+									anxiety: {
+										riskLevel:
+											prediction.mlPredictions.anxiety.riskLevel.toLowerCase() as
+												| "low risk"
+												| "moderate risk"
+												| "high risk",
+										riskScore: prediction.mlPredictions.anxiety.riskScore,
+										confidence: prediction.mlPredictions.anxiety.confidence,
+										prediction: prediction.mlPredictions.anxiety.prediction,
+										explanation: prediction.mlPredictions.anxiety.explanation,
+										modelBasis: prediction.mlPredictions.anxiety.modelBasis,
+										riskFactors: prediction.mlPredictions.anxiety.riskFactors,
+										recommendations:
+											prediction.mlPredictions.anxiety.recommendations,
+										immediateAction:
+											prediction.mlPredictions.anxiety.immediateAction,
+									},
+									depression: {
+										riskLevel:
+											prediction.mlPredictions.depression.riskLevel.toLowerCase() as
+												| "low risk"
+												| "moderate risk"
+												| "high risk",
+										riskScore: prediction.mlPredictions.depression.riskScore,
+										confidence: prediction.mlPredictions.depression.confidence,
+										prediction: prediction.mlPredictions.depression.prediction,
+										explanation:
+											prediction.mlPredictions.depression.explanation,
+										modelBasis: prediction.mlPredictions.depression.modelBasis,
+										riskFactors:
+											prediction.mlPredictions.depression.riskFactors,
+										recommendations:
+											prediction.mlPredictions.depression.recommendations,
+										immediateAction:
+											prediction.mlPredictions.depression.immediateAction,
+									},
+									stress: {
+										riskLevel:
+											prediction.mlPredictions.stress.riskLevel.toLowerCase() as
+												| "low risk"
+												| "moderate risk"
+												| "high risk",
+										riskScore: prediction.mlPredictions.stress.riskScore,
+										confidence: prediction.mlPredictions.stress.confidence,
+										prediction: prediction.mlPredictions.stress.prediction,
+										explanation: prediction.mlPredictions.stress.explanation,
+										modelBasis: prediction.mlPredictions.stress.modelBasis,
+										riskFactors: prediction.mlPredictions.stress.riskFactors,
+										recommendations:
+											prediction.mlPredictions.stress.recommendations,
+										immediateAction:
+											prediction.mlPredictions.stress.immediateAction,
+									},
+									modelAccuracy: prediction.mlPredictions.modelAccuracy,
+									trainingDataSize: prediction.mlPredictions.trainingDataSize,
+									lastTrainingDate: prediction.mlPredictions.lastTrainingDate,
+								}
+							: null,
 					};
 
 					// Create new prediction record in the array to track history
@@ -1212,6 +1693,7 @@ export const controller = (prisma: PrismaClient) => {
 							riskFactors: predictionData.riskFactors,
 							mentalHealthRisk: predictionData.mentalHealthRisk,
 							mentalHealthPredictions: predictionData.mentalHealthPredictions,
+							mlPredictions: predictionData.mlPredictions,
 							inputData: predictionData.inputData,
 							recommendations: predictionData.recommendations,
 							predictionDate: predictionData.predictionDate,
@@ -1230,6 +1712,10 @@ export const controller = (prisma: PrismaClient) => {
 								include: {
 									person: true,
 								},
+							},
+							mentalHealthPredictions: {
+								where: { isDeleted: false },
+								orderBy: { createdAt: "desc" },
 							},
 						},
 					});
@@ -1259,11 +1745,31 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			// Return updated inventory (with or without prediction)
+			// Include mentalHealthPredictions in the response
+			const finalInventory = await prisma.individualInventory.findFirst({
+				where: { id: updatedInventory.id },
+				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+					mentalHealthPredictions: {
+						where: { isDeleted: false },
+						orderBy: { createdAt: "desc" },
+					},
+					significantNotes: {
+						where: { isDeleted: false },
+						orderBy: { createdAt: "desc" },
+					},
+				},
+			});
+
 			res.status(200).json({
 				message: predictionResult
 					? "Inventory updated successfully and mental health prediction generated"
 					: "Inventory updated successfully",
-				inventory: updatedInventory,
+				inventory: finalInventory || updatedInventory,
 				...(predictionResult && { prediction: predictionResult }),
 			});
 		} catch (error) {
@@ -1414,6 +1920,7 @@ export const controller = (prisma: PrismaClient) => {
 					(existingInventory.nature_of_schooling?.continuous
 						? "continuous"
 						: "interrupted"),
+				honorsReceived: existingInventory.educational_background?.honors_received || "None",
 				// Home and family background
 				parentsMaritalRelationship:
 					parentsMaritalRelationship ||
@@ -1437,12 +1944,20 @@ export const controller = (prisma: PrismaClient) => {
 					existingInventory.home_and_family_background?.parents_total_montly_income
 						?.income ||
 					"below_five_thousand",
+				weeklyAllowance:
+					existingInventory.home_and_family_background
+						?.how_much_is_your_weekly_allowance || 500,
 				quietPlaceToStudy:
 					quietPlaceToStudy ||
 					(existingInventory.home_and_family_background
 						?.do_you_have_quiet_place_to_study === "yes"
 						? "yes"
 						: "no"),
+				shareRoom:
+					existingInventory.home_and_family_background?.do_you_share_your_room_with_anyone
+						?.status === "yes"
+						? "yes"
+						: "no",
 				natureOfResidence:
 					natureOfResidence ||
 					existingInventory.home_and_family_background
@@ -1452,19 +1967,37 @@ export const controller = (prisma: PrismaClient) => {
 				visionProblems:
 					visionProblems ||
 					(existingInventory.health?.physical?.your_vision ? "yes" : "no"),
+				hearingProblems: existingInventory.health?.physical?.your_hearing ? "yes" : "no",
+				speechProblems: existingInventory.health?.physical?.your_speech ? "yes" : "no",
 				generalHealthProblems:
 					generalHealthProblems ||
 					(existingInventory.health?.physical?.your_general_health ? "yes" : "no"),
+				// Map psychological consultation type correctly
 				psychologicalConsultation:
 					psychologicalConsultation ||
 					(existingInventory.health?.psychological?.status === "yes" ? "yes" : "no"),
+				psychiatristConsultation:
+					psychiatristConsultation ||
+					(existingInventory.health?.psychological?.status === "yes" &&
+					existingInventory.health?.psychological?.consulted === "psychiatrist"
+						? "yes"
+						: "no"),
+				psychologistConsultation:
+					existingInventory.health?.psychological?.status === "yes" &&
+					existingInventory.health?.psychological?.consulted === "psychologist"
+						? "yes"
+						: "no",
+				counselorConsultation:
+					counselorConsultation ||
+					(existingInventory.health?.psychological?.status === "yes" &&
+					existingInventory.health?.psychological?.consulted === "councelor"
+						? "yes"
+						: "no"),
 				psychologicalConsultationReason:
 					psychologicalConsultationReason ||
 					existingInventory.health?.psychological?.for_what ||
 					"",
-				psychiatristConsultation: psychiatristConsultation || "no",
 				psychiatristConsultationReason: psychiatristConsultationReason || "",
-				counselorConsultation: counselorConsultation || "no",
 				counselorConsultationReason: counselorConsultationReason || "",
 				// Test results
 				testName: testName || existingInventory.test_results?.name_of_test || "",
@@ -1595,45 +2128,152 @@ export const controller = (prisma: PrismaClient) => {
 					disclaimer:
 						"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 				},
-				// NEW: Focused mental health prediction - stores only primary concern
-				mentalHealthPredictions: (() => {
-					const primaryType = prediction.primaryMentalHealthConcern?.type;
-					if (
-						!primaryType ||
-						!prediction.mentalHealthPredictions[primaryType] ||
-						!prediction.primaryMentalHealthConcern
-					) {
-						return null;
-					}
-
-					const assessment = prediction.mentalHealthPredictions[primaryType];
-					return {
-						primaryConcern: primaryType,
-						priority: prediction.primaryMentalHealthConcern.priority,
-						[primaryType]: {
-							riskLevel: assessment.riskLevel.toLowerCase() as
+				// Clinical mental health assessments
+				mentalHealthPredictions: {
+					anxiety: {
+						riskLevel:
+							prediction.mentalHealthPredictions.anxiety.riskLevel.toLowerCase() as
 								| "low"
 								| "moderate"
 								| "high"
 								| "critical",
-							riskScore: assessment.riskScore,
-							maxScore: assessment.maxScore,
-							riskPercentage: assessment.riskPercentage,
-							isProne: assessment.isProne,
-							riskFactors: assessment.riskFactors,
-							protectiveFactors: assessment.protectiveFactors,
-							explanation: assessment.explanation,
-							recommendations: assessment.recommendations,
-							warningSignsToWatch: assessment.warningSignsToWatch,
-							immediateAction: assessment.immediateAction,
-						},
-						// Store all assessments for comprehensive analysis (internal use)
-						_allAssessments: prediction.mentalHealthPredictions._allAssessments,
-					};
-				})() as any,
+						riskScore: prediction.mentalHealthPredictions.anxiety.riskScore,
+						maxScore: prediction.mentalHealthPredictions.anxiety.maxScore,
+						riskPercentage: prediction.mentalHealthPredictions.anxiety.riskPercentage,
+						isProne: prediction.mentalHealthPredictions.anxiety.isProne,
+						riskFactors: prediction.mentalHealthPredictions.anxiety.riskFactors,
+						protectiveFactors:
+							prediction.mentalHealthPredictions.anxiety.protectiveFactors,
+						explanation: prediction.mentalHealthPredictions.anxiety.explanation,
+						recommendations: prediction.mentalHealthPredictions.anxiety.recommendations,
+						warningSignsToWatch:
+							prediction.mentalHealthPredictions.anxiety.warningSignsToWatch,
+						immediateAction: prediction.mentalHealthPredictions.anxiety.immediateAction,
+					},
+					depression: {
+						riskLevel:
+							prediction.mentalHealthPredictions.depression.riskLevel.toLowerCase() as
+								| "low"
+								| "moderate"
+								| "high"
+								| "critical",
+						riskScore: prediction.mentalHealthPredictions.depression.riskScore,
+						maxScore: prediction.mentalHealthPredictions.depression.maxScore,
+						riskPercentage:
+							prediction.mentalHealthPredictions.depression.riskPercentage,
+						isProne: prediction.mentalHealthPredictions.depression.isProne,
+						riskFactors: prediction.mentalHealthPredictions.depression.riskFactors,
+						protectiveFactors:
+							prediction.mentalHealthPredictions.depression.protectiveFactors,
+						explanation: prediction.mentalHealthPredictions.depression.explanation,
+						recommendations:
+							prediction.mentalHealthPredictions.depression.recommendations,
+						warningSignsToWatch:
+							prediction.mentalHealthPredictions.depression.warningSignsToWatch,
+						immediateAction:
+							prediction.mentalHealthPredictions.depression.immediateAction,
+					},
+					stress: {
+						riskLevel:
+							prediction.mentalHealthPredictions.stress.riskLevel.toLowerCase() as
+								| "low"
+								| "moderate"
+								| "high"
+								| "critical",
+						riskScore: prediction.mentalHealthPredictions.stress.riskScore,
+						maxScore: prediction.mentalHealthPredictions.stress.maxScore,
+						riskPercentage: prediction.mentalHealthPredictions.stress.riskPercentage,
+						isProne: prediction.mentalHealthPredictions.stress.isProne,
+						riskFactors: prediction.mentalHealthPredictions.stress.riskFactors,
+						protectiveFactors:
+							prediction.mentalHealthPredictions.stress.protectiveFactors,
+						explanation: prediction.mentalHealthPredictions.stress.explanation,
+						recommendations: prediction.mentalHealthPredictions.stress.recommendations,
+						warningSignsToWatch:
+							prediction.mentalHealthPredictions.stress.warningSignsToWatch,
+						immediateAction: prediction.mentalHealthPredictions.stress.immediateAction,
+					},
+					suicide: {
+						riskLevel:
+							prediction.mentalHealthPredictions.suicide.riskLevel.toLowerCase() as
+								| "low"
+								| "moderate"
+								| "high"
+								| "critical",
+						riskScore: prediction.mentalHealthPredictions.suicide.riskScore,
+						maxScore: prediction.mentalHealthPredictions.suicide.maxScore,
+						riskPercentage: prediction.mentalHealthPredictions.suicide.riskPercentage,
+						isProne: prediction.mentalHealthPredictions.suicide.isProne,
+						riskFactors: prediction.mentalHealthPredictions.suicide.riskFactors,
+						protectiveFactors:
+							prediction.mentalHealthPredictions.suicide.protectiveFactors,
+						explanation: prediction.mentalHealthPredictions.suicide.explanation,
+						recommendations: prediction.mentalHealthPredictions.suicide.recommendations,
+						warningSignsToWatch:
+							prediction.mentalHealthPredictions.suicide.warningSignsToWatch,
+						immediateAction: prediction.mentalHealthPredictions.suicide.immediateAction,
+					},
+				},
 				inputData: studentData,
 				recommendations: generateRecommendations(prediction),
 				predictionDate: new Date(),
+				// NEW: Machine Learning Predictions from actual outcome data
+				mlPredictions: prediction.mlPredictions
+					? {
+							anxiety: {
+								riskLevel:
+									prediction.mlPredictions.anxiety.riskLevel.toLowerCase() as
+										| "low risk"
+										| "high risk",
+								riskScore: prediction.mlPredictions.anxiety.riskScore,
+								confidence: prediction.mlPredictions.anxiety.confidence,
+								prediction: prediction.mlPredictions.anxiety.prediction,
+								explanation: prediction.mlPredictions.anxiety.explanation,
+								modelBasis: prediction.mlPredictions.anxiety.modelBasis,
+								riskFactors: prediction.mentalHealthPredictions.anxiety.riskFactors,
+								recommendations:
+									prediction.mentalHealthPredictions.anxiety.recommendations,
+								immediateAction:
+									prediction.mentalHealthPredictions.anxiety.immediateAction,
+							},
+							depression: {
+								riskLevel:
+									prediction.mlPredictions.depression.riskLevel.toLowerCase() as
+										| "low risk"
+										| "high risk",
+								riskScore: prediction.mlPredictions.depression.riskScore,
+								confidence: prediction.mlPredictions.depression.confidence,
+								prediction: prediction.mlPredictions.depression.prediction,
+								explanation: prediction.mlPredictions.depression.explanation,
+								modelBasis: prediction.mlPredictions.depression.modelBasis,
+								riskFactors:
+									prediction.mentalHealthPredictions.depression.riskFactors,
+								recommendations:
+									prediction.mentalHealthPredictions.depression.recommendations,
+								immediateAction:
+									prediction.mentalHealthPredictions.depression.immediateAction,
+							},
+							stress: {
+								riskLevel:
+									prediction.mlPredictions.stress.riskLevel.toLowerCase() as
+										| "low risk"
+										| "high risk",
+								riskScore: prediction.mlPredictions.stress.riskScore,
+								confidence: prediction.mlPredictions.stress.confidence,
+								prediction: prediction.mlPredictions.stress.prediction,
+								explanation: prediction.mlPredictions.stress.explanation,
+								modelBasis: prediction.mlPredictions.stress.modelBasis,
+								riskFactors: prediction.mentalHealthPredictions.stress.riskFactors,
+								recommendations:
+									prediction.mentalHealthPredictions.stress.recommendations,
+								immediateAction:
+									prediction.mentalHealthPredictions.stress.immediateAction,
+							},
+							modelAccuracy: prediction.mlPredictions.modelAccuracy,
+							trainingDataSize: prediction.mlPredictions.trainingDataSize,
+							lastTrainingDate: prediction.mlPredictions.lastTrainingDate,
+						}
+					: null,
 			};
 
 			// Create new prediction record in the array to track history
@@ -1646,6 +2286,7 @@ export const controller = (prisma: PrismaClient) => {
 					riskFactors: predictionData.riskFactors,
 					mentalHealthRisk: predictionData.mentalHealthRisk,
 					mentalHealthPredictions: predictionData.mentalHealthPredictions,
+					mlPredictions: predictionData.mlPredictions,
 					inputData: predictionData.inputData,
 					recommendations: predictionData.recommendations,
 					predictionDate: predictionData.predictionDate,
@@ -1678,33 +2319,60 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			res.status(200).json({
-				message: "Mental health prediction completed successfully",
+				message: "Comprehensive mental health prediction completed successfully",
 				disclaimer:
-					"⚠️ IMPORTANT NOTICE: This mental health prediction is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
+					"⚠️ IMPORTANT NOTICE: This mental health assessment combines evidence-based clinical screening with machine learning predictions trained on actual student mental health outcomes. This is for screening purposes only and should not be considered a professional diagnosis.",
 				studentId,
 				inventory: updatedInventory,
-				prediction: {
-					academicPerformanceOutlook: prediction.prediction,
-					confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
-					modelAccuracy: {
-						decisionTree: `${(prediction.modelAccuracy.decisionTree * 100).toFixed(1)}%`,
-						randomForest: `${(prediction.modelAccuracy.randomForest * 100).toFixed(1)}%`,
-					},
-					riskFactors: prediction.riskFactors,
-					mentalHealthRisk: {
-						level: prediction.mentalHealthRisk.level,
-						description: prediction.mentalHealthRisk.description,
-						needsAttention: prediction.mentalHealthRisk.needsAttention,
-						urgency: prediction.mentalHealthRisk.urgency,
-						assessmentSummary: prediction.mentalHealthRisk.needsAttention
-							? `⚠️ ATTENTION NEEDED: ${prediction.mentalHealthRisk.description}`
-							: `✅ LOW RISK: ${prediction.mentalHealthRisk.description}`,
-						disclaimer:
-							"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
-					},
-					inputData: studentData,
-					recommendations: generateRecommendations(prediction),
-				},
+				// NEW: Machine Learning Predictions with enhanced details
+				// Only show High Risk conditions, or positive message if all Low Risk
+				mlPredictions: prediction.mlPredictions
+					? {
+							anxiety: {
+								riskLevel: prediction.mlPredictions.anxiety.riskLevel,
+								riskPercentage: `${(prediction.mlPredictions.anxiety.confidence * 100).toFixed(1)}%`,
+								prediction: prediction.mlPredictions.anxiety.prediction,
+								explanation: prediction.mlPredictions.anxiety.explanation,
+								modelBasis: prediction.mlPredictions.anxiety.modelBasis,
+								riskFactors: prediction.mlPredictions.anxiety.riskFactors,
+								recommendations: prediction.mlPredictions.anxiety.recommendations,
+								immediateAction: prediction.mlPredictions.anxiety.immediateAction,
+							},
+							depression: {
+								riskLevel: prediction.mlPredictions.depression.riskLevel,
+								riskPercentage: `${(prediction.mlPredictions.depression.confidence * 100).toFixed(1)}%`,
+								prediction: prediction.mlPredictions.depression.prediction,
+								explanation: prediction.mlPredictions.depression.explanation,
+								modelBasis: prediction.mlPredictions.depression.modelBasis,
+								riskFactors: prediction.mlPredictions.depression.riskFactors,
+								recommendations:
+									prediction.mlPredictions.depression.recommendations,
+								immediateAction:
+									prediction.mlPredictions.depression.immediateAction,
+							},
+							stress: {
+								riskLevel: prediction.mlPredictions.stress.riskLevel,
+								riskPercentage: `${(prediction.mlPredictions.stress.confidence * 100).toFixed(1)}%`,
+								prediction: prediction.mlPredictions.stress.prediction,
+								explanation: prediction.mlPredictions.stress.explanation,
+								modelBasis: prediction.mlPredictions.stress.modelBasis,
+								riskFactors: prediction.mlPredictions.stress.riskFactors,
+								recommendations: prediction.mlPredictions.stress.recommendations,
+								immediateAction: prediction.mlPredictions.stress.immediateAction,
+							},
+							modelAccuracy: {
+								anxiety: `${(prediction.mlPredictions.modelAccuracy.anxiety * 100).toFixed(1)}%`,
+								depression: `${(prediction.mlPredictions.modelAccuracy.depression * 100).toFixed(1)}%`,
+								stress: `${(prediction.mlPredictions.modelAccuracy.stress * 100).toFixed(1)}%`,
+							},
+							trainingDataSize: prediction.mlPredictions.trainingDataSize,
+							lastTrainingDate: prediction.mlPredictions.lastTrainingDate,
+						}
+					: {
+							message:
+								"ML predictions are being initialized. Please try again in a few moments.",
+							status: "initializing",
+						},
 			});
 		} catch (error) {
 			inventoryLogger.error(
