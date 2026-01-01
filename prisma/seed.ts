@@ -116,7 +116,7 @@ const scoreMapping: { [key: string]: number } = {
 	very_often: 4,
 };
 
-// Function to generate mental health prediction
+// Function to generate mental health prediction with new structure
 const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 	const predictions = ["Improved", "Same", "Declined"];
 	const prediction = getRandomElement(predictions);
@@ -128,15 +128,10 @@ const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 		"high",
 		"critical",
 	];
-	const riskLevel = getRandomElement(riskLevels);
 
-	const urgencyLevels: ("none" | "monitor" | "schedule" | "immediate")[] = [
-		"none",
-		"monitor",
-		"schedule",
-		"immediate",
-	];
-	const urgency = getRandomElement(urgencyLevels);
+	const concerns = ["anxiety", "depression", "stress", "suicide"];
+	const primaryConcern = getRandomElement(concerns);
+	const priority = getRandomElement(["Low", "Moderate", "High", "Critical"]);
 
 	const riskFactorOptions = [
 		"Low family support",
@@ -147,22 +142,98 @@ const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 		"Health concerns",
 		"Relationship issues",
 		"Career uncertainty",
+		"Housing instability",
+		"Physical health challenges",
 	];
 
-	const riskFactors = [getRandomElement(riskFactorOptions), getRandomElement(riskFactorOptions)];
+	const protectiveFactorOptions = [
+		"Strong family support",
+		"Good academic performance",
+		"Active social connections",
+		"Regular exercise routine",
+		"Healthy sleep habits",
+		"Effective coping strategies",
+		"Access to counseling services",
+		"Positive peer relationships",
+	];
 
-	const recommendations = [
+	const warningSignsOptions = [
+		"Increased isolation from friends and family",
+		"Declining academic performance",
+		"Changes in sleep patterns",
+		"Loss of interest in activities",
+		"Increased irritability or mood swings",
+		"Physical symptoms like headaches or fatigue",
+		"Difficulty concentrating",
+		"Changes in appetite",
+	];
+
+	const recommendationsOptions = [
 		"Schedule regular counseling sessions",
 		"Engage in stress management activities",
 		"Maintain healthy sleep schedule",
 		"Seek peer support",
 		"Participate in campus activities",
 		"Consult with academic advisor",
+		"Practice mindfulness and relaxation techniques",
+		"Establish a regular exercise routine",
+		"Maintain social connections",
+		"Utilize campus health services and seek appropriate medical support",
 	];
 
+	// Generate concern-specific data
+	const generateConcernData = (concernType: string) => {
+		const riskLevel = getRandomElement(riskLevels);
+		const isHighRisk = riskLevel === "high" || riskLevel === "critical";
+		const riskScore = getRandomInt(0, 100);
+		const maxScore = 100;
+		const riskPercentage = Math.round((riskScore / maxScore) * 100 * 100) / 100;
+
+		return {
+			riskLevel: riskLevel as any,
+			riskScore,
+			maxScore,
+			riskPercentage,
+			isProne: isHighRisk,
+			riskFactors: [getRandomElement(riskFactorOptions), getRandomElement(riskFactorOptions)],
+			protectiveFactors: [
+				getRandomElement(protectiveFactorOptions),
+				getRandomElement(protectiveFactorOptions),
+			],
+			explanation: `${concernType.charAt(0).toUpperCase() + concernType.slice(1)} assessment shows ${riskLevel} risk level based on current indicators and behavioral patterns.`,
+			recommendations: [
+				getRandomElement(recommendationsOptions),
+				getRandomElement(recommendationsOptions),
+				getRandomElement(recommendationsOptions),
+			],
+			warningSignsToWatch: [
+				getRandomElement(warningSignsOptions),
+				getRandomElement(warningSignsOptions),
+			],
+			immediateAction: isHighRisk
+				? "Contact counseling services immediately for professional support"
+				: null,
+		};
+	};
+
+	const mentalHealthPredictions = {
+		primaryConcern,
+		priority,
+		anxiety: generateConcernData("anxiety"),
+		depression: generateConcernData("depression"),
+		stress: generateConcernData("stress"),
+		suicide: generateConcernData("suicide"),
+		allAssessments: {
+			overallRisk: getRandomElement(riskLevels),
+			assessmentSummary: `Comprehensive mental health assessment completed. Primary concern identified as ${primaryConcern}.`,
+			lastUpdated: new Date().toISOString(),
+		},
+	};
+
 	const selectedRecommendations = [
-		getRandomElement(recommendations),
-		getRandomElement(recommendations),
+		getRandomElement(recommendationsOptions),
+		getRandomElement(recommendationsOptions),
+		getRandomElement(recommendationsOptions),
 	];
 
 	return {
@@ -172,19 +243,17 @@ const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
 			decisionTree: Math.round((0.7 + Math.random() * 0.25) * 100) / 100,
 			randomForest: Math.round((0.72 + Math.random() * 0.25) * 100) / 100,
 		},
-		riskFactors,
+		riskFactors: [getRandomElement(riskFactorOptions), getRandomElement(riskFactorOptions)],
+		// Legacy field - kept for schema compatibility but data comes from mentalHealthPredictions
 		mentalHealthRisk: {
-			level: riskLevel,
-			description: `Student presents ${riskLevel} risk factors for mental health concerns`,
-			needsAttention: riskLevel === "high" || riskLevel === "critical",
-			urgency,
-			assessmentSummary:
-				riskLevel === "high" || riskLevel === "critical"
-					? `⚠️ ATTENTION NEEDED: Student shows ${riskLevel} risk level and requires follow-up`
-					: `✅ LOW RISK: Student's profile suggests manageable stress levels`,
-			disclaimer:
-				"⚠️ IMPORTANT: This is only a prediction based on preliminary data. For accurate mental health assessment, please consult with qualified mental health professionals.",
+			level: "low" as any,
+			description: "Legacy field - see mentalHealthPredictions for actual data",
+			needsAttention: false,
+			urgency: "none" as any,
+			assessmentSummary: "Data migrated to mentalHealthPredictions structure",
+			disclaimer: "This field is deprecated. Use mentalHealthPredictions for current data.",
 		},
+		mentalHealthPredictions,
 		inputData: {
 			gender: studentGender === "male" ? "Male" : "Female",
 			age: getRandomInt(18, 26),

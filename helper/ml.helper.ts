@@ -63,6 +63,28 @@ export interface PredictionResult {
 		needsAttention: boolean;
 		urgency: "None" | "Monitor" | "Schedule" | "Immediate";
 	};
+	// NEW: Focused mental health prediction - shows only the primary concern
+	mentalHealthPredictions: any; // Flexible type to handle dynamic primary concern
+	// NEW: Primary mental health concern identification
+	primaryMentalHealthConcern?: {
+		type: "anxiety" | "depression" | "stress" | "suicide";
+		priority: "Critical" | "High" | "Moderate" | "Low";
+		reason: string;
+	};
+}
+
+export interface MentalHealthRiskAssessment {
+	riskLevel: "Low" | "Moderate" | "High" | "Critical";
+	riskScore: number;
+	maxScore: number;
+	riskPercentage: number;
+	isProne: boolean;
+	riskFactors: string[];
+	protectiveFactors: string[];
+	explanation: string;
+	recommendations: string[];
+	warningSignsToWatch: string[];
+	immediateAction?: string;
 }
 
 interface TrainingData {
@@ -362,7 +384,7 @@ export class MentalHealthPredictor {
 		const inputFeatures = this.encodeFeatures(normalizedInput);
 		const normalizedFeatures = this.applyFeatureScaling(inputFeatures);
 
-		// Make predictions using trained models
+		// Make predictions using trained models (for academic performance)
 		const decisionTreePredictionNum = this.decisionTreeModel.predict([normalizedFeatures]); // Wrap in array for 2D input
 
 		let randomForestPredictionNum = decisionTreePredictionNum; // Fallback to DT if RF not available
@@ -398,12 +420,37 @@ export class MentalHealthPredictor {
 		// Identify risk factors
 		const riskFactors = this.identifyRiskFactors(studentData);
 
-		// Assess mental health risk
+		// Assess mental health risk (legacy system)
 		const mentalHealthRisk = this.assessMentalHealthRisk(
 			finalPrediction,
 			riskFactors,
 			studentData,
 		);
+
+		// NEW: Perform evidence-based mental health risk assessments
+		const allMentalHealthAssessments = {
+			anxiety: this.assessAnxietyRisk(normalizedInput),
+			depression: this.assessDepressionRisk(normalizedInput),
+			stress: this.assessStressRisk(normalizedInput),
+			suicide: this.assessSuicideRisk(normalizedInput),
+		};
+
+		// Determine the most critical mental health issue that needs attention
+		const primaryMentalHealthConcern = this.determinePrimaryMentalHealthConcern(
+			allMentalHealthAssessments,
+		);
+
+		// Create focused mental health predictions showing only the primary concern
+		const mentalHealthPredictions: any = {
+			primaryConcern: primaryMentalHealthConcern.type,
+			priority: primaryMentalHealthConcern.priority,
+			[primaryMentalHealthConcern.type]:
+				allMentalHealthAssessments[
+					primaryMentalHealthConcern.type as keyof typeof allMentalHealthAssessments
+				],
+			// Keep all assessments for internal use but only show the primary one
+			_allAssessments: allMentalHealthAssessments, // Internal use only
+		};
 
 		return {
 			prediction: finalPrediction,
@@ -411,6 +458,8 @@ export class MentalHealthPredictor {
 			modelAccuracy: this.modelAccuracy,
 			riskFactors,
 			mentalHealthRisk,
+			mentalHealthPredictions,
+			primaryMentalHealthConcern, // Add this for easy access
 		};
 	}
 
@@ -1095,7 +1144,1039 @@ export class MentalHealthPredictor {
 	}
 
 	/**
-	 * Assess mental health risk based on prediction and risk factors
+	 * EVIDENCE-BASED ANXIETY RISK ASSESSMENT
+	 * Based on GAD-7 risk factors and psychological research
+	 */
+	private assessAnxietyRisk(studentData: StudentData): MentalHealthRiskAssessment {
+		let riskScore = 0;
+		const maxScore = 21; // Based on GAD-7 scale
+		const riskFactors: string[] = [];
+		const protectiveFactors: string[] = [];
+
+		// Academic stress factors (GAD-7 equivalent scoring)
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 75) {
+			riskScore += 2;
+			riskFactors.push("Academic performance concerns may increase worry and anxiety");
+		}
+
+		if (studentData.natureOfSchooling === "interrupted") {
+			riskScore += 3;
+			riskFactors.push(
+				"Educational disruptions can create uncertainty and anxiety about future",
+			);
+		}
+
+		// Family and social factors
+		if (
+			studentData.parentsMaritalRelationship === "single_parent" ||
+			studentData.parentsMaritalRelationship === "married_but_separated"
+		) {
+			riskScore += 2;
+			riskFactors.push("Family instability can contribute to generalized anxiety");
+		}
+
+		if (studentData.numberOfChildren && studentData.numberOfChildren > 4) {
+			riskScore += 1;
+			riskFactors.push("Large family dynamics may create additional social anxiety");
+		}
+
+		// Financial stress (major anxiety trigger)
+		if (
+			studentData.parentsTotalMonthlyIncome === "below_five_thousand" ||
+			studentData.whoFinancesYourSchooling === "self_supporting"
+		) {
+			riskScore += 3;
+			riskFactors.push("Financial insecurity is a significant anxiety trigger");
+		}
+
+		// Environmental factors
+		if (studentData.quietPlaceToStudy === "no") {
+			riskScore += 2;
+			riskFactors.push("Lack of quiet study space can increase academic anxiety");
+		}
+
+		if (
+			studentData.natureOfResidence === "bed_spacer" ||
+			studentData.natureOfResidence === "rented_apartment"
+		) {
+			riskScore += 1;
+			riskFactors.push("Housing instability can contribute to general anxiety");
+		}
+
+		// Health factors
+		if (studentData.visionProblems === "yes" || studentData.generalHealthProblems === "yes") {
+			riskScore += 2;
+			riskFactors.push("Physical health concerns can manifest as health anxiety");
+		}
+
+		// Previous mental health consultation (strong indicator)
+		if (studentData.psychologicalConsultation === "yes") {
+			riskScore += 3;
+			riskFactors.push(
+				"Previous psychological consultation suggests ongoing mental health concerns",
+			);
+		}
+
+		if (studentData.psychiatristConsultation === "yes") {
+			riskScore += 4;
+			riskFactors.push(
+				"Psychiatric consultation history indicates significant mental health needs",
+			);
+		}
+
+		// Test anxiety
+		if (studentData.testResultScore && studentData.testResultScore < 50) {
+			riskScore += 2;
+			riskFactors.push(
+				"Poor test performance may indicate test anxiety or general academic anxiety",
+			);
+		}
+
+		// Protective factors
+		if (studentData.academicOrganizations !== "none") {
+			protectiveFactors.push(
+				"Participation in academic organizations provides social support",
+			);
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		if (studentData.organizationPosition === "officer") {
+			protectiveFactors.push("Leadership roles can build confidence and reduce anxiety");
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		if (
+			studentData.parentsTotalMonthlyIncome &&
+			!["below_five_thousand", "five_thousand_to_ten_thousand"].includes(
+				studentData.parentsTotalMonthlyIncome,
+			)
+		) {
+			protectiveFactors.push("Financial stability reduces anxiety triggers");
+		}
+
+		const riskPercentage = Math.min((riskScore / maxScore) * 100, 100);
+		const isProne = riskScore >= 7; // Moderate anxiety threshold
+
+		let riskLevel: "Low" | "Moderate" | "High" | "Critical";
+		let explanation: string;
+		let recommendations: string[];
+		let warningSignsToWatch: string[];
+		let immediateAction: string | undefined;
+
+		if (riskScore >= 15) {
+			riskLevel = "Critical";
+			explanation =
+				"Multiple significant anxiety risk factors present. Student shows high likelihood of experiencing severe anxiety that may significantly impact academic performance and daily functioning.";
+			recommendations = [
+				"Immediate referral to mental health professional for anxiety assessment",
+				"Consider anxiety screening tools (GAD-7, Beck Anxiety Inventory)",
+				"Implement academic accommodations for anxiety-related difficulties",
+				"Provide stress management and relaxation techniques training",
+				"Regular check-ins with counseling services",
+			];
+			warningSignsToWatch = [
+				"Panic attacks or severe anxiety episodes",
+				"Avoidance of classes or academic activities",
+				"Physical symptoms (rapid heartbeat, sweating, trembling)",
+				"Sleep disturbances due to worry",
+				"Difficulty concentrating on studies",
+			];
+			immediateAction =
+				"Schedule urgent appointment with campus mental health services within 24-48 hours";
+		} else if (riskScore >= 10) {
+			riskLevel = "High";
+			explanation =
+				"Several anxiety risk factors identified. Student is likely experiencing moderate to high levels of anxiety that may interfere with academic success and well-being.";
+			recommendations = [
+				"Schedule appointment with counseling services within 1-2 weeks",
+				"Introduce anxiety management techniques (deep breathing, mindfulness)",
+				"Consider study skills support to reduce academic anxiety",
+				"Explore financial aid options if financial stress is present",
+				"Connect with peer support groups",
+			];
+			warningSignsToWatch = [
+				"Increased worry about academic performance",
+				"Physical tension or restlessness",
+				"Difficulty making decisions",
+				"Procrastination due to anxiety",
+				"Social withdrawal",
+			];
+		} else if (riskScore >= 7) {
+			riskLevel = "Moderate";
+			explanation =
+				"Some anxiety risk factors present. Student may experience mild to moderate anxiety that could benefit from preventive interventions.";
+			recommendations = [
+				"Participate in stress management workshops",
+				"Develop healthy coping strategies",
+				"Maintain regular exercise and sleep schedule",
+				"Consider joining study groups for academic support",
+				"Practice time management techniques",
+			];
+			warningSignsToWatch = [
+				"Occasional worry about academic performance",
+				"Mild physical symptoms during stressful periods",
+				"Difficulty relaxing",
+				"Overthinking situations",
+			];
+		} else {
+			riskLevel = "Low";
+			explanation =
+				"Few anxiety risk factors identified. Student appears to have good resilience and coping mechanisms for managing normal academic stress.";
+			recommendations = [
+				"Continue current positive coping strategies",
+				"Maintain healthy lifestyle habits",
+				"Stay connected with support systems",
+				"Be aware of stress management techniques for future use",
+			];
+			warningSignsToWatch = [
+				"Changes in sleep patterns",
+				"Increased irritability",
+				"Difficulty concentrating during exams",
+			];
+		}
+
+		return {
+			riskLevel,
+			riskScore,
+			maxScore,
+			riskPercentage,
+			isProne,
+			riskFactors,
+			protectiveFactors,
+			explanation,
+			recommendations,
+			warningSignsToWatch,
+			immediateAction,
+		};
+	}
+
+	/**
+	 * EVIDENCE-BASED DEPRESSION RISK ASSESSMENT
+	 * Based on PHQ-9 risk factors and clinical research
+	 */
+	private assessDepressionRisk(studentData: StudentData): MentalHealthRiskAssessment {
+		let riskScore = 0;
+		const maxScore = 27; // Based on PHQ-9 scale
+		const riskFactors: string[] = [];
+		const protectiveFactors: string[] = [];
+
+		// Academic performance and self-worth
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 70) {
+			riskScore += 3;
+			riskFactors.push(
+				"Poor academic performance can lead to feelings of worthlessness and hopelessness",
+			);
+		}
+
+		if (studentData.testResultScore && studentData.testResultScore < 40) {
+			riskScore += 2;
+			riskFactors.push(
+				"Consistently poor test results may contribute to depressive thoughts",
+			);
+		}
+
+		// Educational disruption (major life stressor)
+		if (studentData.natureOfSchooling === "interrupted") {
+			riskScore += 4;
+			riskFactors.push(
+				"Educational interruptions can disrupt life goals and contribute to depression",
+			);
+		}
+
+		// Family factors (strong predictors)
+		if (
+			studentData.parentsMaritalRelationship === "single_parent" ||
+			studentData.parentsMaritalRelationship === "married_but_separated"
+		) {
+			riskScore += 3;
+			riskFactors.push(
+				"Family instability and parental separation are risk factors for depression",
+			);
+		}
+
+		// Financial stress (major depression trigger)
+		if (studentData.parentsTotalMonthlyIncome === "below_five_thousand") {
+			riskScore += 4;
+			riskFactors.push("Severe financial hardship is strongly associated with depression");
+		}
+
+		if (studentData.whoFinancesYourSchooling === "self_supporting") {
+			riskScore += 2;
+			riskFactors.push(
+				"Financial independence pressure can contribute to depressive symptoms",
+			);
+		}
+
+		// Social isolation factors
+		if (studentData.academicOrganizations === "none") {
+			riskScore += 2;
+			riskFactors.push(
+				"Lack of social engagement and support networks increases depression risk",
+			);
+		}
+
+		if (studentData.natureOfResidence === "bed_spacer") {
+			riskScore += 2;
+			riskFactors.push(
+				"Unstable housing situations can contribute to feelings of hopelessness",
+			);
+		}
+
+		// Health factors
+		if (studentData.generalHealthProblems === "yes") {
+			riskScore += 3;
+			riskFactors.push("Chronic physical health problems are strongly linked to depression");
+		}
+
+		// Previous mental health history (strongest predictor)
+		if (studentData.psychologicalConsultation === "yes") {
+			riskScore += 4;
+			riskFactors.push(
+				"Previous psychological consultation suggests vulnerability to mental health issues",
+			);
+		}
+
+		if (studentData.psychiatristConsultation === "yes") {
+			riskScore += 5;
+			riskFactors.push(
+				"Psychiatric consultation history indicates significant mental health concerns",
+			);
+		}
+
+		// Significant incidents (trauma/stress)
+		if (studentData.significantIncidents) {
+			riskScore += 3;
+			riskFactors.push(
+				"Documented significant incidents may indicate trauma or chronic stress",
+			);
+		}
+
+		// Age factors
+		if (studentData.age && studentData.age >= 18 && studentData.age <= 25) {
+			riskScore += 1;
+			riskFactors.push("Young adult age group has higher risk for depression onset");
+		}
+
+		// Protective factors
+		if (studentData.organizationPosition === "officer") {
+			protectiveFactors.push("Leadership roles provide sense of purpose and achievement");
+			riskScore = Math.max(0, riskScore - 2);
+		}
+
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage >= 85) {
+			protectiveFactors.push(
+				"Strong academic performance builds self-efficacy and confidence",
+			);
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		if (
+			studentData.whoFinancesYourSchooling === "parents" &&
+			studentData.parentsTotalMonthlyIncome &&
+			!["below_five_thousand", "five_thousand_to_ten_thousand"].includes(
+				studentData.parentsTotalMonthlyIncome,
+			)
+		) {
+			protectiveFactors.push(
+				"Family financial support reduces stress and provides stability",
+			);
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		const riskPercentage = Math.min((riskScore / maxScore) * 100, 100);
+		const isProne = riskScore >= 9; // Moderate depression threshold
+
+		let riskLevel: "Low" | "Moderate" | "High" | "Critical";
+		let explanation: string;
+		let recommendations: string[];
+		let warningSignsToWatch: string[];
+		let immediateAction: string | undefined;
+
+		if (riskScore >= 20) {
+			riskLevel = "Critical";
+			explanation =
+				"Multiple severe depression risk factors present. Student shows high likelihood of experiencing major depressive symptoms that significantly impair functioning.";
+			recommendations = [
+				"Immediate referral to mental health professional for depression screening",
+				"Consider PHQ-9 assessment and clinical evaluation",
+				"Implement academic accommodations and support services",
+				"Safety assessment for self-harm risk",
+				"Coordinate with family/support system if appropriate",
+			];
+			warningSignsToWatch = [
+				"Persistent sadness or hopelessness lasting 2+ weeks",
+				"Loss of interest in activities or studies",
+				"Significant changes in sleep or appetite",
+				"Fatigue and loss of energy",
+				"Thoughts of self-harm or suicide",
+			];
+			immediateAction =
+				"Schedule urgent mental health evaluation within 24 hours and conduct safety assessment";
+		} else if (riskScore >= 14) {
+			riskLevel = "High";
+			explanation =
+				"Several significant depression risk factors identified. Student is at elevated risk for developing moderate to severe depressive symptoms.";
+			recommendations = [
+				"Schedule counseling appointment within 1 week",
+				"Implement depression screening tools",
+				"Provide psychoeducation about depression",
+				"Connect with academic support services",
+				"Consider group therapy or support groups",
+			];
+			warningSignsToWatch = [
+				"Declining academic performance",
+				"Social withdrawal from friends and activities",
+				"Increased irritability or mood swings",
+				"Difficulty concentrating",
+				"Feelings of guilt or worthlessness",
+			];
+		} else if (riskScore >= 9) {
+			riskLevel = "Moderate";
+			explanation =
+				"Some depression risk factors present. Student may benefit from preventive interventions and monitoring for depressive symptoms.";
+			recommendations = [
+				"Participate in mental health awareness programs",
+				"Develop healthy coping strategies and routine",
+				"Maintain social connections and activities",
+				"Consider counseling for stress management",
+				"Regular check-ins with academic advisor",
+			];
+			warningSignsToWatch = [
+				"Persistent low mood",
+				"Changes in sleep patterns",
+				"Decreased motivation for studies",
+				"Increased sensitivity to criticism",
+			];
+		} else {
+			riskLevel = "Low";
+			explanation =
+				"Few depression risk factors identified. Student appears to have good resilience and protective factors against depression.";
+			recommendations = [
+				"Continue maintaining healthy lifestyle habits",
+				"Stay engaged in social and academic activities",
+				"Build and maintain support networks",
+				"Practice stress management techniques",
+			];
+			warningSignsToWatch = [
+				"Significant life changes or stressors",
+				"Academic difficulties",
+				"Relationship problems",
+			];
+		}
+
+		return {
+			riskLevel,
+			riskScore,
+			maxScore,
+			riskPercentage,
+			isProne,
+			riskFactors,
+			protectiveFactors,
+			explanation,
+			recommendations,
+			warningSignsToWatch,
+			immediateAction,
+		};
+	}
+
+	/**
+	 * EVIDENCE-BASED STRESS RISK ASSESSMENT
+	 * Based on Perceived Stress Scale and academic stress research
+	 */
+	private assessStressRisk(studentData: StudentData): MentalHealthRiskAssessment {
+		let riskScore = 0;
+		const maxScore = 40; // Based on Perceived Stress Scale
+		const riskFactors: string[] = [];
+		const protectiveFactors: string[] = [];
+
+		// Academic stressors
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 75) {
+			riskScore += 3;
+			riskFactors.push("Academic performance pressure creates chronic stress");
+		}
+
+		if (studentData.testResultScore && studentData.testResultScore < 50) {
+			riskScore += 2;
+			riskFactors.push("Poor test performance indicates high academic stress levels");
+		}
+
+		if (studentData.natureOfSchooling === "interrupted") {
+			riskScore += 4;
+			riskFactors.push(
+				"Educational disruptions create significant life stress and uncertainty",
+			);
+		}
+
+		// Financial stressors (major category)
+		if (studentData.parentsTotalMonthlyIncome === "below_five_thousand") {
+			riskScore += 5;
+			riskFactors.push("Severe financial constraints create chronic daily stress");
+		}
+
+		if (studentData.whoFinancesYourSchooling === "self_supporting") {
+			riskScore += 3;
+			riskFactors.push(
+				"Self-financing education creates significant financial and time pressure",
+			);
+		}
+
+		// Environmental stressors
+		if (studentData.quietPlaceToStudy === "no") {
+			riskScore += 3;
+			riskFactors.push("Lack of proper study environment increases academic stress");
+		}
+
+		if (
+			studentData.natureOfResidence === "bed_spacer" ||
+			studentData.natureOfResidence === "rented_apartment"
+		) {
+			riskScore += 2;
+			riskFactors.push("Unstable housing creates ongoing environmental stress");
+		}
+
+		// Family stressors
+		if (studentData.parentsMaritalRelationship === "married_but_separated") {
+			riskScore += 3;
+			riskFactors.push("Family conflict and instability contribute to chronic stress");
+		}
+
+		if (studentData.numberOfChildren && studentData.numberOfChildren > 5) {
+			riskScore += 2;
+			riskFactors.push(
+				"Large family dynamics can create additional social and financial stress",
+			);
+		}
+
+		// Health stressors
+		if (studentData.visionProblems === "yes" || studentData.generalHealthProblems === "yes") {
+			riskScore += 3;
+			riskFactors.push("Physical health problems add significant stress to daily life");
+		}
+
+		// Previous mental health issues (stress vulnerability)
+		if (studentData.psychologicalConsultation === "yes") {
+			riskScore += 2;
+			riskFactors.push("Previous mental health concerns indicate vulnerability to stress");
+		}
+
+		// Multiple role stress
+		if (
+			studentData.whoFinancesYourSchooling === "self_supporting" &&
+			studentData.academicOrganizations !== "none"
+		) {
+			riskScore += 2;
+			riskFactors.push("Balancing work, studies, and activities creates high stress levels");
+		}
+
+		// Protective factors
+		if (studentData.academicOrganizations !== "none") {
+			protectiveFactors.push("Social support from organizations helps manage stress");
+			riskScore = Math.max(0, riskScore - 2);
+		}
+
+		if (studentData.organizationPosition === "officer") {
+			protectiveFactors.push("Leadership experience builds stress management skills");
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		if (studentData.quietPlaceToStudy === "yes") {
+			protectiveFactors.push("Proper study environment reduces academic stress");
+		}
+
+		if (
+			studentData.whoFinancesYourSchooling === "parents" &&
+			studentData.parentsTotalMonthlyIncome &&
+			!["below_five_thousand", "five_thousand_to_ten_thousand"].includes(
+				studentData.parentsTotalMonthlyIncome,
+			)
+		) {
+			protectiveFactors.push("Financial security reduces major life stressor");
+			riskScore = Math.max(0, riskScore - 2);
+		}
+
+		const riskPercentage = Math.min((riskScore / maxScore) * 100, 100);
+		const isProne = riskScore >= 14; // Moderate stress threshold
+
+		let riskLevel: "Low" | "Moderate" | "High" | "Critical";
+		let explanation: string;
+		let recommendations: string[];
+		let warningSignsToWatch: string[];
+		let immediateAction: string | undefined;
+
+		if (riskScore >= 28) {
+			riskLevel = "Critical";
+			explanation =
+				"Extremely high stress levels with multiple chronic stressors. Student is at risk for stress-related physical and mental health problems.";
+			recommendations = [
+				"Immediate stress management intervention",
+				"Comprehensive life situation assessment",
+				"Consider temporary academic accommodations",
+				"Stress reduction counseling and techniques",
+				"Address primary stressors (financial, housing, academic)",
+			];
+			warningSignsToWatch = [
+				"Physical symptoms (headaches, muscle tension, fatigue)",
+				"Sleep disturbances and appetite changes",
+				"Difficulty concentrating and memory problems",
+				"Increased irritability and mood swings",
+				"Frequent illness due to compromised immune system",
+			];
+			immediateAction =
+				"Schedule immediate appointment for stress management support and life situation assessment";
+		} else if (riskScore >= 21) {
+			riskLevel = "High";
+			explanation =
+				"High stress levels with multiple significant stressors. Student needs active stress management support to prevent burnout.";
+			recommendations = [
+				"Enroll in stress management workshops",
+				"Learn and practice relaxation techniques",
+				"Time management and prioritization training",
+				"Consider counseling for stress coping strategies",
+				"Evaluate and address major stressors",
+			];
+			warningSignsToWatch = [
+				"Feeling overwhelmed frequently",
+				"Difficulty managing daily tasks",
+				"Physical tension and restlessness",
+				"Procrastination and avoidance behaviors",
+				"Relationship difficulties due to stress",
+			];
+		} else if (riskScore >= 14) {
+			riskLevel = "Moderate";
+			explanation =
+				"Moderate stress levels that may impact academic performance and well-being. Preventive stress management recommended.";
+			recommendations = [
+				"Develop healthy stress management habits",
+				"Practice regular exercise and relaxation",
+				"Improve time management skills",
+				"Build social support networks",
+				"Monitor stress levels and triggers",
+			];
+			warningSignsToWatch = [
+				"Increased worry about academic performance",
+				"Difficulty relaxing or unwinding",
+				"Minor physical symptoms during stressful periods",
+				"Changes in sleep or eating patterns",
+			];
+		} else {
+			riskLevel = "Low";
+			explanation =
+				"Low stress levels with good coping mechanisms. Student appears to manage normal academic and life stress effectively.";
+			recommendations = [
+				"Continue current effective coping strategies",
+				"Maintain healthy lifestyle habits",
+				"Stay aware of stress management techniques",
+				"Build resilience for future challenges",
+			];
+			warningSignsToWatch = [
+				"Major life changes or transitions",
+				"Increased academic demands",
+				"Changes in support systems",
+			];
+		}
+
+		return {
+			riskLevel,
+			riskScore,
+			maxScore,
+			riskPercentage,
+			isProne,
+			riskFactors,
+			protectiveFactors,
+			explanation,
+			recommendations,
+			warningSignsToWatch,
+			immediateAction,
+		};
+	}
+
+	/**
+	 * EVIDENCE-BASED SUICIDE RISK ASSESSMENT
+	 * Based on Columbia Suicide Severity Rating Scale and clinical research
+	 */
+	private assessSuicideRisk(studentData: StudentData): MentalHealthRiskAssessment {
+		let riskScore = 0;
+		const maxScore = 30; // Based on clinical risk factors
+		const riskFactors: string[] = [];
+		const protectiveFactors: string[] = [];
+
+		// Mental health history (strongest predictor)
+		if (studentData.psychiatristConsultation === "yes") {
+			riskScore += 8;
+			riskFactors.push(
+				"Previous psychiatric consultation indicates serious mental health concerns - major suicide risk factor",
+			);
+		}
+
+		if (studentData.psychologicalConsultation === "yes") {
+			riskScore += 5;
+			riskFactors.push(
+				"Previous psychological consultation suggests mental health vulnerability",
+			);
+		}
+
+		// Academic failure and hopelessness
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage < 65) {
+			riskScore += 4;
+			riskFactors.push(
+				"Severe academic difficulties can lead to hopelessness and suicidal ideation",
+			);
+		}
+
+		if (studentData.testResultScore && studentData.testResultScore < 30) {
+			riskScore += 3;
+			riskFactors.push(
+				"Consistent academic failure may contribute to feelings of worthlessness",
+			);
+		}
+
+		if (studentData.natureOfSchooling === "interrupted") {
+			riskScore += 3;
+			riskFactors.push(
+				"Educational disruption can create hopelessness about future prospects",
+			);
+		}
+
+		// Social isolation (major risk factor)
+		if (studentData.academicOrganizations === "none") {
+			riskScore += 3;
+			riskFactors.push("Social isolation and lack of support networks increase suicide risk");
+		}
+
+		// Family instability
+		if (
+			studentData.parentsMaritalRelationship === "single_parent" ||
+			studentData.parentsMaritalRelationship === "married_but_separated"
+		) {
+			riskScore += 2;
+			riskFactors.push("Family instability and breakdown can contribute to suicide risk");
+		}
+
+		// Severe financial stress
+		if (
+			studentData.parentsTotalMonthlyIncome === "below_five_thousand" &&
+			studentData.whoFinancesYourSchooling === "self_supporting"
+		) {
+			riskScore += 4;
+			riskFactors.push(
+				"Severe financial hardship combined with self-reliance creates hopelessness",
+			);
+		}
+
+		// Housing instability
+		if (studentData.natureOfResidence === "bed_spacer") {
+			riskScore += 2;
+			riskFactors.push(
+				"Housing instability can contribute to feelings of hopelessness and despair",
+			);
+		}
+
+		// Health problems
+		if (studentData.generalHealthProblems === "yes") {
+			riskScore += 2;
+			riskFactors.push("Chronic health problems can contribute to suicide risk");
+		}
+
+		// Significant incidents (potential trauma)
+		if (studentData.significantIncidents) {
+			riskScore += 3;
+			riskFactors.push(
+				"Documented significant incidents may indicate trauma or crisis situations",
+			);
+		}
+
+		// Age factors (young adults at higher risk)
+		if (studentData.age && studentData.age >= 18 && studentData.age <= 24) {
+			riskScore += 1;
+			riskFactors.push("Young adult age group has elevated suicide risk");
+		}
+
+		// Protective factors (crucial for suicide prevention)
+		if (studentData.organizationPosition === "officer") {
+			protectiveFactors.push("Leadership roles provide sense of purpose and responsibility");
+			riskScore = Math.max(0, riskScore - 3);
+		}
+
+		if (studentData.academicOrganizations !== "none") {
+			protectiveFactors.push(
+				"Social connections and support networks are protective against suicide",
+			);
+			riskScore = Math.max(0, riskScore - 2);
+		}
+
+		if (studentData.whoFinancesYourSchooling === "parents") {
+			protectiveFactors.push(
+				"Family financial support indicates family connection and support",
+			);
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		if (studentData.highSchoolAverage && studentData.highSchoolAverage >= 80) {
+			protectiveFactors.push("Academic success builds self-efficacy and hope for future");
+			riskScore = Math.max(0, riskScore - 2);
+		}
+
+		if (
+			studentData.quietPlaceToStudy === "yes" &&
+			studentData.natureOfResidence === "family_home"
+		) {
+			protectiveFactors.push("Stable home environment provides security and family support");
+			riskScore = Math.max(0, riskScore - 1);
+		}
+
+		const riskPercentage = Math.min((riskScore / maxScore) * 100, 100);
+		const isProne = riskScore >= 8; // Conservative threshold for suicide risk
+
+		let riskLevel: "Low" | "Moderate" | "High" | "Critical";
+		let explanation: string;
+		let recommendations: string[];
+		let warningSignsToWatch: string[];
+		let immediateAction: string | undefined;
+
+		if (riskScore >= 18) {
+			riskLevel = "Critical";
+			explanation =
+				"Multiple severe suicide risk factors present. Student requires immediate safety assessment and intervention. This represents a mental health emergency.";
+			recommendations = [
+				"IMMEDIATE safety assessment and crisis intervention",
+				"Do not leave student alone - ensure continuous supervision",
+				"Contact emergency mental health services immediately",
+				"Remove access to means of self-harm",
+				"Involve family/support system immediately",
+				"Consider hospitalization if imminent risk present",
+			];
+			warningSignsToWatch = [
+				"Direct or indirect statements about wanting to die",
+				"Giving away possessions or saying goodbye",
+				"Sudden mood improvement after period of depression",
+				"Increased substance use or reckless behavior",
+				"Withdrawal from all social contact",
+			];
+			immediateAction =
+				"EMERGENCY: Contact crisis hotline (988) and campus emergency services immediately. Do not leave student unsupervised.";
+		} else if (riskScore >= 12) {
+			riskLevel = "High";
+			explanation =
+				"Significant suicide risk factors present. Student requires immediate professional evaluation and close monitoring.";
+			recommendations = [
+				"Immediate referral to mental health professional",
+				"Conduct suicide risk assessment within 24 hours",
+				"Develop safety plan with student",
+				"Increase social support and monitoring",
+				"Address primary risk factors (depression, hopelessness)",
+				"Regular follow-up appointments",
+			];
+			warningSignsToWatch = [
+				"Expressions of hopelessness or worthlessness",
+				"Talking about being a burden to others",
+				"Increased isolation and withdrawal",
+				"Dramatic mood changes",
+				"Preoccupation with death or dying",
+			];
+			immediateAction =
+				"Schedule urgent mental health evaluation within 24 hours and implement safety monitoring";
+		} else if (riskScore >= 8) {
+			riskLevel = "Moderate";
+			explanation =
+				"Some suicide risk factors present. Student needs professional assessment and preventive interventions.";
+			recommendations = [
+				"Schedule mental health assessment within 1 week",
+				"Provide suicide prevention education and resources",
+				"Strengthen social support networks",
+				"Address underlying mental health concerns",
+				"Regular check-ins and monitoring",
+			];
+			warningSignsToWatch = [
+				"Persistent sadness or depression",
+				"Social withdrawal",
+				"Declining academic performance",
+				"Changes in sleep or appetite",
+				"Increased irritability or agitation",
+			];
+		} else {
+			riskLevel = "Low";
+			explanation =
+				"Few suicide risk factors with good protective factors present. Student appears to have resilience and support systems.";
+			recommendations = [
+				"Continue building and maintaining support networks",
+				"Develop healthy coping strategies",
+				"Stay connected with mental health resources",
+				"Build resilience and problem-solving skills",
+			];
+			warningSignsToWatch = [
+				"Major life stressors or losses",
+				"Significant academic or personal failures",
+				"Relationship problems or breakups",
+				"Changes in mental health status",
+			];
+		}
+
+		// Always include crisis resources
+		if (riskScore >= 8) {
+			recommendations.unshift("National Suicide Prevention Lifeline: 988 (available 24/7)");
+			recommendations.push("Crisis Text Line: Text HOME to 741741");
+		}
+
+		return {
+			riskLevel,
+			riskScore,
+			maxScore,
+			riskPercentage,
+			isProne,
+			riskFactors,
+			protectiveFactors,
+			explanation,
+			recommendations,
+			warningSignsToWatch,
+			immediateAction,
+		};
+	}
+
+	/**
+	 * Determine the primary mental health concern that needs the most attention
+	 * This focuses the IIF on the most critical issue while still assessing all areas
+	 */
+	private determinePrimaryMentalHealthConcern(assessments: {
+		anxiety: MentalHealthRiskAssessment;
+		depression: MentalHealthRiskAssessment;
+		stress: MentalHealthRiskAssessment;
+		suicide: MentalHealthRiskAssessment;
+	}): {
+		type: "anxiety" | "depression" | "stress" | "suicide";
+		priority: "Critical" | "High" | "Moderate" | "Low";
+		reason: string;
+	} {
+		// Priority order: Suicide > Depression > Anxiety > Stress
+		// This is based on clinical severity and intervention urgency
+
+		// 1. SUICIDE RISK - Highest priority (life-threatening)
+		if (assessments.suicide.riskLevel === "Critical" || assessments.suicide.riskScore >= 18) {
+			return {
+				type: "suicide",
+				priority: "Critical",
+				reason: "Immediate suicide risk assessment and intervention required - this is a mental health emergency requiring urgent professional attention.",
+			};
+		}
+
+		if (assessments.suicide.riskLevel === "High" || assessments.suicide.riskScore >= 12) {
+			return {
+				type: "suicide",
+				priority: "High",
+				reason: "Significant suicide risk factors present - requires immediate professional evaluation and safety planning.",
+			};
+		}
+
+		// 2. DEPRESSION - Second priority (major mental health condition)
+		if (
+			assessments.depression.riskLevel === "Critical" ||
+			assessments.depression.riskScore >= 20
+		) {
+			return {
+				type: "depression",
+				priority: "Critical",
+				reason: "Severe depression risk factors present - requires immediate mental health intervention to prevent deterioration.",
+			};
+		}
+
+		if (assessments.depression.riskLevel === "High" || assessments.depression.riskScore >= 14) {
+			return {
+				type: "depression",
+				priority: "High",
+				reason: "High depression risk identified - professional counseling and support services strongly recommended.",
+			};
+		}
+
+		// 3. ANXIETY - Third priority (common but treatable condition)
+		if (assessments.anxiety.riskLevel === "Critical" || assessments.anxiety.riskScore >= 15) {
+			return {
+				type: "anxiety",
+				priority: "Critical",
+				reason: "Severe anxiety symptoms likely impacting daily functioning - immediate anxiety management support needed.",
+			};
+		}
+
+		if (assessments.anxiety.riskLevel === "High" || assessments.anxiety.riskScore >= 10) {
+			return {
+				type: "anxiety",
+				priority: "High",
+				reason: "High anxiety levels detected - anxiety management techniques and counseling support recommended.",
+			};
+		}
+
+		// 4. STRESS - Fourth priority (manageable with proper support)
+		if (assessments.stress.riskLevel === "Critical" || assessments.stress.riskScore >= 28) {
+			return {
+				type: "stress",
+				priority: "Critical",
+				reason: "Extremely high stress levels - immediate stress management intervention needed to prevent burnout.",
+			};
+		}
+
+		if (assessments.stress.riskLevel === "High" || assessments.stress.riskScore >= 21) {
+			return {
+				type: "stress",
+				priority: "High",
+				reason: "High stress levels identified - stress management support and coping strategies recommended.",
+			};
+		}
+
+		// Check for moderate levels in priority order
+		if (assessments.suicide.riskLevel === "Moderate" || assessments.suicide.riskScore >= 8) {
+			return {
+				type: "suicide",
+				priority: "Moderate",
+				reason: "Some suicide risk factors present - preventive mental health support and monitoring recommended.",
+			};
+		}
+
+		if (
+			assessments.depression.riskLevel === "Moderate" ||
+			assessments.depression.riskScore >= 9
+		) {
+			return {
+				type: "depression",
+				priority: "Moderate",
+				reason: "Moderate depression risk factors - preventive counseling and mental health awareness recommended.",
+			};
+		}
+
+		if (assessments.anxiety.riskLevel === "Moderate" || assessments.anxiety.riskScore >= 7) {
+			return {
+				type: "anxiety",
+				priority: "Moderate",
+				reason: "Moderate anxiety levels - stress management and coping strategies would be beneficial.",
+			};
+		}
+
+		if (assessments.stress.riskLevel === "Moderate" || assessments.stress.riskScore >= 14) {
+			return {
+				type: "stress",
+				priority: "Moderate",
+				reason: "Moderate stress levels - stress management techniques and lifestyle adjustments recommended.",
+			};
+		}
+
+		// If no significant risks, find the highest scoring area for preventive care
+		const scores = [
+			{ type: "suicide" as const, score: assessments.suicide.riskScore },
+			{ type: "depression" as const, score: assessments.depression.riskScore },
+			{ type: "anxiety" as const, score: assessments.anxiety.riskScore },
+			{ type: "stress" as const, score: assessments.stress.riskScore },
+		];
+
+		const highest = scores.reduce((max, current) =>
+			current.score > max.score ? current : max,
+		);
+
+		return {
+			type: highest.type,
+			priority: "Low",
+			reason: `Overall mental health appears stable. Continue monitoring ${highest.type} levels and maintain healthy coping strategies.`,
+		};
+	}
+
+	/**
+	 * Assess mental health risk based on prediction and risk factors (LEGACY - for backward compatibility)
 	 */
 	private assessMentalHealthRisk(
 		prediction: string,

@@ -279,6 +279,35 @@ type MentalHealthRisk {
   disclaimer        String
 }
 
+type SpecificMentalHealthRisk {
+  riskLevel         MentalHealthRiskLevel
+  riskScore         Int
+  maxScore          Int
+  riskPercentage    Float
+  isProne           Boolean
+  riskFactors       String[]
+  protectiveFactors String[]
+  explanation       String
+  recommendations   String[]
+  warningSignsToWatch String[]
+  immediateAction   String?
+}
+
+type MentalHealthPredictions {
+  // Primary concern information
+  primaryConcern String? // "anxiety", "depression", "stress", or "suicide"
+  priority       String? // "Low", "Moderate", "High", or "Critical"
+  
+  // Individual assessments (only primary concern will be populated)
+  anxiety     SpecificMentalHealthRisk?
+  depression  SpecificMentalHealthRisk?
+  stress      SpecificMentalHealthRisk?
+  suicide     SpecificMentalHealthRisk?
+  
+  // Store all assessments for comprehensive analysis (internal use)
+  allAssessments Json?
+}
+
 model MentalHealthPredictionRecord {
   id                         String                     @id @default(auto()) @map("_id") @db.ObjectId
   inventory                  IndividualInventory        @relation("mentalHealthPredictions", fields: [inventoryId], references: [id], onDelete: Cascade)
@@ -288,6 +317,8 @@ model MentalHealthPredictionRecord {
   modelAccuracy              ModelAccuracy
   riskFactors                String[]
   mentalHealthRisk           MentalHealthRisk
+  // NEW: Specific mental health predictions
+  mentalHealthPredictions    MentalHealthPredictions?
   inputData                  Json
   recommendations            String[]
   predictionDate             DateTime                   @default(now())
@@ -299,7 +330,7 @@ model MentalHealthPredictionRecord {
 model IndividualInventory {
   id                                                    String                         @id @default(auto()) @map("_id") @db.ObjectId
   student                                               Student                        @relation(fields: [studentId], references: [id])
-  studentId                                             String                         @unique @db.ObjectId
+  studentId                                             String                         @db.ObjectId
   height                                                String
   weight                                                String
   coplexion                                             String

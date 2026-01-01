@@ -478,20 +478,21 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			// Check if inventory already exists for this student
-			const existingInventory = await prisma.individualInventory.findFirst({
-				where: {
-					studentId,
-					isDeleted: false,
-				},
-			});
+			// Note: Multiple inventories per student are now allowed
+			// const existingInventory = await prisma.individualInventory.findFirst({
+			// 	where: {
+			// 		studentId,
+			// 		isDeleted: false,
+			// 	},
+			// });
 
-			if (existingInventory) {
-				inventoryLogger.error(`${config.ERROR.INVENTORY.EXISTING_INVENTORY}: ${studentId}`);
-				res.status(400).json({
-					error: config.ERROR.INVENTORY.EXISTING_INVENTORY,
-				});
-				return;
-			}
+			// if (existingInventory) {
+			// 	inventoryLogger.error(`${config.ERROR.INVENTORY.EXISTING_INVENTORY}: ${studentId}`);
+			// 	res.status(400).json({
+			// 		error: config.ERROR.INVENTORY.EXISTING_INVENTORY,
+			// 	});
+			// 	return;
+			// }
 
 			// Sanitize data to handle empty strings for DateTime fields
 			const sanitizedData = {
@@ -699,6 +700,42 @@ export const controller = (prisma: PrismaClient) => {
 						disclaimer:
 							"⚠️ IMPORTANT: This is only a assessment based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 					},
+					// NEW: Focused mental health prediction - stores only primary concern
+					mentalHealthPredictions: (() => {
+						const primaryType = prediction.primaryMentalHealthConcern?.type;
+						if (
+							!primaryType ||
+							!prediction.mentalHealthPredictions[primaryType] ||
+							!prediction.primaryMentalHealthConcern
+						) {
+							return null;
+						}
+
+						const assessment = prediction.mentalHealthPredictions[primaryType];
+						return {
+							primaryConcern: primaryType,
+							priority: prediction.primaryMentalHealthConcern.priority,
+							[primaryType]: {
+								riskLevel: assessment.riskLevel.toLowerCase() as
+									| "low"
+									| "moderate"
+									| "high"
+									| "critical",
+								riskScore: assessment.riskScore,
+								maxScore: assessment.maxScore,
+								riskPercentage: assessment.riskPercentage,
+								isProne: assessment.isProne,
+								riskFactors: assessment.riskFactors,
+								protectiveFactors: assessment.protectiveFactors,
+								explanation: assessment.explanation,
+								recommendations: assessment.recommendations,
+								warningSignsToWatch: assessment.warningSignsToWatch,
+								immediateAction: assessment.immediateAction,
+							},
+							// Store all assessments for comprehensive analysis (internal use)
+							allAssessments: prediction.mentalHealthPredictions._allAssessments,
+						};
+					})() as any,
 					inputData: studentData,
 					recommendations: generateRecommendations(prediction),
 					predictionDate: new Date(),
@@ -713,6 +750,7 @@ export const controller = (prisma: PrismaClient) => {
 						modelAccuracy: predictionData.modelAccuracy,
 						riskFactors: predictionData.riskFactors,
 						mentalHealthRisk: predictionData.mentalHealthRisk,
+						mentalHealthPredictions: predictionData.mentalHealthPredictions,
 						inputData: predictionData.inputData,
 						recommendations: predictionData.recommendations,
 						predictionDate: predictionData.predictionDate,
@@ -738,11 +776,11 @@ export const controller = (prisma: PrismaClient) => {
 				// Return inventory data with prediction results
 				res.status(201).json({
 					message:
-						"Individual inventory created successfully with mental health prediction",
+						"Individual inventory created successfully with comprehensive mental health risk assessment",
 					disclaimer:
 						"⚠️ IMPORTANT NOTICE: This mental health assessment is for screening purposes only and should not be considered a professional diagnosis. For accurate mental health assessment, please utilize our comprehensive resources and consult with qualified mental health professionals.",
 					inventory: updatedInventory,
-					mentalHealthPrediction: {
+					academicPerformancePrediction: {
 						academicPerformanceOutlook: prediction.prediction,
 						confidence: `${(prediction.confidence * 100).toFixed(1)}%`,
 						modelAccuracy: {
@@ -764,6 +802,35 @@ export const controller = (prisma: PrismaClient) => {
 						inputData: studentData,
 						recommendations: generateRecommendations(prediction),
 					},
+					// NEW: Focused mental health risk assessment - shows primary concern only
+					primaryMentalHealthConcern: prediction.primaryMentalHealthConcern || null,
+					mentalHealthRiskAssessment: (() => {
+						const primaryType = prediction.primaryMentalHealthConcern?.type;
+						if (
+							!primaryType ||
+							!prediction.mentalHealthPredictions[primaryType] ||
+							!prediction.primaryMentalHealthConcern
+						) {
+							return null;
+						}
+
+						const assessment = prediction.mentalHealthPredictions[primaryType];
+						return {
+							type: primaryType,
+							priority: prediction.primaryMentalHealthConcern.priority,
+							reason: prediction.primaryMentalHealthConcern.reason,
+							riskLevel: assessment.riskLevel,
+							riskPercentage: `${assessment.riskPercentage.toFixed(1)}%`,
+							isProne: assessment.isProne,
+							riskScore: `${assessment.riskScore}/${assessment.maxScore}`,
+							explanation: assessment.explanation,
+							riskFactors: assessment.riskFactors,
+							protectiveFactors: assessment.protectiveFactors,
+							recommendations: assessment.recommendations,
+							warningSignsToWatch: assessment.warningSignsToWatch,
+							immediateAction: assessment.immediateAction,
+						};
+					})(),
 				});
 			} catch (predictionError) {
 				// If prediction fails, still return successful inventory creation
@@ -1094,6 +1161,42 @@ export const controller = (prisma: PrismaClient) => {
 							disclaimer:
 								"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 						},
+						// NEW: Focused mental health prediction - stores only primary concern
+						mentalHealthPredictions: (() => {
+							const primaryType = prediction.primaryMentalHealthConcern?.type;
+							if (
+								!primaryType ||
+								!prediction.mentalHealthPredictions[primaryType] ||
+								!prediction.primaryMentalHealthConcern
+							) {
+								return null;
+							}
+
+							const assessment = prediction.mentalHealthPredictions[primaryType];
+							return {
+								primaryConcern: primaryType,
+								priority: prediction.primaryMentalHealthConcern.priority,
+								[primaryType]: {
+									riskLevel: assessment.riskLevel.toLowerCase() as
+										| "low"
+										| "moderate"
+										| "high"
+										| "critical",
+									riskScore: assessment.riskScore,
+									maxScore: assessment.maxScore,
+									riskPercentage: assessment.riskPercentage,
+									isProne: assessment.isProne,
+									riskFactors: assessment.riskFactors,
+									protectiveFactors: assessment.protectiveFactors,
+									explanation: assessment.explanation,
+									recommendations: assessment.recommendations,
+									warningSignsToWatch: assessment.warningSignsToWatch,
+									immediateAction: assessment.immediateAction,
+								},
+								// Store all assessments for comprehensive analysis (internal use)
+								_allAssessments: prediction.mentalHealthPredictions._allAssessments,
+							};
+						})() as any,
 						inputData: studentData,
 						recommendations: generateRecommendations(prediction),
 						predictionDate: new Date(),
@@ -1108,6 +1211,7 @@ export const controller = (prisma: PrismaClient) => {
 							modelAccuracy: predictionData.modelAccuracy,
 							riskFactors: predictionData.riskFactors,
 							mentalHealthRisk: predictionData.mentalHealthRisk,
+							mentalHealthPredictions: predictionData.mentalHealthPredictions,
 							inputData: predictionData.inputData,
 							recommendations: predictionData.recommendations,
 							predictionDate: predictionData.predictionDate,
@@ -1260,7 +1364,7 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				include: {
 					person: true,
-					individualInventory: true,
+					individualInventories: true,
 				},
 			});
 
@@ -1491,6 +1595,42 @@ export const controller = (prisma: PrismaClient) => {
 					disclaimer:
 						"⚠️ IMPORTANT: This is only a prediction based on preliminary data. If you want to determine if you really have mental health issues, please continue to answer our comprehensive resources available for professional mental health assessments.",
 				},
+				// NEW: Focused mental health prediction - stores only primary concern
+				mentalHealthPredictions: (() => {
+					const primaryType = prediction.primaryMentalHealthConcern?.type;
+					if (
+						!primaryType ||
+						!prediction.mentalHealthPredictions[primaryType] ||
+						!prediction.primaryMentalHealthConcern
+					) {
+						return null;
+					}
+
+					const assessment = prediction.mentalHealthPredictions[primaryType];
+					return {
+						primaryConcern: primaryType,
+						priority: prediction.primaryMentalHealthConcern.priority,
+						[primaryType]: {
+							riskLevel: assessment.riskLevel.toLowerCase() as
+								| "low"
+								| "moderate"
+								| "high"
+								| "critical",
+							riskScore: assessment.riskScore,
+							maxScore: assessment.maxScore,
+							riskPercentage: assessment.riskPercentage,
+							isProne: assessment.isProne,
+							riskFactors: assessment.riskFactors,
+							protectiveFactors: assessment.protectiveFactors,
+							explanation: assessment.explanation,
+							recommendations: assessment.recommendations,
+							warningSignsToWatch: assessment.warningSignsToWatch,
+							immediateAction: assessment.immediateAction,
+						},
+						// Store all assessments for comprehensive analysis (internal use)
+						_allAssessments: prediction.mentalHealthPredictions._allAssessments,
+					};
+				})() as any,
 				inputData: studentData,
 				recommendations: generateRecommendations(prediction),
 				predictionDate: new Date(),
@@ -1505,6 +1645,7 @@ export const controller = (prisma: PrismaClient) => {
 					modelAccuracy: predictionData.modelAccuracy,
 					riskFactors: predictionData.riskFactors,
 					mentalHealthRisk: predictionData.mentalHealthRisk,
+					mentalHealthPredictions: predictionData.mentalHealthPredictions,
 					inputData: predictionData.inputData,
 					recommendations: predictionData.recommendations,
 					predictionDate: predictionData.predictionDate,
