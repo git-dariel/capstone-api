@@ -10,7 +10,19 @@
 
 ## Executive Summary
 
-Yes, this is a **genuine machine learning prediction system**. The implementation uses established supervised learning algorithms (Decision Trees and Random Forest) trained on real-world data to make predictive classifications about student mental health risk levels. This document explains why this qualifies as true machine learning and outlines the key implementation features for your capstone defense.
+Yes, this is a **genuine machine learning prediction system**. The implementation uses established supervised learning algorithms (Decision Trees and Random Forest) trained on real-world student mental health survey data to make predictive classifications about student mental health risk levels. This document explains why this qualifies as true machine learning and outlines the key implementation features for your capstone defense.
+
+### Dataset Information
+
+This research utilizes **two real-world datasets**:
+
+1. **Individual Inventory Form (IIF) Data**: Institutional data collected directly from the institution's Guidance Counselor Office. This contains student demographic and background information used as **input features** for machine learning prediction.
+
+2. **Student Mental Health Survey Dataset**: Sourced from Kaggle (public dataset), containing over 7,000 student records with validated mental health outcome measurements (depression scores, anxiety scores, stress levels). This dataset represents actual survey responses from students and serves as **target labels (ground truth)** for supervised learning.
+
+**Training Dataset Construction**: A novel matching methodology links institutional IIF profiles to Kaggle mental health outcomes based on demographic similarity, creating approximately 852 training samples. This hybrid approach represents a key research contribution, enabling the application of machine learning to predict mental health outcomes using institutional inventory data.
+
+Proper attribution to both datasets should be included in all academic documentation and presentations.
 
 ---
 
@@ -20,7 +32,7 @@ Yes, this is a **genuine machine learning prediction system**. The implementatio
 
 The system implements a **supervised learning** approach, which is one of the fundamental paradigms of machine learning. Here's what makes it legitimate:
 
-- **Training Data with Labels**: The system uses actual mental health outcome data (depression scores, anxiety scores, stress levels) from validated student surveys as target variables (labels) for training.
+- **Training Data with Labels**: The system combines two real-world data sources: (1) Individual Inventory Form (IIF) data collected directly from the institution's Guidance Counselor Office (used as input features), and (2) Mental health outcome data (depression scores, anxiety scores, stress levels) from validated student mental health surveys sourced from Kaggle (used as target labels). The Kaggle dataset contains over 7,000 actual student survey responses, representing authentic mental health measurements. A novel matching methodology links IIF profiles to mental health outcomes, creating the training dataset.
 
 - **Feature-Label Mapping**: Student inventory data (IIF) serves as input features, while mental health survey outcomes serve as the ground truth labels that the model learns to predict.
 
@@ -49,7 +61,7 @@ The implementation uses industry-standard machine learning algorithms:
 
 Unlike rule-based systems where decisions are hardcoded by domain experts, this system:
 
-- **Learns from Historical Data**: The models are trained on 852+ student records with actual mental health outcomes
+- **Learns from Historical Data**: The models are trained on a combination of: (1) Institutional Individual Inventory Form (IIF) data collected by the Guidance Counselor Office (input features), and (2) Mental health survey data (7,000+ records from Kaggle) containing actual depression, anxiety, and stress measurements (target labels). Approximately 852 matched records combine both datasets through demographic similarity matching, creating the training dataset.
 - **Generalizes to New Cases**: After training, the model can make predictions on new students it has never seen before
 - **Adaptive Learning**: The model can be retrained with new data to improve accuracy over time
 - **Feature Importance Discovery**: The system automatically identifies which factors (financial status, family structure, health history) are most predictive
@@ -242,7 +254,7 @@ This hybrid approach is actually **best practice** in healthcare ML, where safet
 
 This implementation demonstrates several valuable research aspects:
 
-1. **Real-World Application**: Uses actual student data from Individual Inventory Forms and mental health surveys
+1. **Real-World Application**: Uses actual institutional student data from Individual Inventory Forms collected by the Guidance Counselor Office, combined with real-world mental health survey data sourced from Kaggle (comprising 7,000+ student records with validated mental health outcomes). The novel matching methodology linking these datasets is a key research contribution.
 2. **Practical ML Implementation**: Shows how ML can be integrated into existing administrative systems
 3. **Feature Engineering**: Demonstrates the importance of proper data preprocessing in ML workflows
 4. **Hybrid Methodology**: Combines ML predictions with clinical expertise - a practical approach for healthcare applications
@@ -263,7 +275,7 @@ The system uses:
 The system provides:
 
 - **Early Risk Identification**: Identifies at-risk students before they reach crisis
-- **Evidence-Based Predictions**: Based on patterns learned from 852+ historical cases
+- **Evidence-Based Predictions**: Based on patterns learned from a hybrid dataset combining institutional IIF data (from Guidance Counselor Office) with real-world mental health survey data from Kaggle (7,000+ student records). The training dataset consists of ~852 matched samples created through demographic similarity matching.
 - **Automated Risk Assessment**: Scales to assess many students efficiently
 - **Actionable Insights**: Provides specific risk factors and recommendations
 - **Continuous Learning**: Can improve as more data becomes available
