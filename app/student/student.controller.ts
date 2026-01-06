@@ -182,6 +182,8 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				findManyQuery.select = fieldSelections;
+				// Always include personId for userId lookup
+				findManyQuery.select.personId = true;
 			}
 
 			const [students, total] = await Promise.all([
@@ -190,22 +192,30 @@ export const controller = (prisma: PrismaClient) => {
 			]);
 
 			// Get user IDs for each student by matching personId
-			const studentsWithUserIds = await Promise.all(
-				students.map(async (student) => {
-					const user = await prisma.user.findFirst({
-						where: {
-							personId: student.personId,
-							type: "student",
-							isDeleted: false,
-						},
-						select: { id: true },
-					});
-					return {
-						...student,
-						userId: user?.id || null,
-					};
-				}),
-			);
+			// Fetch all users at once for better performance and accuracy
+			const personIds = students
+				.map((student) => student.personId)
+				.filter((id) => id !== undefined);
+			const users = await prisma.user.findMany({
+				where: {
+					personId: { in: personIds },
+					type: "student",
+					isDeleted: false,
+				},
+				select: { id: true, personId: true },
+			});
+
+			// Create a map of personId to userId for quick lookup
+			const personIdToUserIdMap = new Map<string, string>();
+			users.forEach((user) => {
+				personIdToUserIdMap.set(user.personId, user.id);
+			});
+
+			// Map students to include their corresponding userId
+			const studentsWithUserIds = students.map((student) => ({
+				...student,
+				userId: personIdToUserIdMap.get(student.personId) || null,
+			}));
 
 			studentLogger.info(`Retrieved ${studentsWithUserIds.length} students`);
 			res.status(200).json({

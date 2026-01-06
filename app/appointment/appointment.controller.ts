@@ -6,6 +6,96 @@ import { createNotificationHelper } from "../../helper/notification.helper";
 const logger = getLogger();
 const appointmentLogger = logger.child({ module: "appointment" });
 
+/**
+ * Helper function to calculate appointment priority based on student's inventory mental health predictions
+ * @param studentId - The ID of the student
+ * @returns Priority level: "urgent", "high", "normal", or "low"
+ */
+const calculatePriorityFromInventory = async (
+	prisma: PrismaClient,
+	userId: string,
+): Promise<string> => {
+	try {
+		// First, get the User to find their personId
+		const user = await prisma.user.findFirst({
+			where: {
+				id: userId,
+				type: "student",
+				isDeleted: false,
+			},
+			select: {
+				personId: true,
+			},
+		});
+
+		if (!user) {
+			appointmentLogger.warn(`User not found for priority calculation: ${userId}`);
+			return "normal";
+		}
+
+		// Then, get the Student record using the personId
+		const student = await prisma.student.findFirst({
+			where: {
+				personId: user.personId,
+				isDeleted: false,
+			},
+			select: {
+				id: true,
+			},
+		});
+
+		if (!student) {
+			appointmentLogger.warn(`Student record not found for personId: ${user.personId}`);
+			return "normal";
+		}
+
+		// Now fetch the student's inventory with latest mental health predictions using the Student record ID
+		const inventory = await prisma.individualInventory.findFirst({
+			where: {
+				studentId: student.id,
+				isDeleted: false,
+			},
+			include: {
+				mentalHealthPredictions: {
+					where: {
+						isDeleted: false,
+					},
+					orderBy: {
+						predictionDate: "desc",
+					},
+					take: 1, // Get only the latest prediction
+				},
+			},
+		});
+
+		// If no inventory or predictions exist, return normal priority
+		if (!inventory || !inventory.mentalHealthPredictions.length) {
+			return "normal";
+		}
+
+		const latestPrediction = inventory.mentalHealthPredictions[0];
+		const mentalHealthRisk = latestPrediction.mentalHealthRisk;
+
+		// Determine priority based on risk level
+		switch (mentalHealthRisk.level) {
+			case "critical":
+				return "urgent";
+			case "high":
+				return "high";
+			case "moderate":
+				return "normal";
+			case "low":
+				return "low";
+			default:
+				return "normal";
+		}
+	} catch (error) {
+		appointmentLogger.error(`Error calculating priority from inventory: ${error}`);
+		// Default to normal priority if there's an error
+		return "normal";
+	}
+};
+
 export const controller = (prisma: PrismaClient) => {
 	const notificationHelper = createNotificationHelper(prisma);
 	// Get appointment by ID
@@ -183,15 +273,33 @@ export const controller = (prisma: PrismaClient) => {
 					: {}),
 			};
 
+			// Enhanced sorting logic to support alphabetical sorting by student name
+			let orderByClause:
+				| Prisma.AppointmentOrderByWithRelationInput
+				| Prisma.AppointmentOrderByWithRelationInput[];
+
+			if (sort === "studentName") {
+				// Sort by student's first name, then last name alphabetically
+				orderByClause = [
+					{ student: { person: { firstName: order as Prisma.SortOrder } } },
+					{ student: { person: { lastName: order as Prisma.SortOrder } } },
+				];
+			} else if (sort === "priority") {
+				// Sort by priority (urgent > high > normal > low)
+				orderByClause = { priority: order as Prisma.SortOrder };
+			} else if (sort && typeof sort === "string" && !sort.startsWith("{")) {
+				orderByClause = { [sort as string]: order };
+			} else if (sort && typeof sort === "string" && sort.startsWith("{")) {
+				orderByClause = JSON.parse(sort as string);
+			} else {
+				orderByClause = { createdAt: order as Prisma.SortOrder };
+			}
+
 			const findManyQuery: Prisma.AppointmentFindManyArgs = {
 				where: whereClause,
 				skip,
 				take: Number(limit),
-				orderBy: sort
-					? typeof sort === "string" && !sort.startsWith("{")
-						? { [sort as string]: order }
-						: JSON.parse(sort as string)
-					: { createdAt: order as Prisma.SortOrder },
+				orderBy: orderByClause,
 				include: {
 					student: {
 						include: {
@@ -267,6 +375,9 @@ export const controller = (prisma: PrismaClient) => {
 			attachments,
 		} = req.body;
 
+		// Get the authenticated user from the request (set by auth middleware)
+		const authenticatedUser = (req as any).user;
+
 		if (!studentId || !counselorId || !requestedDate) {
 			appointmentLogger.error("Missing required fields");
 			res.status(400).json({
@@ -278,7 +389,7 @@ export const controller = (prisma: PrismaClient) => {
 		appointmentLogger.info(`Creating appointment for student: ${studentId}`);
 
 		try {
-			// Verify student exists and is of type 'student'
+			// Verify student user exists and is of type 'student' (studentId is the User ID)
 			const student = await prisma.user.findFirst({
 				where: {
 					id: studentId,
@@ -308,6 +419,154 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Calculate priority based on inventory if not explicitly provided
+			// Pass the User ID to calculatePriorityFromInventory
+			let appointmentPriority = priority || "normal";
+			if (!priority) {
+				appointmentPriority = await calculatePriorityFromInventory(prisma, studentId);
+				appointmentLogger.info(
+					`Auto-calculated priority for user ${studentId}: ${appointmentPriority}`,
+				);
+			}
+
+			// Check for appointment conflicts (double-booking)
+			const requestDate = new Date(requestedDate);
+			const appointmentDuration = duration || 60; // Default to 60 minutes
+			const appointmentEndTime = new Date(
+				requestDate.getTime() + appointmentDuration * 60000,
+			);
+
+			// Check if student already has an appointment at this time
+			const studentConflict = await prisma.appointment.findFirst({
+				where: {
+					studentId,
+					isDeleted: false,
+					status: {
+						notIn: ["cancelled", "no_show"], // Ignore cancelled and no-show appointments
+					},
+					OR: [
+						{
+							// New appointment starts during existing appointment
+							AND: [
+								{ requestedDate: { lte: requestDate } },
+								{
+									requestedDate: {
+										gte: new Date(requestDate.getTime() - 120 * 60000), // Check 2 hours before
+									},
+								},
+							],
+						},
+					],
+				},
+				include: {
+					counselor: {
+						include: {
+							person: true,
+						},
+					},
+				},
+			});
+
+			if (studentConflict) {
+				// Calculate conflict end time
+				const conflictEndTime = new Date(
+					studentConflict.requestedDate.getTime() +
+						(studentConflict.duration || 60) * 60000,
+				);
+
+				// Check if there's an actual overlap
+				const hasOverlap =
+					(requestDate >= studentConflict.requestedDate &&
+						requestDate < conflictEndTime) ||
+					(appointmentEndTime > studentConflict.requestedDate &&
+						appointmentEndTime <= conflictEndTime) ||
+					(requestDate <= studentConflict.requestedDate &&
+						appointmentEndTime >= conflictEndTime);
+
+				if (hasOverlap) {
+					const conflictCounselor = studentConflict.counselor?.person
+						? `${studentConflict.counselor.person.firstName} ${studentConflict.counselor.person.lastName}`
+						: "Unknown";
+					appointmentLogger.error(
+						`Student already has an appointment at this time: ${studentConflict.id}`,
+					);
+					res.status(409).json({
+						error: "Student already has an appointment at this time",
+						conflictDetails: {
+							appointmentId: studentConflict.id,
+							date: studentConflict.requestedDate,
+							duration: studentConflict.duration,
+							counselor: conflictCounselor,
+						},
+					});
+					return;
+				}
+			}
+
+			// Check if counselor already has an appointment at this time
+			const counselorConflict = await prisma.appointment.findFirst({
+				where: {
+					counselorId,
+					isDeleted: false,
+					status: {
+						notIn: ["cancelled", "no_show"],
+					},
+					OR: [
+						{
+							AND: [
+								{ requestedDate: { lte: requestDate } },
+								{
+									requestedDate: {
+										gte: new Date(requestDate.getTime() - 120 * 60000),
+									},
+								},
+							],
+						},
+					],
+				},
+				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
+				},
+			});
+
+			if (counselorConflict) {
+				const conflictEndTime = new Date(
+					counselorConflict.requestedDate.getTime() +
+						(counselorConflict.duration || 60) * 60000,
+				);
+
+				const hasOverlap =
+					(requestDate >= counselorConflict.requestedDate &&
+						requestDate < conflictEndTime) ||
+					(appointmentEndTime > counselorConflict.requestedDate &&
+						appointmentEndTime <= conflictEndTime) ||
+					(requestDate <= counselorConflict.requestedDate &&
+						appointmentEndTime >= conflictEndTime);
+
+				if (hasOverlap) {
+					const conflictStudent = counselorConflict.student?.person
+						? `${counselorConflict.student.person.firstName} ${counselorConflict.student.person.lastName}`
+						: "Unknown";
+					appointmentLogger.error(
+						`Counselor already has an appointment at this time: ${counselorConflict.id}`,
+					);
+					res.status(409).json({
+						error: "Counselor already has an appointment at this time",
+						conflictDetails: {
+							appointmentId: counselorConflict.id,
+							date: counselorConflict.requestedDate,
+							duration: counselorConflict.duration,
+							student: conflictStudent,
+						},
+					});
+					return;
+				}
+			}
+
 			// Verify schedule exists and is available (only if scheduleId is provided)
 			let schedule = null;
 			if (scheduleId) {
@@ -334,7 +593,6 @@ export const controller = (prisma: PrismaClient) => {
 				}
 
 				// Check if requested date is within schedule time range
-				const requestDate = new Date(requestedDate);
 				if (requestDate < schedule.startTime || requestDate > schedule.endTime) {
 					appointmentLogger.error(`Requested date outside schedule range`);
 					res.status(400).json({
@@ -344,8 +602,24 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			// Determine appointment status based on who is creating it
+			// If guidance counselor is creating the appointment, auto-confirm
+			// If student is creating (requesting), set as pending
+			let appointmentStatus = status || "pending";
+			if (!status) {
+				// Check if the authenticated user is the counselor
+				if (authenticatedUser && authenticatedUser.id === counselorId) {
+					appointmentStatus = "confirmed";
+					appointmentLogger.info(
+						`Auto-confirming appointment created by counselor: ${counselorId}`,
+					);
+				} else {
+					appointmentStatus = "pending";
+				}
+			}
+
 			const result = await prisma.$transaction(async (tx) => {
-				// Create the appointment
+				// Create the appointment with calculated priority
 				const appointment = await tx.appointment.create({
 					data: {
 						studentId,
@@ -355,8 +629,8 @@ export const controller = (prisma: PrismaClient) => {
 						description,
 						appointmentType: appointmentType || "general_information",
 						requestedDate: new Date(requestedDate),
-						status: status || "pending", // Use provided status or default to pending
-						priority: priority || "normal",
+						status: appointmentStatus,
+						priority: appointmentPriority,
 						location: location || schedule?.location,
 						duration: duration || 60,
 						attachments: attachments || [],
