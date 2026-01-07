@@ -3988,13 +3988,31 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				// Add student filters if provided
+				if (filter.program || filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						predictionGenerated: true,
-						...dateFilter,
-					},
+						...(filter.program && { program: filter.program }),
+						...(filter.yearLevel && { year: filter.yearLevel }),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
 							orderBy: { createdAt: "desc" },
@@ -4041,14 +4059,38 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					...dateFilter,
+				};
+
+				// Add student filters if provided
+				if (filter.program || filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						...dateFilter,
-					},
+						...(filter.program && { program: filter.program }),
+						...(filter.yearLevel && { year: filter.yearLevel }),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					select: {
 						height: true,
 						weight: true,
+						student: {
+							select: {
+								program: true,
+								year: true,
+								person: {
+									select: {
+										gender: true,
+									},
+								},
+							},
+						},
 					},
 				});
 
@@ -4138,12 +4180,24 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				// Add student filters if provided (for yearLevel and gender filtering)
+				if (filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						predictionGenerated: true,
-						...dateFilter,
-					},
+						...(filter.yearLevel && { year: filter.yearLevel }),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					include: {
 						student: {
 							include: {
@@ -4399,11 +4453,23 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					...dateFilter,
+				};
+
+				// Add student filters if provided (for yearLevel and gender filtering)
+				if (filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						...dateFilter,
-					},
+						...(filter.yearLevel && { year: filter.yearLevel }),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					include: {
 						student: {
 							include: {
