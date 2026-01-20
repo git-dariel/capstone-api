@@ -165,8 +165,63 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			appointmentLogger.info(`Retrieved appointment: ${appointment.id}`);
-			res.status(200).json(appointment);
+			// Fetch all students for group sessions
+			let allStudents: any[] = [];
+			if (appointment.studentIds && appointment.studentIds.length > 0) {
+				// First get the User records
+				const users = await prisma.user.findMany({
+					where: {
+						id: { in: appointment.studentIds },
+						isDeleted: false,
+					},
+					include: {
+						person: true,
+					},
+				});
+
+				// Then get Student records using personIds
+				const personIds = users.map((user) => user.personId);
+				const students = await prisma.student.findMany({
+					where: {
+						personId: { in: personIds },
+						isDeleted: false,
+					},
+					include: {
+						person: true,
+					},
+				});
+
+				// Merge user and student data - include userId for frontend compatibility
+				allStudents = users.map((user) => {
+					const studentRecord = students.find((s) => s.personId === user.personId);
+
+					if (studentRecord) {
+						// Return student record with userId added
+						return {
+							...studentRecord,
+							userId: user.id,
+						};
+					}
+					// Fallback to user if no student record found
+					return user;
+				});
+			}
+
+			// Include students array in the response
+			const responseData = {
+				...appointment,
+				students:
+					allStudents.length > 0
+						? allStudents
+						: (appointment as any).student
+							? [(appointment as any).student]
+							: [],
+			};
+
+			appointmentLogger.info(
+				`Retrieved appointment: ${appointment.id}, students count: ${responseData.students?.length || 0}, studentIds: ${JSON.stringify(appointment.studentIds)}`,
+			);
+			res.status(200).json(responseData);
 		} catch (error) {
 			appointmentLogger.error(`Error getting appointment: ${error}`);
 			res.status(500).json({ error: "Internal server error" });
@@ -345,9 +400,92 @@ export const controller = (prisma: PrismaClient) => {
 				prisma.appointment.count({ where: whereClause }),
 			]);
 
+			// Fetch all students for group sessions
+			const appointmentsWithStudents = await Promise.all(
+				appointments.map(async (appointment) => {
+					if (appointment.studentIds && appointment.studentIds.length > 0) {
+						appointmentLogger.info(
+							`Fetching students for appointment ${appointment.id}, studentIds: ${JSON.stringify(appointment.studentIds)}`,
+						);
+
+						// First get the User records
+						const users = await prisma.user.findMany({
+							where: {
+								id: { in: appointment.studentIds },
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
+
+						appointmentLogger.info(
+							`Found ${users.length} users for appointment ${appointment.id}`,
+						);
+
+						// Then get Student records using personIds
+						const personIds = users.map((user) => user.personId);
+						const students = await prisma.student.findMany({
+							where: {
+								personId: { in: personIds },
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
+
+						appointmentLogger.info(
+							`Found ${students.length} student records for appointment ${appointment.id}`,
+						);
+
+						// Merge user and student data - include userId for frontend compatibility
+						const allStudents = users.map((user) => {
+							const studentRecord = students.find(
+								(s) => s.personId === user.personId,
+							);
+
+							if (studentRecord) {
+								// Return student record with userId added
+								return {
+									...studentRecord,
+									userId: user.id,
+								};
+							}
+							// Fallback to user if no student record found
+							return user;
+						});
+
+						appointmentLogger.info(
+							`Returning ${allStudents.length} students for appointment ${appointment.id}`,
+						);
+
+						return {
+							...appointment,
+							students: allStudents,
+						};
+					}
+					return {
+						...appointment,
+						students: (appointment as any).student
+							? [(appointment as any).student]
+							: [],
+					};
+				}),
+			);
+
 			appointmentLogger.info(`Retrieved ${appointments.length} appointments`);
+
+			// Log sample appointment to verify students array
+			if (appointmentsWithStudents.length > 0) {
+				const firstAppointment = appointmentsWithStudents[0];
+				appointmentLogger.info(
+					`Sample appointment - ID: ${firstAppointment.id}, has students array: ${!!firstAppointment.students}, students count: ${firstAppointment.students?.length || 0}`,
+				);
+			}
+
 			res.status(200).json({
-				appointments,
+				appointments: appointmentsWithStudents,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
@@ -362,6 +500,7 @@ export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		const {
 			studentId,
+			studentIds,
 			counselorId,
 			scheduleId,
 			title,
@@ -373,34 +512,57 @@ export const controller = (prisma: PrismaClient) => {
 			location,
 			duration,
 			attachments,
+			maxStudents,
 		} = req.body;
 
 		// Get the authenticated user from the request (set by auth middleware)
 		const authenticatedUser = (req as any).user;
 
-		if (!studentId || !counselorId || !requestedDate) {
+		// Support both single student and multiple students (for group sessions)
+		const isGroupSession = studentIds && Array.isArray(studentIds) && studentIds.length > 0;
+		const primaryStudentId = isGroupSession ? studentIds[0] : studentId;
+		const allStudentIds = isGroupSession ? studentIds : studentId ? [studentId] : [];
+
+		if (allStudentIds.length === 0 || !counselorId || !requestedDate) {
 			appointmentLogger.error("Missing required fields");
 			res.status(400).json({
-				error: "Student ID, Counselor ID, and Requested Date are required",
+				error: "Student ID(s), Counselor ID, and Requested Date are required",
 			});
 			return;
 		}
 
-		appointmentLogger.info(`Creating appointment for student: ${studentId}`);
+		// Validate max students for group sessions
+		const maxAllowedStudents = maxStudents || 10;
+		if (allStudentIds.length > maxAllowedStudents) {
+			appointmentLogger.error(`Too many students: ${allStudentIds.length}`);
+			res.status(400).json({
+				error: `Maximum ${maxAllowedStudents} students allowed per group session`,
+			});
+			return;
+		}
+
+		appointmentLogger.info(
+			`Creating appointment for ${allStudentIds.length} student(s): ${allStudentIds.join(", ")}`,
+		);
 
 		try {
-			// Verify student user exists and is of type 'student' (studentId is the User ID)
-			const student = await prisma.user.findFirst({
+			// Verify all students exist and are of type 'student'
+			const students = await prisma.user.findMany({
 				where: {
-					id: studentId,
+					id: { in: allStudentIds },
 					type: "student",
 					isDeleted: false,
 				},
 			});
 
-			if (!student) {
-				appointmentLogger.error(`Student not found: ${studentId}`);
-				res.status(404).json({ error: "Student not found" });
+			if (students.length !== allStudentIds.length) {
+				const foundIds = students.map((s) => s.id);
+				const missingIds = allStudentIds.filter((id) => !foundIds.includes(id));
+				appointmentLogger.error(`Students not found: ${missingIds.join(", ")}`);
+				res.status(404).json({
+					error: "One or more students not found",
+					missingStudentIds: missingIds,
+				});
 				return;
 			}
 
@@ -420,12 +582,24 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			// Calculate priority based on inventory if not explicitly provided
-			// Pass the User ID to calculatePriorityFromInventory
+			// For group sessions, use the highest priority among all students
 			let appointmentPriority = priority || "normal";
 			if (!priority) {
-				appointmentPriority = await calculatePriorityFromInventory(prisma, studentId);
+				const priorities = await Promise.all(
+					allStudentIds.map((id) => calculatePriorityFromInventory(prisma, id)),
+				);
+
+				// Determine highest priority: critical > high > normal
+				if (priorities.includes("critical")) {
+					appointmentPriority = "critical";
+				} else if (priorities.includes("high")) {
+					appointmentPriority = "high";
+				} else {
+					appointmentPriority = "normal";
+				}
+
 				appointmentLogger.info(
-					`Auto-calculated priority for user ${studentId}: ${appointmentPriority}`,
+					`Auto-calculated priority for ${allStudentIds.length} student(s): ${appointmentPriority}`,
 				);
 			}
 
@@ -436,29 +610,34 @@ export const controller = (prisma: PrismaClient) => {
 				requestDate.getTime() + appointmentDuration * 60000,
 			);
 
-			// Check if student already has an appointment at this time
-			const studentConflict = await prisma.appointment.findFirst({
+			// Check if any student already has an appointment at this time
+			const studentConflicts = await prisma.appointment.findMany({
 				where: {
-					studentId,
+					OR: [
+						{ studentId: { in: allStudentIds } },
+						{ studentIds: { hasSome: allStudentIds } },
+					],
 					isDeleted: false,
 					status: {
 						notIn: ["cancelled", "no_show"], // Ignore cancelled and no-show appointments
 					},
-					OR: [
+					AND: [
 						{
-							// New appointment starts during existing appointment
-							AND: [
-								{ requestedDate: { lte: requestDate } },
-								{
-									requestedDate: {
-										gte: new Date(requestDate.getTime() - 120 * 60000), // Check 2 hours before
-									},
-								},
-							],
+							requestedDate: { lte: requestDate },
+						},
+						{
+							requestedDate: {
+								gte: new Date(requestDate.getTime() - 120 * 60000), // Check 2 hours before
+							},
 						},
 					],
 				},
 				include: {
+					student: {
+						include: {
+							person: true,
+						},
+					},
 					counselor: {
 						include: {
 							person: true,
@@ -467,35 +646,37 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
-			if (studentConflict) {
-				// Calculate conflict end time
+			// Check for actual time overlaps
+			for (const conflict of studentConflicts) {
 				const conflictEndTime = new Date(
-					studentConflict.requestedDate.getTime() +
-						(studentConflict.duration || 60) * 60000,
+					conflict.requestedDate.getTime() + (conflict.duration || 60) * 60000,
 				);
 
-				// Check if there's an actual overlap
 				const hasOverlap =
-					(requestDate >= studentConflict.requestedDate &&
-						requestDate < conflictEndTime) ||
-					(appointmentEndTime > studentConflict.requestedDate &&
+					(requestDate >= conflict.requestedDate && requestDate < conflictEndTime) ||
+					(appointmentEndTime > conflict.requestedDate &&
 						appointmentEndTime <= conflictEndTime) ||
-					(requestDate <= studentConflict.requestedDate &&
+					(requestDate <= conflict.requestedDate &&
 						appointmentEndTime >= conflictEndTime);
 
 				if (hasOverlap) {
-					const conflictCounselor = studentConflict.counselor?.person
-						? `${studentConflict.counselor.person.firstName} ${studentConflict.counselor.person.lastName}`
+					const conflictStudent = conflict.student?.person
+						? `${conflict.student.person.firstName} ${conflict.student.person.lastName}`
 						: "Unknown";
+					const conflictCounselor = conflict.counselor?.person
+						? `${conflict.counselor.person.firstName} ${conflict.counselor.person.lastName}`
+						: "Unknown";
+
 					appointmentLogger.error(
-						`Student already has an appointment at this time: ${studentConflict.id}`,
+						`Student already has an appointment at this time: ${conflict.id}`,
 					);
 					res.status(409).json({
-						error: "Student already has an appointment at this time",
+						error: "One or more students already have an appointment at this time",
 						conflictDetails: {
-							appointmentId: studentConflict.id,
-							date: studentConflict.requestedDate,
-							duration: studentConflict.duration,
+							appointmentId: conflict.id,
+							date: conflict.requestedDate,
+							duration: conflict.duration,
+							student: conflictStudent,
 							counselor: conflictCounselor,
 						},
 					});
@@ -618,11 +799,16 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			appointmentLogger.info(
+				`Creating appointment with studentIds: ${JSON.stringify(allStudentIds)}, isGroupSession: ${isGroupSession}`,
+			);
+
 			const result = await prisma.$transaction(async (tx) => {
-				// Create the appointment with calculated priority
+				// Create the appointment with calculated priority and student IDs
 				const appointment = await tx.appointment.create({
 					data: {
-						studentId,
+						studentId: primaryStudentId, // Primary student (for backward compatibility)
+						studentIds: allStudentIds, // All students in the group session
 						counselorId,
 						...(scheduleId && { scheduleId }),
 						title,
@@ -631,9 +817,10 @@ export const controller = (prisma: PrismaClient) => {
 						requestedDate: new Date(requestedDate),
 						status: appointmentStatus,
 						priority: appointmentPriority,
-						location: location || schedule?.location,
+						location,
 						duration: duration || 60,
 						attachments: attachments || [],
+						maxStudents,
 					},
 					include: {
 						student: {
@@ -649,6 +836,10 @@ export const controller = (prisma: PrismaClient) => {
 						schedule: true,
 					},
 				});
+
+				appointmentLogger.info(
+					`Appointment created with ID: ${appointment.id}, studentIds saved: ${JSON.stringify(appointment.studentIds)}`,
+				);
 
 				// Update schedule booked slots (only if scheduleId is provided)
 				if (scheduleId && schedule) {
@@ -671,23 +862,28 @@ export const controller = (prisma: PrismaClient) => {
 
 			appointmentLogger.info(`Appointment created: ${result.id}`);
 
-			// Create notification for appointment creation
+			// Create notifications for all students in the appointment
 			try {
-				await notificationHelper.createAppointmentNotification(
-					"CREATED",
-					result.studentId,
-					result.id,
-					{
-						appointmentType: result.appointmentType,
-						requestedDate: result.requestedDate,
-						counselorName: result.counselor?.person
-							? `${result.counselor.person.firstName} ${result.counselor.person.lastName}`
-							: "Unknown Counselor",
-					},
+				const notificationPromises = allStudentIds.map((studentId) =>
+					notificationHelper.createAppointmentNotification(
+						"CREATED",
+						studentId,
+						result.id,
+						{
+							appointmentType: result.appointmentType,
+							requestedDate: result.requestedDate,
+							counselorName: result.counselor?.person
+								? `${result.counselor.person.firstName} ${result.counselor.person.lastName}`
+								: "Unknown Counselor",
+							isGroupSession: allStudentIds.length > 1,
+							totalStudents: allStudentIds.length,
+						},
+					),
 				);
+				await Promise.all(notificationPromises);
 			} catch (notificationError) {
 				appointmentLogger.warn(
-					`Failed to create appointment notification: ${notificationError}`,
+					`Failed to create appointment notifications: ${notificationError}`,
 				);
 			}
 
@@ -718,6 +914,8 @@ export const controller = (prisma: PrismaClient) => {
 			followUpRequired,
 			followUpDate,
 			attachments,
+			studentIds,
+			maxStudents,
 		} = req.body;
 
 		if (!id) {
@@ -744,6 +942,11 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				include: {
 					schedule: true,
+					student: {
+						include: {
+							person: true,
+						},
+					},
 				},
 			});
 
@@ -751,6 +954,44 @@ export const controller = (prisma: PrismaClient) => {
 				appointmentLogger.error(`Appointment not found: ${id}`);
 				res.status(404).json({ error: "Appointment not found" });
 				return;
+			}
+
+			// Validate studentIds if provided
+			if (studentIds && Array.isArray(studentIds)) {
+				if (studentIds.length === 0) {
+					appointmentLogger.error("studentIds array cannot be empty");
+					res.status(400).json({ error: "At least one student is required" });
+					return;
+				}
+
+				const maxAllowedStudents = maxStudents || existingAppointment.maxStudents || 10;
+				if (studentIds.length > maxAllowedStudents) {
+					appointmentLogger.error(`Too many students: ${studentIds.length}`);
+					res.status(400).json({
+						error: `Maximum ${maxAllowedStudents} students allowed per group session`,
+					});
+					return;
+				}
+
+				// Verify all students exist
+				const students = await prisma.user.findMany({
+					where: {
+						id: { in: studentIds },
+						type: "student",
+						isDeleted: false,
+					},
+				});
+
+				if (students.length !== studentIds.length) {
+					const foundIds = students.map((s) => s.id);
+					const missingIds = studentIds.filter((id) => !foundIds.includes(id));
+					appointmentLogger.error(`Students not found: ${missingIds.join(", ")}`);
+					res.status(404).json({
+						error: "One or more students not found",
+						missingStudentIds: missingIds,
+					});
+					return;
+				}
 			}
 
 			const result = await prisma.$transaction(async (tx) => {
@@ -790,6 +1031,12 @@ export const controller = (prisma: PrismaClient) => {
 						...(location && { location }),
 						...(duration && { duration }),
 						...(cancellationReason && { cancellationReason }),
+						...(studentIds &&
+							Array.isArray(studentIds) && {
+								studentIds: studentIds,
+								studentId: studentIds[0], // Update primary student
+							}),
+						...(maxStudents && { maxStudents }),
 						...(completionNotes && { completionNotes }),
 						...(followUpRequired !== undefined && { followUpRequired }),
 						...(followUpDate && { followUpDate: new Date(followUpDate) }),
@@ -815,7 +1062,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			appointmentLogger.info(`Appointment updated: ${result.id}`);
 
-			// Create notification for appointment update
+			// Create notifications for all students in the appointment
 			try {
 				let notificationAction: "UPDATED" | "CANCELLED" | "CONFIRMED" | "COMPLETED" =
 					"UPDATED";
@@ -835,19 +1082,30 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				}
 
-				await notificationHelper.createAppointmentNotification(
-					notificationAction,
-					result.studentId,
-					result.id,
-					{
-						status: result.status,
-						appointmentType: result.appointmentType,
-						requestedDate: result.requestedDate,
-						counselorName: result.counselor?.person
-							? `${result.counselor.person.firstName} ${result.counselor.person.lastName}`
-							: "Unknown Counselor",
-					},
+				// Notify all students in group session
+				const allStudentIds =
+					result.studentIds && result.studentIds.length > 0
+						? result.studentIds
+						: [result.studentId];
+
+				const notificationPromises = allStudentIds.map((studentId) =>
+					notificationHelper.createAppointmentNotification(
+						notificationAction,
+						studentId,
+						result.id,
+						{
+							status: result.status,
+							appointmentType: result.appointmentType,
+							requestedDate: result.requestedDate,
+							counselorName: result.counselor?.person
+								? `${result.counselor.person.firstName} ${result.counselor.person.lastName}`
+								: "Unknown Counselor",
+							isGroupSession: allStudentIds.length > 1,
+							totalStudents: allStudentIds.length,
+						},
+					),
 				);
+				await Promise.all(notificationPromises);
 			} catch (notificationError) {
 				appointmentLogger.warn(
 					`Failed to create appointment update notification: ${notificationError}`,
@@ -967,8 +1225,86 @@ export const controller = (prisma: PrismaClient) => {
 				prisma.appointment.count({ where: whereClause }),
 			]);
 
+			// Fetch all students for group sessions
+			const appointmentsWithStudents = await Promise.all(
+				appointments.map(async (appointment) => {
+					if (appointment.studentIds && appointment.studentIds.length > 0) {
+						appointmentLogger.info(
+							`[getByStudentId] Fetching students for appointment ${appointment.id}, studentIds: ${JSON.stringify(appointment.studentIds)}`,
+						);
+
+						// First get the User records
+						const users = await prisma.user.findMany({
+							where: {
+								id: { in: appointment.studentIds },
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
+
+						appointmentLogger.info(
+							`[getByStudentId] Found ${users.length} users for appointment ${appointment.id}`,
+						);
+
+						// Then get Student records using personIds
+						const personIds = users.map((user) => user.personId);
+						const students = await prisma.student.findMany({
+							where: {
+								personId: { in: personIds },
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
+
+						appointmentLogger.info(
+							`[getByStudentId] Found ${students.length} student records for appointment ${appointment.id}`,
+						);
+
+						// Merge user and student data - include userId for frontend compatibility
+						const allStudents = users.map((user) => {
+							const studentRecord = students.find(
+								(s) => s.personId === user.personId,
+							);
+
+							if (studentRecord) {
+								// Return student record with userId added
+								return {
+									...studentRecord,
+									userId: user.id,
+								};
+							}
+							// Fallback to user if no student record found
+							return user;
+						});
+
+						appointmentLogger.info(
+							`[getByStudentId] Returning ${allStudents.length} students for appointment ${appointment.id}`,
+						);
+
+						return {
+							...appointment,
+							students: allStudents,
+						};
+					}
+					return {
+						...appointment,
+						students: (appointment as any).student
+							? [(appointment as any).student]
+							: [],
+					};
+				}),
+			);
+
+			appointmentLogger.info(
+				`[getByStudentId] Retrieved ${appointments.length} appointments for student ${studentId}`,
+			);
+
 			res.status(200).json({
-				appointments,
+				appointments: appointmentsWithStudents,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
@@ -1025,8 +1361,86 @@ export const controller = (prisma: PrismaClient) => {
 				prisma.appointment.count({ where: whereClause }),
 			]);
 
+			// Fetch all students for group sessions
+			const appointmentsWithStudents = await Promise.all(
+				appointments.map(async (appointment) => {
+					if (appointment.studentIds && appointment.studentIds.length > 0) {
+						appointmentLogger.info(
+							`[getByCounselorId] Fetching students for appointment ${appointment.id}, studentIds: ${JSON.stringify(appointment.studentIds)}`,
+						);
+
+						// First get the User records
+						const users = await prisma.user.findMany({
+							where: {
+								id: { in: appointment.studentIds },
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
+
+						appointmentLogger.info(
+							`[getByCounselorId] Found ${users.length} users for appointment ${appointment.id}`,
+						);
+
+						// Then get Student records using personIds
+						const personIds = users.map((user) => user.personId);
+						const students = await prisma.student.findMany({
+							where: {
+								personId: { in: personIds },
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
+
+						appointmentLogger.info(
+							`[getByCounselorId] Found ${students.length} student records for appointment ${appointment.id}`,
+						);
+
+						// Merge user and student data - include userId for frontend compatibility
+						const allStudents = users.map((user) => {
+							const studentRecord = students.find(
+								(s) => s.personId === user.personId,
+							);
+
+							if (studentRecord) {
+								// Return student record with userId added
+								return {
+									...studentRecord,
+									userId: user.id,
+								};
+							}
+							// Fallback to user if no student record found
+							return user;
+						});
+
+						appointmentLogger.info(
+							`[getByCounselorId] Returning ${allStudents.length} students for appointment ${appointment.id}`,
+						);
+
+						return {
+							...appointment,
+							students: allStudents,
+						};
+					}
+					return {
+						...appointment,
+						students: (appointment as any).student
+							? [(appointment as any).student]
+							: [],
+					};
+				}),
+			);
+
+			appointmentLogger.info(
+				`[getByCounselorId] Retrieved ${appointments.length} appointments for counselor ${counselorId}`,
+			);
+
 			res.status(200).json({
-				appointments,
+				appointments: appointmentsWithStudents,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
