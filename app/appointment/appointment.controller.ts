@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { createNotificationHelper } from "../../helper/notification.helper";
+import { auditHelpers, extractAuditContext } from "../../helper/audit.helper";
 
 const logger = getLogger();
 const appointmentLogger = logger.child({ module: "appointment" });
@@ -862,6 +863,36 @@ export const controller = (prisma: PrismaClient) => {
 
 			appointmentLogger.info(`Appointment created: ${result.id}`);
 
+			// Create audit log for appointment creation
+			try {
+				const auditContext = extractAuditContext(req);
+				await auditHelpers.logAppointmentAction(
+					prisma,
+					"CREATE",
+					result.id,
+					auditContext,
+					undefined, // No beforeValues for creation
+					{
+						studentId: primaryStudentId,
+						studentIds: allStudentIds,
+						counselorId,
+						appointmentType: result.appointmentType,
+						requestedDate: result.requestedDate,
+						status: result.status,
+						priority: result.priority,
+						isGroupSession: allStudentIds.length > 1,
+					},
+					{
+						totalStudents: allStudentIds.length,
+						calculatedPriority: appointmentPriority !== priority,
+						scheduleId: scheduleId || null,
+					},
+				);
+			} catch (auditError) {
+				appointmentLogger.error(`Failed to create appointment audit log: ${auditError}`);
+				// Don't fail the appointment creation if audit logging fails
+			}
+
 			// Create notifications for all students in the appointment
 			try {
 				const notificationPromises = allStudentIds.map((studentId) =>
@@ -1061,6 +1092,64 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			appointmentLogger.info(`Appointment updated: ${result.id}`);
+
+			// Create audit log for appointment update
+			try {
+				const auditContext = extractAuditContext(req);
+				const changedFields = [];
+				const beforeValues: any = {};
+				const afterValues: any = {};
+
+				// Track what fields changed
+				if (status && status !== existingAppointment.status) {
+					changedFields.push("status");
+					beforeValues.status = existingAppointment.status;
+					afterValues.status = status;
+				}
+				if (title && title !== existingAppointment.title) {
+					changedFields.push("title");
+					beforeValues.title = existingAppointment.title;
+					afterValues.title = title;
+				}
+				if (
+					requestedDate &&
+					new Date(requestedDate).getTime() !==
+						existingAppointment.requestedDate.getTime()
+				) {
+					changedFields.push("requestedDate");
+					beforeValues.requestedDate = existingAppointment.requestedDate;
+					afterValues.requestedDate = new Date(requestedDate);
+				}
+				if (priority && priority !== existingAppointment.priority) {
+					changedFields.push("priority");
+					beforeValues.priority = existingAppointment.priority;
+					afterValues.priority = priority;
+				}
+
+				await auditHelpers.logAppointmentAction(
+					prisma,
+					status === "cancelled"
+						? "CANCEL"
+						: status === "confirmed"
+							? "APPROVE"
+							: "UPDATE",
+					result.id,
+					auditContext,
+					beforeValues,
+					afterValues,
+					{
+						changedFields,
+						cancellationReason: cancellationReason || null,
+						completionNotes: completionNotes || null,
+						isGroupSession: result.studentIds && result.studentIds.length > 1,
+					},
+				);
+			} catch (auditError) {
+				appointmentLogger.error(
+					`Failed to create appointment update audit log: ${auditError}`,
+				);
+				// Don't fail the update if audit logging fails
+			}
 
 			// Create notifications for all students in the appointment
 			try {

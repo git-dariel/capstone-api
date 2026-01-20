@@ -10,6 +10,7 @@ import {
 import { getLogger } from "../../helper/logger";
 import { mentalHealthPredictor, StudentData } from "../../helper/ml.helper";
 import { createNotificationHelper } from "../../helper/notification.helper";
+import { auditHelpers, extractAuditContext } from "../../helper/audit.helper";
 
 const logger = getLogger();
 const inventoryLogger = logger.child({ module: "inventory" });
@@ -752,6 +753,35 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			inventoryLogger.info(`${config.SUCCESS.INVENTORY.CREATED}: ${inventory.id}`);
+
+			// Create audit log for inventory creation
+			try {
+				const auditContext = extractAuditContext(req);
+				await auditHelpers.logInventoryChange(
+					prisma,
+					"CREATE",
+					inventory.id,
+					auditContext,
+					undefined, // No beforeValues for creation
+					{
+						studentId: inventory.studentId,
+						height: inventory.height,
+						weight: inventory.weight,
+						complexion: inventory.coplexion,
+						studentName: inventory.student?.person
+							? `${inventory.student.person.firstName} ${inventory.student.person.lastName}`
+							: "Unknown Student",
+					},
+					{
+						inventoryType: "individual",
+						hasSignificantNotes: !!significant_notes_councilor_only,
+						automaticPrediction: true,
+					},
+				);
+			} catch (auditError) {
+				inventoryLogger.error(`Failed to create inventory audit log: ${auditError}`);
+				// Don't fail the inventory creation if audit logging fails
+			}
 
 			// Create notification for inventory creation
 			try {

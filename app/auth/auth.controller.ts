@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { PrismaClient, Role, Type } from "../../generated/prisma";
 import { initOTPEmailHelper, validateFirstYearStudentNumber } from "../../helper/auth.helper";
 import { getLogger } from "../../helper/logger";
+import { auditHelpers, extractAuditContext } from "../../helper/audit.helper";
 import { controller as personController } from "../person/person.controller";
 import { controller as studentController } from "../student/student.controller";
 
@@ -1058,6 +1059,32 @@ export const controller = (prisma: PrismaClient) => {
 			const isPasswordValid = await bcrypt.compare(password, user.password);
 			if (!isPasswordValid) {
 				authLogger.error(`Invalid password for user: ${user.id}`);
+
+				// Create audit log for failed login attempt
+				try {
+					const auditContext = extractAuditContext(req);
+					await auditHelpers.logLogin(
+						prisma,
+						user.id,
+						{
+							...auditContext,
+							userId: user.id,
+							userName: user.userName || email,
+							userRole: user.role || "unknown",
+							userType: user.type || "unknown",
+						},
+						{
+							loginMethod: "email",
+							userType: user.type,
+							userRole: user.role,
+							success: false,
+							failureReason: "invalid_password",
+						},
+					);
+				} catch (auditError) {
+					authLogger.error(`Failed to create failed login audit log: ${auditError}`);
+				}
+
 				res.status(401).json({ message: "Invalid credentials" });
 				return;
 			}
@@ -1065,6 +1092,34 @@ export const controller = (prisma: PrismaClient) => {
 			// Additional check to ensure type matches
 			if (user.type !== type) {
 				authLogger.error(`User type mismatch. Expected: ${type}, Got: ${user.type}`);
+
+				// Create audit log for type mismatch
+				try {
+					const auditContext = extractAuditContext(req);
+					await auditHelpers.logLogin(
+						prisma,
+						user.id,
+						{
+							...auditContext,
+							userId: user.id,
+							userName: user.userName || email,
+							userRole: user.role || "unknown",
+							userType: user.type || "unknown",
+						},
+						{
+							loginMethod: "email",
+							userType: user.type,
+							userRole: user.role,
+							success: false,
+							failureReason: "type_mismatch",
+							expectedType: type,
+							actualType: user.type,
+						},
+					);
+				} catch (auditError) {
+					authLogger.error(`Failed to create type mismatch audit log: ${auditError}`);
+				}
+
 				res.status(401).json({ message: "Invalid account type" });
 				return;
 			}
@@ -1156,6 +1211,31 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			authLogger.info(`User logged in successfully: ${user.id} (${user.type})`);
+
+			// Create audit log for successful login
+			try {
+				const auditContext = extractAuditContext(req);
+				await auditHelpers.logLogin(
+					prisma,
+					user.id,
+					{
+						...auditContext,
+						userId: user.id,
+						userName: user.userName || person.email || "unknown",
+						userRole: user.role || "unknown",
+						userType: user.type || "unknown",
+					},
+					{
+						loginMethod: "email",
+						userType: user.type,
+						userRole: user.role,
+						success: true,
+					},
+				);
+			} catch (auditError) {
+				authLogger.error(`Failed to create login audit log: ${auditError}`);
+				// Don't fail the login if audit logging fails
+			}
 
 			const responseData: any = {
 				message: "Logged in successfully",
