@@ -140,25 +140,40 @@ export const controller = (prisma: PrismaClient) => {
 				});
 
 				if (existingStudent) {
-					// Check if the provided names match the existing student's names (excluding middle name)
-					const nameMatches = namesMatch(
-						firstName,
-						lastName,
-						null,
-						existingStudent.person.firstName,
-						existingStudent.person.lastName,
-						null,
-					);
+					// Check if student is first-year before validating names
+					const isFirstYear =
+						year &&
+						(year.toString().toLowerCase().includes("1st") ||
+							year.toString().toLowerCase().includes("first") ||
+							year.toString().toLowerCase() === "1" ||
+							year.toString().toLowerCase().includes("freshman"));
 
-					if (!nameMatches) {
-						authLogger.error(
-							`Name mismatch for student number ${studentNumber}. Expected: ${existingStudent.person.firstName} ${existingStudent.person.lastName}, Got: ${firstName} ${lastName}`,
+					// Only validate names for first-year students
+					if (isFirstYear) {
+						// Check if the provided names match the existing student's names (excluding middle name)
+						const nameMatches = namesMatch(
+							firstName,
+							lastName,
+							null,
+							existingStudent.person.firstName,
+							existingStudent.person.lastName,
+							null,
 						);
-						res.status(400).json({
-							message:
-								"The provided name does not match the student record. Please verify your full name matches your student record.",
-						});
-						return;
+
+						if (!nameMatches) {
+							authLogger.error(
+								`Name mismatch for student number ${studentNumber}. Expected: ${existingStudent.person.firstName} ${existingStudent.person.lastName}, Got: ${firstName} ${lastName}`,
+							);
+							res.status(400).json({
+								message:
+									"The provided name does not match the student record. Please verify your full name matches your student record.",
+							});
+							return;
+						}
+					} else {
+						authLogger.info(
+							`Skipping name validation for non-first-year student: ${studentNumber}, Year: ${year}`,
+						);
 					}
 
 					// Names match, check if this student already has a user account
@@ -461,25 +476,32 @@ export const controller = (prisma: PrismaClient) => {
 				});
 
 				if (existingStudent) {
-					// Check if the provided names match the existing student's names (excluding middle name)
-					const nameMatches = namesMatch(
-						firstName,
-						lastName,
-						null,
-						existingStudent.person.firstName,
-						existingStudent.person.lastName,
-						null,
-					);
-
-					if (!nameMatches) {
-						authLogger.error(
-							`Name mismatch for student number ${studentNumber}. Expected: ${existingStudent.person.firstName} ${existingStudent.person.lastName}, Got: ${firstName} ${lastName}`,
+					// Only validate names for first-year students (already determined above)
+					if (isFirstYear) {
+						// Check if the provided names match the existing student's names (excluding middle name)
+						const nameMatches = namesMatch(
+							firstName,
+							lastName,
+							null,
+							existingStudent.person.firstName,
+							existingStudent.person.lastName,
+							null,
 						);
-						res.status(400).json({
-							message:
-								"The provided name does not match the student record. Please verify your full name matches your student record.",
-						});
-						return;
+
+						if (!nameMatches) {
+							authLogger.error(
+								`Name mismatch for student number ${studentNumber}. Expected: ${existingStudent.person.firstName} ${existingStudent.person.lastName}, Got: ${firstName} ${lastName}`,
+							);
+							res.status(400).json({
+								message:
+									"The provided name does not match the student record. Please verify your full name matches your student record.",
+							});
+							return;
+						}
+					} else {
+						authLogger.info(
+							`Skipping name validation for non-first-year student: ${studentNumber}, Year: ${year}`,
+						);
 					}
 
 					// Names match, check if this student already has a user account
