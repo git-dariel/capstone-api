@@ -24,6 +24,56 @@ const getActiveStudentFilter = () => ({
 	},
 });
 
+// Utility: build a flexible, case-insensitive "year level" match.
+// IMPORTANT: Prisma's StringFilter does NOT accept an "OR" directly; OR must live on the parent where object.
+// This helper returns an array of year conditions you can place under `OR: [...]`.
+const getYearLevelOrConditions = (yearLevel?: string) => {
+	if (!yearLevel) return [];
+
+	const trimmed = yearLevel.trim();
+	const lower = trimmed.toLowerCase();
+	const digitsOnly = trimmed.replace(/[^0-9]/g, "");
+	const alphaNum = trimmed.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+	// Derive ordinal from digits (1->1st, 2->2nd, 3->3rd, others -> th)
+	const toOrdinal = (nStr: string) => {
+		if (!nStr) return "";
+		const n = parseInt(nStr, 10);
+		if (isNaN(n)) return "";
+		const mod10 = n % 10;
+		const mod100 = n % 100;
+		if (mod10 === 1 && mod100 !== 11) return `${n}st`;
+		if (mod10 === 2 && mod100 !== 12) return `${n}nd`;
+		if (mod10 === 3 && mod100 !== 13) return `${n}rd`;
+		return `${n}th`;
+	};
+
+	const ordinal = toOrdinal(digitsOnly);
+
+	const variants = new Set<string>();
+	if (trimmed) variants.add(trimmed);
+	if (lower) variants.add(lower);
+	if (digitsOnly) variants.add(digitsOnly);
+	if (alphaNum) variants.add(alphaNum);
+	if (ordinal) variants.add(ordinal);
+	if (ordinal) variants.add(`${ordinal} year`);
+	if (digitsOnly) variants.add(`year ${digitsOnly}`);
+
+	return Array.from(variants).flatMap((v) => [
+		{
+			year: { equals: v, mode: "insensitive" as const },
+		},
+		{
+			year: { contains: v, mode: "insensitive" as const },
+		},
+	]);
+};
+
+const getYearLevelStudentWhere = (yearLevel?: string) => {
+	const or = getYearLevelOrConditions(yearLevel);
+	return or.length ? { OR: or } : {};
+};
+
 // Utility function to find the highest risk level from mental health assessments (for clinical predictions)
 const findHighestRiskLevel = (assessments: any): string => {
 	let highestRisk = "low";
@@ -4000,7 +4050,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					whereClause.student = {
 						isDeleted: false,
 						...(filter.program && { program: filter.program }),
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 						...(filter.gender && { person: { gender: filter.gender } }),
 					};
 				}
@@ -4070,7 +4120,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					whereClause.student = {
 						isDeleted: false,
 						...(filter.program && { program: filter.program }),
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 						...(filter.gender && { person: { gender: filter.gender } }),
 					};
 				}
@@ -4191,7 +4241,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				if (filter.yearLevel || filter.gender) {
 					whereClause.student = {
 						isDeleted: false,
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 						...(filter.gender && { person: { gender: filter.gender } }),
 					};
 				}
@@ -4373,7 +4423,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					whereClause.student = {
 						isDeleted: false,
 						...(filter.program && { program: filter.program }),
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 					};
 				}
 
@@ -4463,7 +4513,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				if (filter.yearLevel || filter.gender) {
 					whereClause.student = {
 						isDeleted: false,
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 						...(filter.gender && { person: { gender: filter.gender } }),
 					};
 				}
@@ -4710,7 +4760,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					whereClause.student = {
 						isDeleted: false,
 						...(filter.program && { program: filter.program }),
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 					};
 				}
 
@@ -4833,7 +4883,9 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				// Build student filter
 				const studentFilter: any = { isDeleted: false };
 				if (filter.program) studentFilter.program = filter.program;
-				if (filter.yearLevel) studentFilter.year = filter.yearLevel;
+				if (filter.yearLevel) {
+					Object.assign(studentFilter, getYearLevelStudentWhere(filter.yearLevel));
+				}
 				if (filter.gender) {
 					// Gender is on the person, need to handle this differently
 					whereClause.student = {
