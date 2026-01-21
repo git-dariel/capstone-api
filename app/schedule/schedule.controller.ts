@@ -287,6 +287,12 @@ export const controller = (prisma: PrismaClient) => {
 			const startDateTime = new Date(startTime);
 			const endDateTime = new Date(endTime);
 
+			// Log the received times for debugging
+			scheduleLogger.info(`Received startTime: ${startTime}, endTime: ${endTime}`);
+			scheduleLogger.info(
+				`Parsed startDateTime: ${startDateTime.toISOString()}, endDateTime: ${endDateTime.toISOString()}`,
+			);
+
 			// Validate time range
 			if (endDateTime <= startDateTime) {
 				scheduleLogger.error("End time must be after start time");
@@ -294,15 +300,32 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Validate business hours (08:00 - 20:00)
-			const scheduleStart = startDateTime.getHours() * 60 + startDateTime.getMinutes();
-			const scheduleEnd = endDateTime.getHours() * 60 + endDateTime.getMinutes();
+			// Validate business hours (08:00 - 20:00) with proper timezone handling
+			// Convert to Philippine timezone (Asia/Manila) for accurate validation
+			const philippineTimeStart = new Date(
+				startDateTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+			);
+			const philippineTimeEnd = new Date(
+				endDateTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+			);
+
+			const scheduleStart =
+				philippineTimeStart.getHours() * 60 + philippineTimeStart.getMinutes();
+			const scheduleEnd = philippineTimeEnd.getHours() * 60 + philippineTimeEnd.getMinutes();
+
 			const MIN_TIME = 8 * 60; // 08:00
 			const MAX_TIME = 20 * 60; // 20:00
 
+			scheduleLogger.info(
+				`Business hours check (Philippine Time) - Start: ${scheduleStart} minutes (${Math.floor(scheduleStart / 60)}:${(scheduleStart % 60).toString().padStart(2, "0")}), End: ${scheduleEnd} minutes (${Math.floor(scheduleEnd / 60)}:${(scheduleEnd % 60).toString().padStart(2, "0")})`,
+			);
+			scheduleLogger.info(
+				`Business hours range - Min: ${MIN_TIME} minutes (08:00), Max: ${MAX_TIME} minutes (20:00)`,
+			);
+
 			if (scheduleStart < MIN_TIME || scheduleEnd > MAX_TIME) {
 				scheduleLogger.error(
-					`Schedule time outside business hours: ${scheduleStart}-${scheduleEnd}`,
+					`Schedule time outside business hours: Start=${scheduleStart} minutes, End=${scheduleEnd} minutes`,
 				);
 				res.status(400).json({
 					error: "Schedule must be within business hours (08:00 - 20:00)",
@@ -550,15 +573,30 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				// Validate business hours (08:00 - 20:00)
-				const scheduleStart = startTime.getHours() * 60 + startTime.getMinutes();
-				const scheduleEnd = endTime.getHours() * 60 + endTime.getMinutes();
+				// Validate business hours (08:00 - 20:00) with proper timezone handling
+				// Convert to Philippine timezone (Asia/Manila) for accurate validation
+				const philippineTimeStart = new Date(
+					startTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+				);
+				const philippineTimeEnd = new Date(
+					endTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+				);
+
+				const scheduleStart =
+					philippineTimeStart.getHours() * 60 + philippineTimeStart.getMinutes();
+				const scheduleEnd =
+					philippineTimeEnd.getHours() * 60 + philippineTimeEnd.getMinutes();
+
 				const MIN_TIME = 8 * 60; // 08:00
 				const MAX_TIME = 20 * 60; // 20:00
 
+				scheduleLogger.info(
+					`Update business hours check (Philippine Time) - Start: ${scheduleStart} minutes (${Math.floor(scheduleStart / 60)}:${(scheduleStart % 60).toString().padStart(2, "0")}), End: ${scheduleEnd} minutes (${Math.floor(scheduleEnd / 60)}:${(scheduleEnd % 60).toString().padStart(2, "0")})`,
+				);
+
 				if (scheduleStart < MIN_TIME || scheduleEnd > MAX_TIME) {
 					scheduleLogger.error(
-						`Schedule time outside business hours: ${scheduleStart}-${scheduleEnd}`,
+						`Schedule time outside business hours: Start=${scheduleStart} minutes, End=${scheduleEnd} minutes`,
 					);
 					res.status(400).json({
 						error: "Schedule must be within business hours (08:00 - 20:00)",
