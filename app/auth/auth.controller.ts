@@ -406,17 +406,31 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Soon this will be removed, since we are now saving the data in database
-			const isValidFirstYearStudent = validateFirstYearStudentNumber(studentNumber);
-			if (!isValidFirstYearStudent) {
-				authLogger.error(
-					`First-year student number validation failed for: ${studentNumber}`,
+			// Check if student is first-year before validating against first-year database
+			const isFirstYear =
+				year &&
+				(year.toString().toLowerCase().includes("1st") ||
+					year.toString().toLowerCase().includes("first") ||
+					year.toString().toLowerCase() === "1" ||
+					year.toString().toLowerCase().includes("freshman"));
+
+			// Only validate first-year students against the first-year student database
+			if (isFirstYear) {
+				const isValidFirstYearStudent = validateFirstYearStudentNumber(studentNumber);
+				if (!isValidFirstYearStudent) {
+					authLogger.error(
+						`First-year student number validation failed for: ${studentNumber}`,
+					);
+					res.status(400).json({
+						message:
+							"Invalid student number. Your student number is not found in the first-year student database. Please verify and try again.",
+					});
+					return;
+				}
+			} else {
+				authLogger.info(
+					`Skipping first-year validation for non-first-year student: ${studentNumber}, Year: ${year}`,
 				);
-				res.status(400).json({
-					message:
-						"Invalid student number. Your student number is not found in the first-year student database. Please verify and try again.",
-				});
-				return;
 			}
 
 			// Check if email already exists in either person or pending registration tables
