@@ -364,6 +364,7 @@ model IndividualInventory {
   mentalHealthPredictions                               MentalHealthPredictionRecord[] @relation("mentalHealthPredictions")
   predictionGenerated                                   Boolean                        @default(false)
   predictionUpdatedAt                                   DateTime?
+  showMlPredictionsToStudent                            Boolean                        @default(false)
   isDeleted                                             Boolean                        @default(false)
   createdAt                                             DateTime                       @default(now())
   updatedAt                                             DateTime                       @updatedAt

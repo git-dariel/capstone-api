@@ -1,4 +1,4 @@
-import { PrismaClient } from "../generated/prisma";
+import { Prisma, PrismaClient } from "../generated/prisma";
 
 interface MetricFilter {
 	userFilter?: Record<string, any>;
@@ -6,6 +6,7 @@ interface MetricFilter {
 	endDate?: string | Date;
 	page?: number;
 	limit?: number;
+	query?: string;
 	program?: string;
 	yearLevel?: string;
 	gender?: string;
@@ -72,6 +73,51 @@ const getYearLevelOrConditions = (yearLevel?: string) => {
 const getYearLevelStudentWhere = (yearLevel?: string) => {
 	const or = getYearLevelOrConditions(yearLevel);
 	return or.length ? { OR: or } : {};
+};
+
+const applyStudentListSearchAndPagination = (
+	students: Array<Record<string, any>>,
+	filter: MetricFilter,
+) => {
+	const query = typeof filter.query === "string" ? filter.query.trim() : "";
+	let filtered = students;
+
+	if (query) {
+		const searchLower = query.toLowerCase();
+		filtered = students.filter((student) => {
+			const fullName = `${student.firstName || ""} ${student.lastName || ""}`.trim();
+			const candidateValues = [
+				fullName,
+				student.studentNumber,
+				student.program,
+				student.year,
+				student.email,
+				student.severity,
+				student.gender,
+				student.score !== undefined && student.score !== null ? String(student.score) : "",
+			];
+
+			return candidateValues.some((value) =>
+				String(value || "")
+					.toLowerCase()
+					.includes(searchLower),
+			);
+		});
+	}
+
+	const page = Math.max(1, Number(filter.page) || 1);
+	const limit = Math.max(1, Number(filter.limit) || 10);
+	const total = filtered.length;
+	const totalPages = total ? Math.ceil(total / limit) : 0;
+	const start = (page - 1) * limit;
+	const paginated = filtered.slice(start, start + limit);
+
+	return {
+		students: paginated,
+		total,
+		page,
+		totalPages,
+	};
 };
 
 // Utility function to find the highest risk level from mental health assessments (for clinical predictions)
@@ -640,7 +686,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		Stress: {
@@ -963,7 +1009,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		Depression: {
@@ -1286,7 +1332,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		Suicide: {
@@ -1629,7 +1675,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		PersonalProblemsChecklist: {
@@ -1972,7 +2018,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		GuidanceDashboard: {
@@ -1981,7 +2027,57 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					// Extract pagination parameters from filter
 					const page = filter?.page ? Number(filter.page) : 1;
 					const limit = filter?.limit ? Number(filter.limit) : 10;
+					const query = typeof filter?.query === "string" ? filter.query : "";
 					const skip = (page - 1) * limit;
+
+					const searchFilter: Prisma.StudentWhereInput = query
+						? {
+								OR: [
+									{
+										studentNumber: {
+											contains: query,
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+									{
+										program: {
+											contains: query,
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+									{
+										year: {
+											contains: query,
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+									{
+										person: {
+											firstName: {
+												contains: query,
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+									{
+										person: {
+											lastName: {
+												contains: query,
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+									{
+										person: {
+											email: {
+												contains: query,
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+								],
+							}
+						: {};
 
 					// Get total count of students with valid person relations
 					const totalStudents = await prisma.student.count({
@@ -1990,6 +2086,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							person: {
 								isDeleted: false,
 							},
+							...searchFilter,
 						},
 					});
 
@@ -2004,6 +2101,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									isDeleted: false, // Ensure person is not deleted
 								},
+								...searchFilter,
 							},
 							skip,
 							take: limit,
@@ -2049,8 +2147,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							queryError,
 						);
 						// Fallback: fetch students without person filter and filter in memory
-						const allStudents = await prisma.student.findMany({
-							where: { isDeleted: false },
+						const allStudents = (await prisma.student.findMany({
+							where: {
+								isDeleted: false,
+								...searchFilter,
+							},
 							skip,
 							take: limit * 2, // Get more to account for filtering
 							orderBy: { studentNumber: "asc" },
@@ -2088,7 +2189,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 									},
 								},
 							},
-						});
+						})) as any[];
 						// Filter in memory to only include students with valid person
 						students = allStudents
 							.filter((s) => s.person && !s.person.isDeleted)

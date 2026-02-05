@@ -218,10 +218,66 @@ export const controller = (prisma: PrismaClient) => {
 				...(query
 					? {
 							OR: [
-								{ student: { studentNumber: { contains: String(query) } } },
-								{ student: { person: { firstName: { contains: String(query) } } } },
-								{ student: { person: { lastName: { contains: String(query) } } } },
-								{ what_brings_you_to_guidance: { contains: String(query) } },
+								{
+									student: {
+										studentNumber: {
+											contains: String(query),
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+								},
+								{
+									student: {
+										program: {
+											contains: String(query),
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+								},
+								{
+									student: {
+										year: {
+											contains: String(query),
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+								},
+								{
+									student: {
+										person: {
+											firstName: {
+												contains: String(query),
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+								},
+								{
+									student: {
+										person: {
+											lastName: {
+												contains: String(query),
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+								},
+								{
+									student: {
+										person: {
+											email: {
+												contains: String(query),
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+								},
+								{
+									what_brings_you_to_guidance: {
+										contains: String(query),
+										mode: Prisma.QueryMode.insensitive,
+									},
+								},
 							],
 						}
 					: {}),
