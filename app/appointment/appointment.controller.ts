@@ -1271,7 +1271,7 @@ export const controller = (prisma: PrismaClient) => {
 	// Get appointments by student ID
 	const getByStudentId = async (req: Request, res: Response, _next: NextFunction) => {
 		const { studentId } = req.params;
-		const { page = 1, limit = 10, status, dateFrom, dateTo } = req.query;
+		const { page = 1, limit = 10, status, dateFrom, dateTo, query } = req.query;
 
 		if (!studentId) {
 			appointmentLogger.error("Missing student ID");
@@ -1292,6 +1292,36 @@ export const controller = (prisma: PrismaClient) => {
 								...(dateFrom && { gte: new Date(String(dateFrom)) }),
 								...(dateTo && { lte: new Date(String(dateTo)) }),
 							},
+						}
+					: {}),
+				...(query
+					? {
+							OR: [
+								{ title: { contains: String(query), mode: "insensitive" } },
+								{
+									description: { contains: String(query), mode: "insensitive" },
+								},
+								{
+									counselor: {
+										person: {
+											firstName: {
+												contains: String(query),
+												mode: "insensitive",
+											},
+										},
+									},
+								},
+								{
+									counselor: {
+										person: {
+											lastName: {
+												contains: String(query),
+												mode: "insensitive",
+											},
+										},
+									},
+								},
+							],
 						}
 					: {}),
 			};
@@ -1407,7 +1437,7 @@ export const controller = (prisma: PrismaClient) => {
 	// Get appointments by counselor ID
 	const getByCounselorId = async (req: Request, res: Response, _next: NextFunction) => {
 		const { counselorId } = req.params;
-		const { page = 1, limit = 10, status, dateFrom, dateTo } = req.query;
+		const { page = 1, limit = 10, status, dateFrom, dateTo, query } = req.query;
 
 		if (!counselorId) {
 			appointmentLogger.error("Missing counselor ID");
@@ -1428,6 +1458,36 @@ export const controller = (prisma: PrismaClient) => {
 								...(dateFrom && { gte: new Date(String(dateFrom)) }),
 								...(dateTo && { lte: new Date(String(dateTo)) }),
 							},
+						}
+					: {}),
+				...(query
+					? {
+							OR: [
+								{ title: { contains: String(query), mode: "insensitive" } },
+								{
+									description: { contains: String(query), mode: "insensitive" },
+								},
+								{
+									student: {
+										person: {
+											firstName: {
+												contains: String(query),
+												mode: "insensitive",
+											},
+										},
+									},
+								},
+								{
+									student: {
+										person: {
+											lastName: {
+												contains: String(query),
+												mode: "insensitive",
+											},
+										},
+									},
+								},
+							],
 						}
 					: {}),
 			};

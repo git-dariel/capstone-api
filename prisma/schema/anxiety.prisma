@@ -34,6 +34,7 @@ model AnxietyAssessment {
   severityLevel                      SeverityLevel    @default(minimal)
   assessmentDate                     DateTime         @default(now())
   difficulty_level                   DifficultyLevel?
+  showResultToStudent                Boolean          @default(false)
   cooldownActive                     Boolean          @default(true) // Cooldown period active after assessment
   createdAt                          DateTime         @default(now())
   updatedAt                          DateTime         @updatedAt
