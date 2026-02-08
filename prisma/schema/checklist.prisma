@@ -281,6 +281,7 @@ model PersonalProblemsChecklist {
   checklist_analysis ChecklistAnalysis?
   analysisGenerated  Boolean            @default(false)
   analysisUpdatedAt  DateTime?
+  showResultToStudent Boolean           @default(false)
 
   // Additional fields following your pattern
   isDeleted Boolean  @default(false)

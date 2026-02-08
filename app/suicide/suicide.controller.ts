@@ -75,6 +75,12 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
+				if (userRole === Role.user) {
+					fieldSelections.showResultToStudent = true;
+					fieldSelections.riskLevel = true;
+					fieldSelections.requires_immediate_intervention = true;
+				}
+
 				query.select = fieldSelections;
 			}
 
@@ -92,9 +98,19 @@ export const controller = (prisma: PrismaClient) => {
 				assessment.requires_immediate_intervention,
 			);
 
+			const shouldHideResults =
+				userRole === Role.user && assessment.showResultToStudent === false;
+			const responseAssessment = shouldHideResults
+				? {
+						...assessment,
+						riskLevel: null,
+						requires_immediate_intervention: null,
+					}
+				: assessment;
+
 			suicideLogger.info(`${config.SUCCESS.SUICIDE.RETRIEVED}: ${assessment.id}`);
 			res.status(200).json({
-				...assessment,
+				...responseAssessment,
 				analysis: analysisResult,
 			});
 		} catch (error) {
@@ -196,6 +212,12 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
+				if (userRole === Role.user) {
+					fieldSelections.showResultToStudent = true;
+					fieldSelections.riskLevel = true;
+					fieldSelections.requires_immediate_intervention = true;
+				}
+
 				findManyQuery.select = fieldSelections;
 			}
 
@@ -213,11 +235,22 @@ export const controller = (prisma: PrismaClient) => {
 				),
 			}));
 
+			const sanitizedAssessments = assessmentsWithAnalysis.map((assessment) => {
+				if (userRole === Role.user && assessment.showResultToStudent === false) {
+					return {
+						...assessment,
+						riskLevel: null,
+						requires_immediate_intervention: null,
+					};
+				}
+				return assessment;
+			});
+
 			suicideLogger.info(
 				`Retrieved ${assessments.length} suicide assessments for role: ${userRole}`,
 			);
 			res.status(200).json({
-				assessments: assessmentsWithAnalysis,
+				assessments: sanitizedAssessments,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
@@ -418,6 +451,7 @@ export const controller = (prisma: PrismaClient) => {
 			done_anything_started_prepared_end_life,
 			behavior_timeframe,
 			assessmentDate,
+			showResultToStudent,
 		} = req.body;
 		const userRole = req.role;
 		const requestingUserId = req.userId;
@@ -455,6 +489,26 @@ export const controller = (prisma: PrismaClient) => {
 		if (behavior_timeframe && !validateBehaviorTimeframe(behavior_timeframe)) {
 			suicideLogger.error(config.ERROR.SUICIDE.INVALID_BEHAVIOR_TIMEFRAME);
 			res.status(400).json({ error: config.ERROR.SUICIDE.INVALID_BEHAVIOR_TIMEFRAME });
+			return;
+		}
+
+		// Validate visibility update permissions - only admins can modify student visibility
+		if (showResultToStudent !== undefined && userRole === Role.user) {
+			suicideLogger.error(
+				`User ${requestingUserId} attempted to modify assessment visibility without admin privileges`,
+			);
+			res.status(403).json({
+				error: "Insufficient permissions to modify assessment visibility",
+				message: "Only admin and guidance personnel can update assessment visibility",
+			});
+			return;
+		}
+
+		if (showResultToStudent !== undefined && typeof showResultToStudent !== "boolean") {
+			suicideLogger.error(`Invalid showResultToStudent value: ${showResultToStudent}`);
+			res.status(400).json({
+				error: "Invalid showResultToStudent value - must be true or false",
+			});
 			return;
 		}
 
@@ -502,6 +556,8 @@ export const controller = (prisma: PrismaClient) => {
 			if (behavior_timeframe !== undefined)
 				updateData.behavior_timeframe = behavior_timeframe;
 			if (assessmentDate !== undefined) updateData.assessmentDate = new Date(assessmentDate);
+			if (showResultToStudent !== undefined)
+				updateData.showResultToStudent = showResultToStudent;
 
 			// Recalculate risk if any CSSRS responses were updated
 			const hasCssrsUpdates = [
