@@ -4,6 +4,7 @@ import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
 import { controller as personController } from "../person/person.controller";
 import { updateStudentYearLevels } from "../../services/student-year-level-cron.service";
+import { parse } from "csv-parse/sync";
 
 const logger = getLogger();
 const studentLogger = logger.child({ module: "student" });
@@ -181,6 +182,8 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				findManyQuery.select = fieldSelections;
+				// Always include personId for userId lookup
+				findManyQuery.select.personId = true;
 			}
 
 			const [students, total] = await Promise.all([
@@ -189,22 +192,30 @@ export const controller = (prisma: PrismaClient) => {
 			]);
 
 			// Get user IDs for each student by matching personId
-			const studentsWithUserIds = await Promise.all(
-				students.map(async (student) => {
-					const user = await prisma.user.findFirst({
-						where: {
-							personId: student.personId,
-							type: "student",
-							isDeleted: false,
-						},
-						select: { id: true },
-					});
-					return {
-						...student,
-						userId: user?.id || null,
-					};
-				}),
-			);
+			// Fetch all users at once for better performance and accuracy
+			const personIds = students
+				.map((student) => student.personId)
+				.filter((id) => id !== undefined);
+			const users = await prisma.user.findMany({
+				where: {
+					personId: { in: personIds },
+					type: "student",
+					isDeleted: false,
+				},
+				select: { id: true, personId: true },
+			});
+
+			// Create a map of personId to userId for quick lookup
+			const personIdToUserIdMap = new Map<string, string>();
+			users.forEach((user) => {
+				personIdToUserIdMap.set(user.personId, user.id);
+			});
+
+			// Map students to include their corresponding userId
+			const studentsWithUserIds = students.map((student) => ({
+				...student,
+				userId: personIdToUserIdMap.get(student.personId) || null,
+			}));
 
 			studentLogger.info(`Retrieved ${studentsWithUserIds.length} students`);
 			res.status(200).json({
@@ -720,6 +731,313 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const uploadStudentsCSV = async (req: Request, res: Response, _next: NextFunction) => {
+		studentLogger.info("CSV upload request received");
+
+		// Verify user type is guidance (admin/super_admin users are guidance users)
+		const authReq = req as any;
+		if (!authReq.userId) {
+			studentLogger.error("User not authenticated");
+			res.status(401).json({ error: "Authentication required" });
+			return;
+		}
+
+		// Check if user is guidance type
+		const user = await prisma.user.findUnique({
+			where: { id: authReq.userId },
+			select: { type: true, role: true },
+		});
+
+		if (!user || user.type !== "guidance") {
+			studentLogger.error(`Access denied for user type: ${user?.type}`);
+			res.status(403).json({ error: "Only guidance users can upload student CSV files" });
+			return;
+		}
+
+		if (!req.file) {
+			studentLogger.error("No CSV file provided");
+			res.status(400).json({ error: "CSV file is required" });
+			return;
+		}
+
+		if (req.file.mimetype !== "text/csv") {
+			studentLogger.error(`Invalid file type: ${req.file.mimetype}`);
+			res.status(400).json({ error: "File must be a CSV" });
+			return;
+		}
+
+		try {
+			const csvContent = req.file.buffer.toString("utf-8");
+
+			// Parse CSV with validation
+			const records = parse(csvContent, {
+				columns: true,
+				skip_empty_lines: true,
+				trim: true,
+			}) as any[];
+
+			if (records.length === 0) {
+				studentLogger.error("CSV file is empty or contains no valid records");
+				res.status(400).json({ error: "CSV file contains no valid records" });
+				return;
+			}
+
+			// Validate CSV format - should have STUDENT NUMBER, FIRSTNAME, and LASTNAME columns
+			const requiredColumns = ["STUDENT NUMBER", "FIRSTNAME", "LASTNAME"];
+			const csvColumns = Object.keys(records[0]);
+
+			const missingColumns = requiredColumns.filter((col) => !csvColumns.includes(col));
+			if (missingColumns.length > 0) {
+				studentLogger.error(`Missing required columns: ${missingColumns.join(", ")}`);
+				res.status(400).json({
+					error: `CSV must contain the following columns: ${requiredColumns.join(", ")}. MIDDLENAME is optional.`,
+					missingColumns,
+				});
+				return;
+			}
+
+			const results = {
+				total: 0,
+				successful: 0,
+				skipped: 0,
+				errors: [] as any[],
+			};
+
+			// Process records in batches for better performance
+			const batchSize = 50;
+			for (let i = 0; i < records.length; i += batchSize) {
+				const batch = records.slice(i, i + batchSize);
+
+				await prisma.$transaction(
+					async (tx) => {
+						for (const record of batch) {
+							results.total++;
+
+							const studentNumber = record["STUDENT NUMBER"]?.trim();
+							const firstName = record["FIRSTNAME"]?.trim();
+							const lastName = record["LASTNAME"]?.trim();
+							const middleName = record["MIDDLENAME"]?.trim() || null;
+
+							// Skip empty rows - require student number, first name, and last name
+							if (!studentNumber || !firstName || !lastName) {
+								results.skipped++;
+								continue;
+							}
+
+							try {
+								// Check if student already exists
+								const existingStudent = await tx.student.findFirst({
+									where: {
+										studentNumber,
+										isDeleted: false,
+									},
+								});
+
+								if (existingStudent) {
+									results.skipped++;
+									studentLogger.info(
+										`Student ${studentNumber} already exists, skipping`,
+									);
+									continue;
+								}
+
+								// Create person record
+								const person = await tx.person.create({
+									data: {
+										firstName,
+										lastName,
+										middleName: middleName || null,
+										isDeleted: false,
+									},
+								});
+
+								// Create student record
+								await tx.student.create({
+									data: {
+										studentNumber,
+										program: "To be assigned", // Default program
+										year: "1st", // Default year for first year students
+										status: "freshman",
+										person: {
+											connect: {
+												id: person.id,
+											},
+										},
+										isDeleted: false,
+									},
+								});
+
+								results.successful++;
+								studentLogger.info(
+									`Successfully created student: ${studentNumber} - ${firstName} ${middleName || ""} ${lastName}`
+										.trim()
+										.replace(/\s+/g, " "),
+								);
+							} catch (error) {
+								results.errors.push({
+									studentNumber,
+									firstName,
+									lastName,
+									middleName,
+									error: error instanceof Error ? error.message : String(error),
+								});
+								studentLogger.error(
+									`Failed to create student ${studentNumber}: ${error}`,
+								);
+							}
+						}
+					},
+					{
+						timeout: 60000, // 60 second timeout for large batches
+					},
+				);
+			}
+
+			studentLogger.info(
+				`CSV upload completed. Total: ${results.total}, Successful: ${results.successful}, Skipped: ${results.skipped}, Errors: ${results.errors.length}`,
+			);
+
+			res.status(200).json({
+				message: "CSV upload completed",
+				results,
+			});
+		} catch (error) {
+			studentLogger.error(`CSV upload failed: ${error}`);
+			res.status(500).json({
+				error: "Failed to process CSV file",
+				details: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+
+	const graduateStudent = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+
+		if (!id) {
+			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.STUDENT.USER_ID_REQUIRED });
+			return;
+		}
+
+		studentLogger.info(`Graduating student: ${id}`);
+
+		try {
+			const existingStudent = await prisma.student.findFirst({
+				where: {
+					id,
+					isDeleted: false,
+				},
+				include: {
+					person: true,
+				},
+			});
+
+			if (!existingStudent) {
+				studentLogger.error(`${config.ERROR.STUDENT.NOT_FOUND}: ${id}`);
+				res.status(404).json({ error: config.ERROR.STUDENT.NOT_FOUND });
+				return;
+			}
+
+			// Check if student is already graduated
+			if (existingStudent.year === "graduated") {
+				studentLogger.info(`Student ${id} is already graduated`);
+				res.status(400).json({ error: "Student is already graduated" });
+				return;
+			}
+
+			// Update student year to "graduated"
+			const graduatedStudent = await prisma.student.update({
+				where: { id },
+				data: {
+					year: "graduated",
+					status: "senior", // Set status to senior when graduated
+				},
+				include: {
+					person: true,
+				},
+			});
+
+			studentLogger.info(`Student ${id} graduated successfully`);
+			res.status(200).json({
+				message: "Student graduated successfully",
+				student: graduatedStudent,
+			});
+		} catch (error) {
+			studentLogger.error(`Error graduating student ${id}: ${error}`);
+			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
+		}
+	};
+
+	const graduateMultipleStudents = async (req: Request, res: Response, _next: NextFunction) => {
+		const { studentIds } = req.body;
+
+		if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+			studentLogger.error("Student IDs array is required");
+			res.status(400).json({ error: "Student IDs array is required" });
+			return;
+		}
+
+		studentLogger.info(`Graduating ${studentIds.length} students`);
+
+		try {
+			const results = {
+				successful: 0,
+				failed: 0,
+				errors: [] as string[],
+			};
+
+			// Process students in batches
+			for (const studentId of studentIds) {
+				try {
+					const existingStudent = await prisma.student.findFirst({
+						where: {
+							id: studentId,
+							isDeleted: false,
+						},
+					});
+
+					if (!existingStudent) {
+						results.failed++;
+						results.errors.push(`Student ${studentId} not found`);
+						continue;
+					}
+
+					if (existingStudent.year === "graduated") {
+						results.failed++;
+						results.errors.push(`Student ${studentId} is already graduated`);
+						continue;
+					}
+
+					await prisma.student.update({
+						where: { id: studentId },
+						data: {
+							year: "graduated",
+							status: "senior",
+						},
+					});
+
+					results.successful++;
+				} catch (error) {
+					results.failed++;
+					results.errors.push(`Failed to graduate student ${studentId}: ${error}`);
+					studentLogger.error(`Error graduating student ${studentId}: ${error}`);
+				}
+			}
+
+			studentLogger.info(
+				`Batch graduation completed. Successful: ${results.successful}, Failed: ${results.failed}`,
+			);
+
+			res.status(200).json({
+				message: "Batch graduation completed",
+				results,
+			});
+		} catch (error) {
+			studentLogger.error(`Error in batch graduation: ${error}`);
+			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
+		}
+	};
+
 	return {
 		getById,
 		getAll,
@@ -727,5 +1045,8 @@ export const controller = (prisma: PrismaClient) => {
 		update,
 		remove,
 		updateYearLevels,
+		uploadStudentsCSV,
+		graduateStudent,
+		graduateMultipleStudents,
 	};
 };

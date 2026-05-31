@@ -9,6 +9,7 @@ interface IController {
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 	predictMentalHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getPredictionByStudentId(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getReminderInfoByStudentId(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -766,6 +767,87 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Internal server error
 	 */
 	routes.get("/student/:studentId/prediction", controller.getPredictionByStudentId);
+
+	/**
+	 * @openapi
+	 * /api/inventory/student/{studentId}/reminder:
+	 *   get:
+	 *     summary: Get inventory reminder information for a student
+	 *     description: Calculate and return inventory reminder information based on risk level and last update
+	 *     tags: [Inventory]
+	 *     parameters:
+	 *       - in: path
+	 *         name: studentId
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Student ID
+	 *     responses:
+	 *       200:
+	 *         description: Returns inventory reminder information
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 reminderInfo:
+	 *                   type: object
+	 *                   properties:
+	 *                     needsUpdate:
+	 *                       type: boolean
+	 *                     riskLevel:
+	 *                       type: string
+	 *                       enum: [low, moderate, high, critical]
+	 *                       nullable: true
+	 *                     lastUpdated:
+	 *                       type: string
+	 *                       format: date-time
+	 *                       nullable: true
+	 *                     nextUpdateDue:
+	 *                       type: string
+	 *                       format: date-time
+	 *                       nullable: true
+	 *                     monthsUntilDue:
+	 *                       type: number
+	 *                     daysUntilDue:
+	 *                       type: number
+	 *                     isOverdue:
+	 *                       type: boolean
+	 *                     updateFrequencyMonths:
+	 *                       type: number
+	 *                 message:
+	 *                   type: string
+	 *                 severity:
+	 *                   type: string
+	 *                   enum: [low, medium, high, critical]
+	 *                 timeRemaining:
+	 *                   type: string
+	 *                 studentId:
+	 *                   type: string
+	 *       400:
+	 *         description: Missing student ID
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student ID is required"
+	 *       404:
+	 *         description: Inventory not found for this student
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Inventory not found for this student"
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.get("/student/:studentId/reminder", controller.getReminderInfoByStudentId);
 
 	route.use(path, routes);
 

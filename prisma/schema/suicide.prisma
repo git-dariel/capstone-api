@@ -28,6 +28,7 @@ model SuicideAssessment {
   behavior_timeframe                      SuicideBehaviorTimeframe?
   riskLevel                               SuicideRiskLevel          @default(low)
   requires_immediate_intervention         Boolean                   @default(false)
+  showResultToStudent                     Boolean                   @default(false)
   assessmentDate                          DateTime                  @default(now())
   createdAt                               DateTime                  @default(now())
   updatedAt                               DateTime                  @updatedAt
