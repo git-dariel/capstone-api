@@ -1,4 +1,4 @@
-import { PrismaClient } from "../generated/prisma";
+import { Prisma, PrismaClient } from "../generated/prisma";
 
 interface MetricFilter {
 	userFilter?: Record<string, any>;
@@ -6,6 +6,7 @@ interface MetricFilter {
 	endDate?: string | Date;
 	page?: number;
 	limit?: number;
+	query?: string;
 	program?: string;
 	yearLevel?: string;
 	gender?: string;
@@ -15,6 +16,253 @@ interface MetricFilter {
 	severityLevel?: string;
 	bmiCategory?: string;
 }
+
+// Utility function to get standard student filter (excludes graduated students)
+const getActiveStudentFilter = () => ({
+	isDeleted: false,
+	year: {
+		not: "graduated",
+	},
+});
+
+// Utility: build a flexible, case-insensitive "year level" match.
+// IMPORTANT: Prisma's StringFilter does NOT accept an "OR" directly; OR must live on the parent where object.
+// This helper returns an array of year conditions you can place under `OR: [...]`.
+const getYearLevelOrConditions = (yearLevel?: string) => {
+	if (!yearLevel) return [];
+
+	const trimmed = yearLevel.trim();
+	const lower = trimmed.toLowerCase();
+	const digitsOnly = trimmed.replace(/[^0-9]/g, "");
+	const alphaNum = trimmed.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+	// Derive ordinal from digits (1->1st, 2->2nd, 3->3rd, others -> th)
+	const toOrdinal = (nStr: string) => {
+		if (!nStr) return "";
+		const n = parseInt(nStr, 10);
+		if (isNaN(n)) return "";
+		const mod10 = n % 10;
+		const mod100 = n % 100;
+		if (mod10 === 1 && mod100 !== 11) return `${n}st`;
+		if (mod10 === 2 && mod100 !== 12) return `${n}nd`;
+		if (mod10 === 3 && mod100 !== 13) return `${n}rd`;
+		return `${n}th`;
+	};
+
+	const ordinal = toOrdinal(digitsOnly);
+
+	const variants = new Set<string>();
+	if (trimmed) variants.add(trimmed);
+	if (lower) variants.add(lower);
+	if (digitsOnly) variants.add(digitsOnly);
+	if (alphaNum) variants.add(alphaNum);
+	if (ordinal) variants.add(ordinal);
+	if (ordinal) variants.add(`${ordinal} year`);
+	if (digitsOnly) variants.add(`year ${digitsOnly}`);
+
+	return Array.from(variants).flatMap((v) => [
+		{
+			year: { equals: v, mode: "insensitive" as const },
+		},
+		{
+			year: { contains: v, mode: "insensitive" as const },
+		},
+	]);
+};
+
+const getYearLevelStudentWhere = (yearLevel?: string) => {
+	const or = getYearLevelOrConditions(yearLevel);
+	return or.length ? { OR: or } : {};
+};
+
+const applyStudentListSearchAndPagination = (
+	students: Array<Record<string, any>>,
+	filter: MetricFilter,
+) => {
+	const query = typeof filter.query === "string" ? filter.query.trim() : "";
+	let filtered = students;
+
+	if (query) {
+		const searchLower = query.toLowerCase();
+		filtered = students.filter((student) => {
+			const fullName = `${student.firstName || ""} ${student.lastName || ""}`.trim();
+			const candidateValues = [
+				fullName,
+				student.studentNumber,
+				student.program,
+				student.year,
+				student.email,
+				student.severity,
+				student.gender,
+				student.score !== undefined && student.score !== null ? String(student.score) : "",
+			];
+
+			return candidateValues.some((value) =>
+				String(value || "")
+					.toLowerCase()
+					.includes(searchLower),
+			);
+		});
+	}
+
+	const page = Math.max(1, Number(filter.page) || 1);
+	const limit = Math.max(1, Number(filter.limit) || 10);
+	const total = filtered.length;
+	const totalPages = total ? Math.ceil(total / limit) : 0;
+	const start = (page - 1) * limit;
+	const paginated = filtered.slice(start, start + limit);
+
+	return {
+		students: paginated,
+		total,
+		page,
+		totalPages,
+	};
+};
+
+// Utility function to find the highest risk level from mental health assessments (for clinical predictions)
+const findHighestRiskLevel = (assessments: any): string => {
+	let highestRisk = "low";
+	const riskPriority: { [key: string]: number } = {
+		low: 0,
+		moderate: 1,
+		high: 2,
+		critical: 3,
+	};
+
+	if (assessments.anxiety?.riskLevel) {
+		const anxietyRisk = assessments.anxiety.riskLevel.toLowerCase();
+		if (riskPriority[anxietyRisk] > riskPriority[highestRisk]) {
+			highestRisk = anxietyRisk;
+		}
+	}
+
+	if (assessments.depression?.riskLevel) {
+		const depressionRisk = assessments.depression.riskLevel.toLowerCase();
+		if (riskPriority[depressionRisk] > riskPriority[highestRisk]) {
+			highestRisk = depressionRisk;
+		}
+	}
+
+	if (assessments.stress?.riskLevel) {
+		const stressRisk = assessments.stress.riskLevel.toLowerCase();
+		if (riskPriority[stressRisk] > riskPriority[highestRisk]) {
+			highestRisk = stressRisk;
+		}
+	}
+
+	if (assessments.suicide?.riskLevel) {
+		const suicideRisk = assessments.suicide.riskLevel.toLowerCase();
+		if (riskPriority[suicideRisk] > riskPriority[highestRisk]) {
+			highestRisk = suicideRisk;
+		}
+	}
+
+	return highestRisk;
+};
+
+// Utility function to find risk level from ML predictions using count-based prioritization
+// Priority logic:
+// 1. Count High Risk, Moderate Risk, and Low Risk conditions
+// 2. Pick from the category that has MORE conditions
+// 3. If counts are equal, prefer High Risk > Moderate Risk > Low Risk
+// 4. Within the chosen category, prioritize: Depression > Anxiety > Stress
+// Returns: "low", "moderate", or "high" (normalized to lowercase, no "risk" suffix)
+const findMLRiskLevel = (mlPredictions: any): string => {
+	if (!mlPredictions || !mlPredictions.anxiety) {
+		return "low"; // Default to low if ML predictions are unavailable
+	}
+
+	// Check if it's the positive message format (all low risk)
+	if (
+		"message" in mlPredictions &&
+		"status" in mlPredictions &&
+		mlPredictions.status === "all_low_risk"
+	) {
+		return "low";
+	}
+
+	// Helper function to check if a condition is High Risk (case-insensitive)
+	const isHighRisk = (condition: any): boolean => {
+		if (!condition) return false;
+		const riskLevel = condition.riskLevel?.toLowerCase() || "";
+		const prediction = condition.prediction?.toLowerCase() || "";
+		return riskLevel.includes("high") || prediction.includes("high");
+	};
+
+	// Helper function to check if a condition is Moderate Risk (case-insensitive)
+	const isModerateRisk = (condition: any): boolean => {
+		if (!condition) return false;
+		const riskLevel = condition.riskLevel?.toLowerCase() || "";
+		const prediction = condition.prediction?.toLowerCase() || "";
+		return (
+			(riskLevel.includes("moderate") || prediction.includes("moderate")) &&
+			!isHighRisk(condition)
+		);
+	};
+
+	// Helper function to check if a condition is Low Risk (case-insensitive)
+	const isLowRisk = (condition: any): boolean => {
+		if (!condition) return false;
+		const riskLevel = condition.riskLevel?.toLowerCase() || "";
+		const prediction = condition.prediction?.toLowerCase() || "";
+		return (
+			(riskLevel.includes("low") || prediction.includes("low")) &&
+			!isHighRisk(condition) &&
+			!isModerateRisk(condition)
+		);
+	};
+
+	// Categorize all conditions
+	const conditions = [
+		{ name: "depression", data: mlPredictions.depression },
+		{ name: "anxiety", data: mlPredictions.anxiety },
+		{ name: "stress", data: mlPredictions.stress },
+	].filter((c) => c.data);
+
+	const highRiskConditions = conditions.filter((c) => isHighRisk(c.data));
+	const moderateRiskConditions = conditions.filter((c) => isModerateRisk(c.data));
+	const lowRiskConditions = conditions.filter((c) => isLowRisk(c.data));
+
+	// Determine which category to pick from based on count
+	// Pick from the category with MORE conditions
+	// If counts are equal, prefer High Risk > Moderate Risk > Low Risk
+	let selectedCondition: { name: string; data: any } | undefined;
+
+	if (
+		highRiskConditions.length >= moderateRiskConditions.length &&
+		highRiskConditions.length >= lowRiskConditions.length &&
+		highRiskConditions.length > 0
+	) {
+		// Pick from High Risk (Depression > Anxiety > Stress)
+		selectedCondition =
+			highRiskConditions.find((c) => c.name === "depression") ||
+			highRiskConditions.find((c) => c.name === "anxiety") ||
+			highRiskConditions.find((c) => c.name === "stress");
+		return "high";
+	} else if (
+		moderateRiskConditions.length > highRiskConditions.length &&
+		moderateRiskConditions.length >= lowRiskConditions.length &&
+		moderateRiskConditions.length > 0
+	) {
+		// Pick from Moderate Risk (Depression > Anxiety > Stress)
+		selectedCondition =
+			moderateRiskConditions.find((c) => c.name === "depression") ||
+			moderateRiskConditions.find((c) => c.name === "anxiety") ||
+			moderateRiskConditions.find((c) => c.name === "stress");
+		return "moderate";
+	} else if (lowRiskConditions.length > 0) {
+		// Pick from Low Risk (Depression > Anxiety > Stress)
+		selectedCondition =
+			lowRiskConditions.find((c) => c.name === "depression") ||
+			lowRiskConditions.find((c) => c.name === "anxiety") ||
+			lowRiskConditions.find((c) => c.name === "stress");
+		return "low";
+	}
+
+	// Fallback: if no conditions found, default to low
+	return "low";
+};
 
 export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 	return {
@@ -31,7 +279,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			totalStudent: async () =>
 				prisma.student.count({
 					where: {
-						isDeleted: false,
+						...getActiveStudentFilter(),
 						person: {
 							users: {
 								some: filter.userFilter || {},
@@ -43,7 +291,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			totalStudentByProgram: async () => {
 				const studentsWithProgram = await prisma.student.findMany({
 					where: {
-						isDeleted: false,
+						...getActiveStudentFilter(),
 						person: {
 							users: {
 								some: filter.userFilter || {},
@@ -73,7 +321,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 			totalStudentByYear: async () => {
 				const studentsWithYear = await prisma.student.findMany({
 					where: {
-						isDeleted: false,
+						...getActiveStudentFilter(),
 						person: {
 							users: {
 								some: filter.userFilter || {},
@@ -120,15 +368,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				const count = await prisma.anxietyAssessment.count({
+				// Get latest anxiety assessment per user instead of counting all assessments
+				const latestAssessments = await prisma.anxietyAssessment.groupBy({
+					by: ["userId"],
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
+					_max: {
+						assessmentDate: true,
+					},
 				});
 
-				console.log(`📊 Anxiety count result: ${count}`);
+				const count = latestAssessments.length;
+				console.log(`📊 Anxiety latest assessments count: ${count}`);
 				return count;
 			},
 
@@ -186,7 +440,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -244,7 +498,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -303,7 +557,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -371,7 +625,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -432,7 +686,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		Stress: {
@@ -455,15 +709,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				const count = await prisma.stressAssessment.count({
+				// Get latest stress assessment per user instead of counting all assessments
+				const latestAssessments = await prisma.stressAssessment.groupBy({
+					by: ["userId"],
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
+					_max: {
+						assessmentDate: true,
+					},
 				});
 
-				console.log(`📊 Stress count result: ${count}`);
+				const count = latestAssessments.length;
+				console.log(`📊 Stress latest assessments count: ${count}`);
 				return count;
 			},
 
@@ -511,7 +771,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -562,7 +822,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -621,7 +881,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -688,7 +948,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -749,7 +1009,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		Depression: {
@@ -772,15 +1032,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				const count = await prisma.depressionAssessment.count({
+				// Get latest depression assessment per user instead of counting all assessments
+				const latestAssessments = await prisma.depressionAssessment.groupBy({
+					by: ["userId"],
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
+					_max: {
+						assessmentDate: true,
+					},
 				});
 
-				console.log(`📊 Depression count result: ${count}`);
+				const count = latestAssessments.length;
+				console.log(`📊 Depression latest assessments count: ${count}`);
 				return count;
 			},
 
@@ -828,7 +1094,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -879,7 +1145,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -938,7 +1204,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1005,7 +1271,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1066,7 +1332,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		Suicide: {
@@ -1089,15 +1355,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				const count = await prisma.suicideAssessment.count({
+				// Get latest suicide assessment per user instead of counting all assessments
+				const latestAssessments = await prisma.suicideAssessment.groupBy({
+					by: ["userId"],
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
+					_max: {
+						assessmentDate: true,
+					},
 				});
 
-				console.log(`📊 Suicide count result: ${count}`);
+				const count = latestAssessments.length;
+				console.log(`📊 Suicide latest assessments count: ${count}`);
 				return count;
 			},
 
@@ -1155,7 +1427,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1214,7 +1486,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1275,7 +1547,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1342,7 +1614,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1403,7 +1675,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		PersonalProblemsChecklist: {
@@ -1426,15 +1698,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (endDate) console.log(`📅 End Date: ${endDate.toISOString()}`);
 				}
 
-				const count = await prisma.personalProblemsChecklist.count({
+				// Get latest checklist assessment per user instead of counting all assessments
+				const latestAssessments = await prisma.personalProblemsChecklist.groupBy({
+					by: ["userId"],
 					where: {
 						isDeleted: false,
 						...dateFilter,
 						user: filter.userFilter || {},
 					},
+					_max: {
+						date_completed: true,
+					},
 				});
 
-				console.log(`📊 Checklist count result: ${count}`);
+				const count = latestAssessments.length;
+				console.log(`📊 Checklist latest assessments count: ${count}`);
 				return count;
 			},
 
@@ -1492,7 +1770,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1551,7 +1829,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1612,7 +1890,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1679,7 +1957,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								person: {
 									include: {
 										students: {
-											where: { isDeleted: false },
+											where: getActiveStudentFilter(),
 										},
 									},
 								},
@@ -1740,310 +2018,503 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					});
 				});
 
-				return Array.from(studentMap.values());
+				return applyStudentListSearchAndPagination(Array.from(studentMap.values()), filter);
 			},
 		},
 		GuidanceDashboard: {
 			studentProgressOverview: async () => {
-				console.log(`🔍 API: Getting student progress overview for guidance dashboard`);
+				try {
+					// Extract pagination parameters from filter
+					const page = filter?.page ? Number(filter.page) : 1;
+					const limit = filter?.limit ? Number(filter.limit) : 10;
+					const query = typeof filter?.query === "string" ? filter.query : "";
+					const skip = (page - 1) * limit;
 
-				// Extract pagination parameters from filter
-				const page = filter?.page ? Number(filter.page) : 1;
-				const limit = filter?.limit ? Number(filter.limit) : 10;
-				const skip = (page - 1) * limit;
+					const searchFilter: Prisma.StudentWhereInput = query
+						? {
+								OR: [
+									{
+										studentNumber: {
+											contains: query,
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+									{
+										program: {
+											contains: query,
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+									{
+										year: {
+											contains: query,
+											mode: Prisma.QueryMode.insensitive,
+										},
+									},
+									{
+										person: {
+											firstName: {
+												contains: query,
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+									{
+										person: {
+											lastName: {
+												contains: query,
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+									{
+										person: {
+											email: {
+												contains: query,
+												mode: Prisma.QueryMode.insensitive,
+											},
+										},
+									},
+								],
+							}
+						: {};
 
-				console.log(`📄 Pagination: page=${page}, limit=${limit}, skip=${skip}`);
+					// Get total count of students with valid person relations
+					const totalStudents = await prisma.student.count({
+						where: {
+							isDeleted: false,
+							person: {
+								isDeleted: false,
+							},
+							...searchFilter,
+						},
+					});
 
-				// Get total count of students
-				const totalStudents = await prisma.student.count({
-					where: { isDeleted: false },
-				});
-
-				// Get paginated students with their assessment data
-				const students = await prisma.student.findMany({
-					where: { isDeleted: false },
-					skip,
-					take: limit,
-					orderBy: [{ person: { lastName: "asc" } }, { person: { firstName: "asc" } }],
-					include: {
-						person: {
+					// Get paginated students with their assessment data
+					// Filter to only include students that have a valid, non-deleted person relation
+					// Use studentNumber for ordering to avoid issues with null person fields
+					let students;
+					try {
+						students = await prisma.student.findMany({
+							where: {
+								isDeleted: false,
+								person: {
+									isDeleted: false, // Ensure person is not deleted
+								},
+								...searchFilter,
+							},
+							skip,
+							take: limit,
+							orderBy: { studentNumber: "asc" }, // Use simple ordering to avoid null issues
 							include: {
-								users: {
-									where: { type: "student", isDeleted: false },
+								person: {
 									include: {
-										anxietyAssessments: {
-											where: { isDeleted: false },
-											orderBy: { assessmentDate: "desc" },
-											take: 1,
-										},
-										stressAssessments: {
-											where: { isDeleted: false },
-											orderBy: { assessmentDate: "desc" },
-											take: 1,
-										},
-										depressionAssessments: {
-											where: { isDeleted: false },
-											orderBy: { assessmentDate: "desc" },
-											take: 1,
-										},
-										suicideAssessments: {
-											where: { isDeleted: false },
-											orderBy: { assessmentDate: "desc" },
-											take: 1,
-										},
-										personalProblemsChecklist: {
-											where: { isDeleted: false },
+										users: {
+											where: { type: "student", isDeleted: false },
+											include: {
+												anxietyAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												stressAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												depressionAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												suicideAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												personalProblemsChecklist: {
+													where: { isDeleted: false },
+												},
+											},
 										},
 									},
 								},
 							},
-						},
-					},
-				});
-
-				// Process student data to generate progress insights
-				const studentProgressInsights = students
-					.map((student) => {
-						const user = student.person?.users?.[0];
-
-						// If no user account exists, still include the student but with no assessment data
-						if (!user) {
-							return {
-								studentId: student.id,
-								studentName:
-									`${student.person?.firstName || ""} ${student.person?.lastName || ""}`.trim(),
-								studentNumber: student.studentNumber,
-								program: student.program,
-								year: student.year,
-								totalAssessments: {
-									anxiety: 0,
-									stress: 0,
-									depression: 0,
-									suicide: 0,
-									checklist: 0,
-									overall: 0,
-								},
-								latestAssessments: {
-									anxiety: null,
-									stress: null,
-									depression: null,
-									suicide: null,
-									checklist: null,
-								},
-								progressInsights: [
-									{
-										type: "warning" as const,
-										assessmentType: "overall" as const,
-										message: "No user account found for this student.",
-										severity: "medium" as const,
-										recommendation:
-											"Student needs to create a user account to take assessments.",
+						});
+					} catch (queryError: any) {
+						console.error(
+							"❌ Error fetching students with person relation:",
+							queryError,
+						);
+						// Fallback: fetch students without person filter and filter in memory
+						const allStudents = (await prisma.student.findMany({
+							where: {
+								isDeleted: false,
+								...searchFilter,
+							},
+							skip,
+							take: limit * 2, // Get more to account for filtering
+							orderBy: { studentNumber: "asc" },
+							include: {
+								person: {
+									include: {
+										users: {
+											where: { type: "student", isDeleted: false },
+											include: {
+												anxietyAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												stressAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												depressionAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												suicideAssessments: {
+													where: { isDeleted: false },
+													orderBy: { assessmentDate: "desc" },
+													take: 1,
+												},
+												personalProblemsChecklist: {
+													where: { isDeleted: false },
+												},
+											},
+										},
 									},
-								],
-								riskLevel: "low" as const,
-								lastAssessmentDate: null,
+								},
+							},
+						})) as any[];
+						// Filter in memory to only include students with valid person
+						students = allStudents
+							.filter((s) => s.person && !s.person.isDeleted)
+							.slice(0, limit);
+					}
+
+					// Process student data to generate progress insights
+					const studentProgressInsights = students
+						.map((student: any) => {
+							// Safely access person and user data
+							if (!student.person) {
+								// Convert year to number if it's a string
+								const yearValue =
+									typeof student.year === "string"
+										? parseInt(student.year, 10) || 0
+										: student.year || 0;
+
+								return {
+									studentId: student.id,
+									studentName: student.studentNumber || `Student ${student.id}`,
+									studentNumber: student.studentNumber || "",
+									program: student.program || "",
+									year: yearValue,
+									totalAssessments: {
+										anxiety: 0,
+										stress: 0,
+										depression: 0,
+										suicide: 0,
+										checklist: 0,
+										overall: 0,
+									},
+									latestAssessments: {
+										anxiety: null,
+										stress: null,
+										depression: null,
+										suicide: null,
+										checklist: null,
+									},
+									progressInsights: [
+										{
+											type: "warning" as const,
+											assessmentType: "overall" as const,
+											message: "No person data found for this student.",
+											severity: "medium" as const,
+											recommendation:
+												"Student record needs to be linked to a person record.",
+										},
+									],
+									riskLevel: "low" as const,
+									lastAssessmentDate: null,
+								};
+							}
+
+							const user = student.person?.users?.[0];
+
+							// If no user account exists, still include the student but with no assessment data
+							if (!user) {
+								return {
+									studentId: student.id,
+									studentName:
+										`${student.person?.firstName || ""} ${student.person?.lastName || ""}`.trim(),
+									studentNumber: student.studentNumber,
+									program: student.program,
+									year: student.year,
+									totalAssessments: {
+										anxiety: 0,
+										stress: 0,
+										depression: 0,
+										suicide: 0,
+										checklist: 0,
+										overall: 0,
+									},
+									latestAssessments: {
+										anxiety: null,
+										stress: null,
+										depression: null,
+										suicide: null,
+										checklist: null,
+									},
+									progressInsights: [
+										{
+											type: "warning" as const,
+											assessmentType: "overall" as const,
+											message: "No user account found for this student.",
+											severity: "medium" as const,
+											recommendation:
+												"Student needs to create a user account to take assessments.",
+										},
+									],
+									riskLevel: "low" as const,
+									lastAssessmentDate: null,
+								};
+							}
+
+							// personalProblemsChecklist is a one-to-one relation, so it's a single object, not an array
+							const checklist = user.personalProblemsChecklist;
+							const checklistCount = checklist ? 1 : 0;
+							const latestChecklist = checklist || null;
+
+							const totalAssessments = {
+								anxiety: user.anxietyAssessments.length,
+								stress: user.stressAssessments.length,
+								depression: user.depressionAssessments.length,
+								suicide: user.suicideAssessments.length,
+								checklist: checklistCount,
+								overall:
+									user.anxietyAssessments.length +
+									user.stressAssessments.length +
+									user.depressionAssessments.length +
+									user.suicideAssessments.length +
+									checklistCount,
 							};
-						}
 
-						const totalAssessments = {
-							anxiety: user.anxietyAssessments.length,
-							stress: user.stressAssessments.length,
-							depression: user.depressionAssessments.length,
-							suicide: user.suicideAssessments.length,
-							checklist: user.personalProblemsChecklist ? 1 : 0,
-							overall:
-								user.anxietyAssessments.length +
-								user.stressAssessments.length +
-								user.depressionAssessments.length +
-								user.suicideAssessments.length +
-								(user.personalProblemsChecklist ? 1 : 0),
-						};
+							const latestAssessments = {
+								anxiety: user.anxietyAssessments[0] || null,
+								stress: user.stressAssessments[0] || null,
+								depression: user.depressionAssessments[0] || null,
+								suicide: user.suicideAssessments[0] || null,
+								checklist: latestChecklist,
+							};
 
-						const latestAssessments = {
-							anxiety: user.anxietyAssessments[0] || null,
-							stress: user.stressAssessments[0] || null,
-							depression: user.depressionAssessments[0] || null,
-							suicide: user.suicideAssessments[0] || null,
-							checklist: user.personalProblemsChecklist || null,
-						};
+							// Generate progress insights
+							const progressInsights = [];
 
-						// Generate progress insights
-						const progressInsights = [];
+							// Check for high severity levels
+							if (
+								latestAssessments.anxiety &&
+								latestAssessments.anxiety.severityLevel === "severe"
+							) {
+								progressInsights.push({
+									type: "warning",
+									assessmentType: "anxiety",
+									message: `Latest anxiety assessment shows severe levels.`,
+									severity: "high",
+									recommendation:
+										"Please contact your guidance counselor immediately for support.",
+								});
+							}
 
-						// Check for high severity levels
-						if (
-							latestAssessments.anxiety &&
-							latestAssessments.anxiety.severityLevel === "severe"
-						) {
-							progressInsights.push({
-								type: "warning",
-								assessmentType: "anxiety",
-								message: `Latest anxiety assessment shows severe levels.`,
-								severity: "high",
-								recommendation:
-									"Please contact your guidance counselor immediately for support.",
-							});
-						}
+							if (
+								latestAssessments.stress &&
+								latestAssessments.stress.severityLevel === "high"
+							) {
+								progressInsights.push({
+									type: "warning",
+									assessmentType: "stress",
+									message: `Latest stress assessment shows high levels.`,
+									severity: "high",
+									recommendation:
+										"Please contact your guidance counselor immediately for support.",
+								});
+							}
 
-						if (
-							latestAssessments.stress &&
-							latestAssessments.stress.severityLevel === "high"
-						) {
-							progressInsights.push({
-								type: "warning",
-								assessmentType: "stress",
-								message: `Latest stress assessment shows high levels.`,
-								severity: "high",
-								recommendation:
-									"Please contact your guidance counselor immediately for support.",
-							});
-						}
+							if (
+								latestAssessments.depression &&
+								latestAssessments.depression.severityLevel === "severe"
+							) {
+								progressInsights.push({
+									type: "warning",
+									assessmentType: "depression",
+									message: `Latest depression assessment shows severe levels.`,
+									severity: "high",
+									recommendation:
+										"Please contact your guidance counselor immediately for support.",
+								});
+							}
 
-						if (
-							latestAssessments.depression &&
-							latestAssessments.depression.severityLevel === "severe"
-						) {
-							progressInsights.push({
-								type: "warning",
-								assessmentType: "depression",
-								message: `Latest depression assessment shows severe levels.`,
-								severity: "high",
-								recommendation:
-									"Please contact your guidance counselor immediately for support.",
-							});
-						}
+							if (
+								latestAssessments.suicide &&
+								latestAssessments.suicide.riskLevel === "high"
+							) {
+								progressInsights.push({
+									type: "warning",
+									assessmentType: "suicide",
+									message: `Latest suicide risk assessment shows high risk level.`,
+									severity: "high",
+									recommendation:
+										"Please contact your guidance counselor or emergency services immediately.",
+								});
+							}
 
-						if (
-							latestAssessments.suicide &&
-							latestAssessments.suicide.riskLevel === "high"
-						) {
-							progressInsights.push({
-								type: "warning",
-								assessmentType: "suicide",
-								message: `Latest suicide risk assessment shows high risk level.`,
-								severity: "high",
-								recommendation:
-									"Please contact your guidance counselor or emergency services immediately.",
-							});
-						}
-
-						if (
-							latestAssessments.checklist &&
-							latestAssessments.checklist.checklist_analysis &&
-							(latestAssessments.checklist.checklist_analysis.riskLevel === "high" ||
-								latestAssessments.checklist.checklist_analysis.riskLevel ===
-									"critical")
-						) {
-							progressInsights.push({
-								type: "warning",
-								assessmentType: "checklist",
-								message: `Latest personal problems checklist shows ${latestAssessments.checklist.checklist_analysis.riskLevel} risk level.`,
-								severity: "high",
-								recommendation:
-									"Please contact your guidance counselor for support and intervention.",
-							});
-						}
-
-						// Determine overall risk level
-						let riskLevel = "low";
-						if (
-							latestAssessments.suicide?.riskLevel === "high" ||
-							latestAssessments.anxiety?.severityLevel === "severe" ||
-							latestAssessments.depression?.severityLevel === "severe" ||
-							latestAssessments.stress?.severityLevel === "high" ||
-							(latestAssessments.checklist?.checklist_analysis &&
+							if (
+								latestAssessments.checklist &&
+								latestAssessments.checklist.checklist_analysis &&
 								(latestAssessments.checklist.checklist_analysis.riskLevel ===
 									"high" ||
 									latestAssessments.checklist.checklist_analysis.riskLevel ===
-										"critical"))
-						) {
-							riskLevel = "high";
-						} else if (
-							latestAssessments.suicide?.riskLevel === "moderate" ||
-							latestAssessments.anxiety?.severityLevel === "moderate" ||
-							latestAssessments.depression?.severityLevel === "moderate" ||
-							latestAssessments.stress?.severityLevel === "moderate" ||
-							(latestAssessments.checklist?.checklist_analysis &&
-								latestAssessments.checklist.checklist_analysis.riskLevel ===
-									"moderate")
-						) {
-							riskLevel = "medium";
-						}
+										"critical")
+							) {
+								progressInsights.push({
+									type: "warning",
+									assessmentType: "checklist",
+									message: `Latest personal problems checklist shows ${latestAssessments.checklist.checklist_analysis.riskLevel} risk level.`,
+									severity: "high",
+									recommendation:
+										"Please contact your guidance counselor for support and intervention.",
+								});
+							}
 
-						// Get last assessment date
-						const allDates = [
-							latestAssessments.anxiety?.assessmentDate,
-							latestAssessments.stress?.assessmentDate,
-							latestAssessments.depression?.assessmentDate,
-							latestAssessments.suicide?.assessmentDate,
-							latestAssessments.checklist?.date_completed,
-						].filter(Boolean);
+							// Determine overall risk level
+							let riskLevel = "low";
+							if (
+								latestAssessments.suicide?.riskLevel === "high" ||
+								latestAssessments.anxiety?.severityLevel === "severe" ||
+								latestAssessments.depression?.severityLevel === "severe" ||
+								latestAssessments.stress?.severityLevel === "high" ||
+								(latestAssessments.checklist?.checklist_analysis &&
+									(latestAssessments.checklist.checklist_analysis.riskLevel ===
+										"high" ||
+										latestAssessments.checklist.checklist_analysis.riskLevel ===
+											"critical"))
+							) {
+								riskLevel = "high";
+							} else if (
+								latestAssessments.suicide?.riskLevel === "moderate" ||
+								latestAssessments.anxiety?.severityLevel === "moderate" ||
+								latestAssessments.depression?.severityLevel === "moderate" ||
+								latestAssessments.stress?.severityLevel === "moderate" ||
+								(latestAssessments.checklist?.checklist_analysis &&
+									latestAssessments.checklist.checklist_analysis.riskLevel ===
+										"moderate")
+							) {
+								riskLevel = "medium";
+							}
 
-						const lastAssessmentDate =
-							allDates.length > 0
-								? new Date(
-										Math.max(
-											...allDates.map((date) =>
-												new Date(date as Date).getTime(),
+							// Get last assessment date
+							const allDates = [
+								latestAssessments.anxiety?.assessmentDate,
+								latestAssessments.stress?.assessmentDate,
+								latestAssessments.depression?.assessmentDate,
+								latestAssessments.suicide?.assessmentDate,
+								latestAssessments.checklist?.date_completed,
+							].filter(Boolean);
+
+							const lastAssessmentDate =
+								allDates.length > 0
+									? new Date(
+											Math.max(
+												...allDates.map((date) =>
+													new Date(date as Date).getTime(),
+												),
 											),
-										),
-									)
-								: null;
+										)
+									: null;
 
-						return {
-							studentId: student.id,
-							studentName:
-								`${student.person?.firstName || ""} ${student.person?.lastName || ""}`.trim(),
-							studentNumber: student.studentNumber,
-							program: student.program,
-							year: student.year,
-							totalAssessments,
-							latestAssessments,
-							progressInsights,
-							riskLevel,
-							lastAssessmentDate: lastAssessmentDate?.toISOString() || null,
-						};
-					})
-					.filter(Boolean);
+							// Convert year to number if it's a string
+							const yearValue =
+								typeof student.year === "string"
+									? parseInt(student.year, 10) || 0
+									: student.year || 0;
 
-				const summary = {
-					totalStudents: totalStudents, // Use the actual total count, not just the current page
-					studentsWithAssessments: studentProgressInsights.filter(
-						(s) => s && s.totalAssessments.overall > 0,
-					).length,
-					highRiskStudents: studentProgressInsights.filter(
-						(s) => s && s.riskLevel === "high",
-					).length,
-					moderateRiskStudents: studentProgressInsights.filter(
-						(s) => s && s.riskLevel === "medium",
-					).length,
-					lowRiskStudents: studentProgressInsights.filter(
-						(s) => s && s.riskLevel === "low",
-					).length,
-				};
+							return {
+								studentId: student.id,
+								studentName:
+									`${(student.person as any)?.firstName || ""} ${(student.person as any)?.lastName || ""}`.trim() ||
+									student.studentNumber ||
+									`Student ${student.id}`,
+								studentNumber: student.studentNumber || "",
+								program: student.program || "",
+								year: yearValue,
+								totalAssessments,
+								latestAssessments,
+								progressInsights,
+								riskLevel,
+								lastAssessmentDate: lastAssessmentDate?.toISOString() || null,
+							};
+						})
+						.filter(Boolean);
 
-				const totalPages = Math.ceil(totalStudents / limit);
+					const summary = {
+						totalStudents: totalStudents, // Use the actual total count, not just the current page
+						studentsWithAssessments: studentProgressInsights.filter(
+							(s) => s && s.totalAssessments.overall > 0,
+						).length,
+						highRiskStudents: studentProgressInsights.filter(
+							(s) => s && s.riskLevel === "high",
+						).length,
+						moderateRiskStudents: studentProgressInsights.filter(
+							(s) => s && s.riskLevel === "medium",
+						).length,
+						lowRiskStudents: studentProgressInsights.filter(
+							(s) => s && s.riskLevel === "low",
+						).length,
+					};
 
-				console.log(
-					`📊 Student progress overview generated: ${studentProgressInsights.length} of ${totalStudents} students (page ${page}/${totalPages})`,
-				);
+					const totalPages = Math.ceil(totalStudents / limit);
 
-				// Debug: Log the final result structure
-				const result = {
-					students: studentProgressInsights,
-					summary,
-					pagination: {
-						page,
-						limit,
-						total: totalStudents,
-						totalPages,
-						hasNextPage: page < totalPages,
-						hasPrevPage: page > 1,
-					},
-				};
-				console.log(`🔍 Final result structure:`, JSON.stringify(result, null, 2));
+					const result = {
+						students: studentProgressInsights,
+						summary,
+						pagination: {
+							page,
+							limit,
+							total: totalStudents,
+							totalPages,
+							hasNextPage: page < totalPages,
+							hasPrevPage: page > 1,
+						},
+					};
 
-				return result;
+					return result;
+				} catch (error: any) {
+					console.error(`❌ Error in studentProgressOverview:`, error);
+					console.error(`❌ Error stack:`, error?.stack);
+
+					// Return empty structure instead of throwing to prevent null response
+					return {
+						students: [],
+						summary: {
+							totalStudents: 0,
+							studentsWithAssessments: 0,
+							highRiskStudents: 0,
+							moderateRiskStudents: 0,
+							lowRiskStudents: 0,
+						},
+						pagination: {
+							page: filter?.page ? Number(filter.page) : 1,
+							limit: filter?.limit ? Number(filter.limit) : 10,
+							total: 0,
+							totalPages: 0,
+							hasNextPage: false,
+							hasPrevPage: false,
+						},
+					};
+				}
 			},
 			getAssessmentDetails: async () => {
 				console.log(`🔍 API: Getting detailed assessment data`);
@@ -2194,23 +2665,60 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							(user.personalProblemsChecklist ? 1 : 0),
 					},
 					latestAssessments: {
-						anxiety: user.anxietyAssessments[0] || null,
-						stress: user.stressAssessments[0] || null,
-						depression: user.depressionAssessments[0] || null,
-						suicide: user.suicideAssessments[0] || null,
+						anxiety:
+							user.anxietyAssessments[0] &&
+							user.anxietyAssessments[0].showResultToStudent === false
+								? {
+										...user.anxietyAssessments[0],
+										totalScore: null,
+										severityLevel: null,
+									}
+								: user.anxietyAssessments[0] || null,
+						stress:
+							user.stressAssessments[0] &&
+							user.stressAssessments[0].showResultToStudent === false
+								? {
+										...user.stressAssessments[0],
+										totalScore: null,
+										severityLevel: null,
+									}
+								: user.stressAssessments[0] || null,
+						depression:
+							user.depressionAssessments[0] &&
+							user.depressionAssessments[0].showResultToStudent === false
+								? {
+										...user.depressionAssessments[0],
+										totalScore: null,
+										severityLevel: null,
+									}
+								: user.depressionAssessments[0] || null,
+						suicide:
+							user.suicideAssessments[0] &&
+							user.suicideAssessments[0].showResultToStudent === false
+								? {
+										...user.suicideAssessments[0],
+										riskLevel: null,
+										requires_immediate_intervention: null,
+									}
+								: user.suicideAssessments[0] || null,
 						checklist: user.personalProblemsChecklist
 							? {
 									...user.personalProblemsChecklist,
 									severityLevel:
-										user.personalProblemsChecklist.checklist_analysis
-											?.riskLevel || "unknown",
-									totalScore: user.personalProblemsChecklist.checklist_analysis
-										?.categoryScores
-										? Object.values(
-												user.personalProblemsChecklist.checklist_analysis
-													.categoryScores as Record<string, number>,
-											).reduce((sum, count) => sum + count, 0)
-										: null,
+										user.personalProblemsChecklist.showResultToStudent === false
+											? null
+											: user.personalProblemsChecklist.checklist_analysis
+												?.riskLevel || "unknown",
+									totalScore:
+										user.personalProblemsChecklist.showResultToStudent === false
+											? null
+											: user.personalProblemsChecklist.checklist_analysis
+												?.categoryScores
+												? Object.values(
+														user.personalProblemsChecklist.checklist_analysis
+															.categoryScores as Record<string, number>,
+													).reduce((sum, count) => sum + count, 0)
+												: null,
 								}
 							: null,
 					},
@@ -2262,9 +2770,17 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							severityLevel: true,
 							assessmentDate: true,
 							createdAt: true,
+							showResultToStudent: true,
 						},
 					});
-					history.push(...anxietyAssessments.map((a) => ({ ...a, type: "anxiety" })));
+					history.push(
+						...anxietyAssessments.map((a) => ({
+							...a,
+							type: "anxiety",
+							totalScore: a.showResultToStudent ? a.totalScore : null,
+							severityLevel: a.showResultToStudent ? a.severityLevel : null,
+						})),
+					);
 				}
 
 				if (!assessmentType || assessmentType === "stress") {
@@ -2278,9 +2794,17 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							severityLevel: true,
 							assessmentDate: true,
 							createdAt: true,
+							showResultToStudent: true,
 						},
 					});
-					history.push(...stressAssessments.map((a) => ({ ...a, type: "stress" })));
+					history.push(
+						...stressAssessments.map((a) => ({
+							...a,
+							type: "stress",
+							totalScore: a.showResultToStudent ? a.totalScore : null,
+							severityLevel: a.showResultToStudent ? a.severityLevel : null,
+						})),
+					);
 				}
 
 				if (!assessmentType || assessmentType === "depression") {
@@ -2294,10 +2818,16 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							severityLevel: true,
 							assessmentDate: true,
 							createdAt: true,
+							showResultToStudent: true,
 						},
 					});
 					history.push(
-						...depressionAssessments.map((a) => ({ ...a, type: "depression" })),
+						...depressionAssessments.map((a) => ({
+							...a,
+							type: "depression",
+							totalScore: a.showResultToStudent ? a.totalScore : null,
+							severityLevel: a.showResultToStudent ? a.severityLevel : null,
+						})),
 					);
 				}
 
@@ -2312,13 +2842,17 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							requires_immediate_intervention: true,
 							assessmentDate: true,
 							createdAt: true,
+							showResultToStudent: true,
 						},
 					});
 					history.push(
 						...suicideAssessments.map((a) => ({
 							...a,
 							type: "suicide",
-							severityLevel: a.riskLevel, // Normalize field name
+							severityLevel: a.showResultToStudent ? a.riskLevel : null, // Normalize field name
+							requires_immediate_intervention: a.showResultToStudent
+								? a.requires_immediate_intervention
+								: null,
 							totalScore: null, // Suicide assessments don't have numeric scores
 						})),
 					);
@@ -2334,6 +2868,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							date_completed: true,
 							createdAt: true,
 							checklist_analysis: true,
+							showResultToStudent: true,
 						},
 					});
 					history.push(
@@ -2341,14 +2876,18 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							...a,
 							type: "checklist",
 							assessmentDate: a.date_completed, // Normalize field name
-							severityLevel: a.checklist_analysis?.riskLevel || "unknown",
-							totalScore: a.checklist_analysis?.categoryScores
-								? Object.values(
-										a.checklist_analysis.categoryScores as Record<
+							severityLevel: a.showResultToStudent
+								? a.checklist_analysis?.riskLevel || "unknown"
+								: null,
+							totalScore: a.showResultToStudent
+								? a.checklist_analysis?.categoryScores
+									? Object.values(
+											a.checklist_analysis.categoryScores as Record<
 											string,
 											number
 										>,
 									).reduce((sum, count) => sum + count, 0)
+									: null
 								: null,
 						})),
 					);
@@ -2421,6 +2960,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
+								showResultToStudent: true,
 								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
@@ -2434,6 +2974,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
+								showResultToStudent: true,
 								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
@@ -2447,6 +2988,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
+								showResultToStudent: true,
 								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
@@ -2460,6 +3002,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
+								showResultToStudent: true,
 								assessmentDate: { gte: startDate, lte: endDate },
 							},
 							orderBy: { assessmentDate: "asc" },
@@ -2473,6 +3016,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							where: {
 								userId,
 								isDeleted: false,
+								showResultToStudent: true,
 								date_completed: { gte: startDate, lte: endDate },
 							},
 							orderBy: { date_completed: "asc" },
@@ -2594,21 +3138,21 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				const [anxietyStats, stressStats, depressionStats, suicideStats, checklistStats] =
 					await Promise.all([
 						prisma.anxietyAssessment.aggregate({
-							where: { userId, isDeleted: false },
+							where: { userId, isDeleted: false, showResultToStudent: true },
 							_count: { id: true },
 							_avg: { totalScore: true },
 							_min: { totalScore: true },
 							_max: { totalScore: true },
 						}),
 						prisma.stressAssessment.aggregate({
-							where: { userId, isDeleted: false },
+							where: { userId, isDeleted: false, showResultToStudent: true },
 							_count: { id: true },
 							_avg: { totalScore: true },
 							_min: { totalScore: true },
 							_max: { totalScore: true },
 						}),
 						prisma.depressionAssessment.aggregate({
-							where: { userId, isDeleted: false },
+							where: { userId, isDeleted: false, showResultToStudent: true },
 							_count: { id: true },
 							_avg: { totalScore: true },
 							_min: { totalScore: true },
@@ -3668,16 +4212,34 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				// Add student filters if provided
+				if (filter.program || filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						predictionGenerated: true,
-						...dateFilter,
-					},
+						...(filter.program && { program: filter.program }),
+						...getYearLevelStudentWhere(filter.yearLevel),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					include: {
+						student: {
+							include: {
+								person: true,
+							},
+						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -3687,17 +4249,16 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					"Low Risk": 0,
 					"Moderate Risk": 0,
 					"High Risk": 0,
-					"Critical Risk": 0,
 				};
 
 				inventories.forEach((inventory) => {
 					const latestPrediction = inventory.mentalHealthPredictions[0];
-					if (latestPrediction?.mentalHealthRisk) {
-						const risk = latestPrediction.mentalHealthRisk.level;
-						if (risk === "low") riskCounts["Low Risk"]++;
-						else if (risk === "moderate") riskCounts["Moderate Risk"]++;
-						else if (risk === "high") riskCounts["High Risk"]++;
-						else if (risk === "critical") riskCounts["Critical Risk"]++;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+
+						if (riskLevel === "low") riskCounts["Low Risk"]++;
+						else if (riskLevel === "moderate") riskCounts["Moderate Risk"]++;
+						else if (riskLevel === "high") riskCounts["High Risk"]++;
 					}
 				});
 
@@ -3722,14 +4283,38 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					...dateFilter,
+				};
+
+				// Add student filters if provided
+				if (filter.program || filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						...dateFilter,
-					},
+						...(filter.program && { program: filter.program }),
+						...getYearLevelStudentWhere(filter.yearLevel),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					select: {
 						height: true,
 						weight: true,
+						student: {
+							select: {
+								program: true,
+								year: true,
+								person: {
+									select: {
+										gender: true,
+									},
+								},
+							},
+						},
 					},
 				});
 
@@ -3819,12 +4404,24 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					predictionGenerated: true,
+					...dateFilter,
+				};
+
+				// Add student filters if provided (for yearLevel and gender filtering)
+				if (filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						predictionGenerated: true,
-						...dateFilter,
-					},
+						...getYearLevelStudentWhere(filter.yearLevel),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					include: {
 						student: {
 							include: {
@@ -3833,7 +4430,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -3846,7 +4443,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (riskLower.includes("low")) normalizedRiskLevel = "low";
 					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
 					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
-					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
 				}
 
 				const programRiskCounts: Record<string, Record<string, number>> = {};
@@ -3855,11 +4451,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					const program = inventory.student?.program || "Unknown";
 					const latestPrediction = inventory.mentalHealthPredictions[0];
 
-					if (latestPrediction?.mentalHealthRisk) {
-						const risk = latestPrediction.mentalHealthRisk.level;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
 						// If risk level filter is set, only count matching risk levels
-						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+						if (normalizedRiskLevel && riskLevel !== normalizedRiskLevel) {
 							return; // Skip this inventory if it doesn't match the filter
 						}
 
@@ -3868,14 +4464,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								"Low Risk": 0,
 								"Moderate Risk": 0,
 								"High Risk": 0,
-								"Critical Risk": 0,
 							};
 						}
 
-						if (risk === "low") programRiskCounts[program]["Low Risk"]++;
-						else if (risk === "moderate") programRiskCounts[program]["Moderate Risk"]++;
-						else if (risk === "high") programRiskCounts[program]["High Risk"]++;
-						else if (risk === "critical") programRiskCounts[program]["Critical Risk"]++;
+						if (riskLevel === "low") programRiskCounts[program]["Low Risk"]++;
+						else if (riskLevel === "moderate")
+							programRiskCounts[program]["Moderate Risk"]++;
+						else if (riskLevel === "high") programRiskCounts[program]["High Risk"]++;
 					}
 				});
 
@@ -3925,7 +4520,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -3938,7 +4533,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (riskLower.includes("low")) normalizedRiskLevel = "low";
 					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
 					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
-					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
 				}
 
 				const yearRiskCounts: Record<string, Record<string, number>> = {};
@@ -3947,11 +4541,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					const year = inventory.student?.year || "Unknown";
 					const latestPrediction = inventory.mentalHealthPredictions[0];
 
-					if (latestPrediction?.mentalHealthRisk) {
-						const risk = latestPrediction.mentalHealthRisk.level;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
 						// If risk level filter is set, only count matching risk levels
-						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+						if (normalizedRiskLevel && riskLevel !== normalizedRiskLevel) {
 							return; // Skip this inventory if it doesn't match the filter
 						}
 
@@ -3960,14 +4554,12 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								"Low Risk": 0,
 								"Moderate Risk": 0,
 								"High Risk": 0,
-								"Critical Risk": 0,
 							};
 						}
 
-						if (risk === "low") yearRiskCounts[year]["Low Risk"]++;
-						else if (risk === "moderate") yearRiskCounts[year]["Moderate Risk"]++;
-						else if (risk === "high") yearRiskCounts[year]["High Risk"]++;
-						else if (risk === "critical") yearRiskCounts[year]["Critical Risk"]++;
+						if (riskLevel === "low") yearRiskCounts[year]["Low Risk"]++;
+						else if (riskLevel === "moderate") yearRiskCounts[year]["Moderate Risk"]++;
+						else if (riskLevel === "high") yearRiskCounts[year]["High Risk"]++;
 					}
 				});
 
@@ -4005,7 +4597,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					whereClause.student = {
 						isDeleted: false,
 						...(filter.program && { program: filter.program }),
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 					};
 				}
 
@@ -4019,7 +4611,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4032,7 +4624,6 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					if (riskLower.includes("low")) normalizedRiskLevel = "low";
 					else if (riskLower.includes("moderate")) normalizedRiskLevel = "moderate";
 					else if (riskLower.includes("high")) normalizedRiskLevel = "high";
-					else if (riskLower.includes("critical")) normalizedRiskLevel = "critical";
 				}
 
 				const genderRiskCounts: Record<string, Record<string, number>> = {};
@@ -4041,11 +4632,11 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					const gender = inventory.student?.person?.gender || "Unknown";
 					const latestPrediction = inventory.mentalHealthPredictions[0];
 
-					if (latestPrediction?.mentalHealthRisk) {
-						const risk = latestPrediction.mentalHealthRisk.level;
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
 
 						// If risk level filter is set, only count matching risk levels
-						if (normalizedRiskLevel && risk !== normalizedRiskLevel) {
+						if (normalizedRiskLevel && riskLevel !== normalizedRiskLevel) {
 							return; // Skip this inventory if it doesn't match the filter
 						}
 
@@ -4054,14 +4645,13 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 								"Low Risk": 0,
 								"Moderate Risk": 0,
 								"High Risk": 0,
-								"Critical Risk": 0,
 							};
 						}
 
-						if (risk === "low") genderRiskCounts[gender]["Low Risk"]++;
-						else if (risk === "moderate") genderRiskCounts[gender]["Moderate Risk"]++;
-						else if (risk === "high") genderRiskCounts[gender]["High Risk"]++;
-						else if (risk === "critical") genderRiskCounts[gender]["Critical Risk"]++;
+						if (riskLevel === "low") genderRiskCounts[gender]["Low Risk"]++;
+						else if (riskLevel === "moderate")
+							genderRiskCounts[gender]["Moderate Risk"]++;
+						else if (riskLevel === "high") genderRiskCounts[gender]["High Risk"]++;
 					}
 				});
 
@@ -4087,11 +4677,23 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					};
 				}
 
-				const inventories = await prisma.individualInventory.findMany({
-					where: {
+				// Build where clause with student filters
+				let whereClause: any = {
+					isDeleted: false,
+					...dateFilter,
+				};
+
+				// Add student filters if provided (for yearLevel and gender filtering)
+				if (filter.yearLevel || filter.gender) {
+					whereClause.student = {
 						isDeleted: false,
-						...dateFilter,
-					},
+						...getYearLevelStudentWhere(filter.yearLevel),
+						...(filter.gender && { person: { gender: filter.gender } }),
+					};
+				}
+
+				const inventories = await prisma.individualInventory.findMany({
+					where: whereClause,
 					include: {
 						student: {
 							include: {
@@ -4332,7 +4934,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					whereClause.student = {
 						isDeleted: false,
 						...(filter.program && { program: filter.program }),
-						...(filter.yearLevel && { year: filter.yearLevel }),
+						...getYearLevelStudentWhere(filter.yearLevel),
 					};
 				}
 
@@ -4455,7 +5057,9 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 				// Build student filter
 				const studentFilter: any = { isDeleted: false };
 				if (filter.program) studentFilter.program = filter.program;
-				if (filter.yearLevel) studentFilter.year = filter.yearLevel;
+				if (filter.yearLevel) {
+					Object.assign(studentFilter, getYearLevelStudentWhere(filter.yearLevel));
+				}
 				if (filter.gender) {
 					// Gender is on the person, need to handle this differently
 					whereClause.student = {
@@ -4478,7 +5082,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						},
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4553,8 +5157,12 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 						// Filter by risk level if specified
 						if (normalizedRiskLevel) {
 							const latestPrediction = inventory.mentalHealthPredictions?.[0];
-							const risk = latestPrediction?.mentalHealthRisk?.level;
-							if (risk !== normalizedRiskLevel) return false;
+							if (latestPrediction?.mlPredictions) {
+								const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+								if (riskLevel !== normalizedRiskLevel) return false;
+							} else {
+								return false; // No ML predictions available
+							}
 						}
 
 						// Filter by BMI category if specified
@@ -4567,6 +5175,12 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					})
 					.map((inventory) => {
 						const latestPrediction = inventory.mentalHealthPredictions?.[0];
+						let riskLevel = "low";
+
+						if (latestPrediction?.mlPredictions) {
+							riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+						}
+
 						return {
 							id: inventory.id,
 							studentId: inventory.student?.id, // Add student ID for frontend lookups
@@ -4577,8 +5191,8 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 							program: inventory.student?.program || "N/A",
 							year: inventory.student?.year || "N/A",
 							gender: inventory.student?.person?.gender || "N/A",
-							mentalHealthPrediction: latestPrediction?.mentalHealthRisk?.level
-								? `${latestPrediction.mentalHealthRisk.level.charAt(0).toUpperCase()}${latestPrediction.mentalHealthRisk.level.slice(1)} Risk`
+							mentalHealthPrediction: riskLevel
+								? `${riskLevel.charAt(0).toUpperCase()}${riskLevel.slice(1)} Risk`
 								: "N/A",
 							bmiCategory: calculateBMICategory(inventory.height, inventory.weight),
 							createdAt: inventory.createdAt,
@@ -4609,7 +5223,7 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 					include: {
 						mentalHealthPredictions: {
 							where: { isDeleted: false },
-							orderBy: { predictionDate: "desc" },
+							orderBy: { createdAt: "desc" },
 							take: 1,
 						},
 					},
@@ -4617,11 +5231,14 @@ export const METRIC = (prisma: PrismaClient, filter: MetricFilter = {}) => {
 
 				const totalRecords = inventories.length;
 
-				// Count high risk (includes high and critical)
+				// Count high risk using ML predictions
 				const highRiskCount = inventories.filter((inv) => {
 					const latestPrediction = inv.mentalHealthPredictions?.[0];
-					const risk = latestPrediction?.mentalHealthRisk?.level;
-					return risk === "high" || risk === "critical";
+					if (latestPrediction?.mlPredictions) {
+						const riskLevel = findMLRiskLevel(latestPrediction.mlPredictions);
+						return riskLevel === "high";
+					}
+					return false;
 				}).length;
 
 				// Calculate completion rate (inventories with predictions)

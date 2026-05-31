@@ -12,17 +12,17 @@ type Notes {
 }
 
 model Student {
-  id                  String               @id @default(auto()) @map("_id") @db.ObjectId
-  studentNumber       String?              @unique
-  program             String
-  year                String
-  status              AcademicStatus       @default(freshman)
-  notes               Notes[] // also known as consultation records
-  person              Person               @relation(fields: [personId], references: [id])
-  personId            String               @db.ObjectId
-  consent             Consent?
-  isDeleted           Boolean              @default(false)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  individualInventory IndividualInventory?
+  id                   String                 @id @default(auto()) @map("_id") @db.ObjectId
+  studentNumber        String?                @unique
+  program              String
+  year                 String
+  status               AcademicStatus         @default(freshman)
+  notes                Notes[] // also known as consultation records
+  person               Person                 @relation(fields: [personId], references: [id])
+  personId             String                 @db.ObjectId
+  consent              Consent?
+  isDeleted            Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  individualInventories IndividualInventory[]
 }

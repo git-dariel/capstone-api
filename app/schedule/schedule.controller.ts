@@ -287,11 +287,134 @@ export const controller = (prisma: PrismaClient) => {
 			const startDateTime = new Date(startTime);
 			const endDateTime = new Date(endTime);
 
+			// Log the received times for debugging
+			scheduleLogger.info(`Received startTime: ${startTime}, endTime: ${endTime}`);
+			scheduleLogger.info(
+				`Parsed startDateTime: ${startDateTime.toISOString()}, endDateTime: ${endDateTime.toISOString()}`,
+			);
+
 			// Validate time range
 			if (endDateTime <= startDateTime) {
 				scheduleLogger.error("End time must be after start time");
 				res.status(400).json({ error: "End time must be after start time" });
 				return;
+			}
+
+			// Validate business hours (08:00 - 20:00) with proper timezone handling
+			// Convert to Philippine timezone (Asia/Manila) for accurate validation
+			const philippineTimeStart = new Date(
+				startDateTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+			);
+			const philippineTimeEnd = new Date(
+				endDateTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+			);
+
+			const scheduleStart =
+				philippineTimeStart.getHours() * 60 + philippineTimeStart.getMinutes();
+			const scheduleEnd = philippineTimeEnd.getHours() * 60 + philippineTimeEnd.getMinutes();
+
+			const MIN_TIME = 8 * 60; // 08:00
+			const MAX_TIME = 20 * 60; // 20:00
+
+			scheduleLogger.info(
+				`Business hours check (Philippine Time) - Start: ${scheduleStart} minutes (${Math.floor(scheduleStart / 60)}:${(scheduleStart % 60).toString().padStart(2, "0")}), End: ${scheduleEnd} minutes (${Math.floor(scheduleEnd / 60)}:${(scheduleEnd % 60).toString().padStart(2, "0")})`,
+			);
+			scheduleLogger.info(
+				`Business hours range - Min: ${MIN_TIME} minutes (08:00), Max: ${MAX_TIME} minutes (20:00)`,
+			);
+
+			if (scheduleStart < MIN_TIME || scheduleEnd > MAX_TIME) {
+				scheduleLogger.error(
+					`Schedule time outside business hours: Start=${scheduleStart} minutes, End=${scheduleEnd} minutes`,
+				);
+				res.status(400).json({
+					error: "Schedule must be within business hours (08:00 - 20:00)",
+				});
+				return;
+			}
+
+			// Check for conflicting appointments with existing appointments
+			const conflictingAppointments = await prisma.appointment.findMany({
+				where: {
+					counselorId,
+					isDeleted: false,
+					status: {
+						notIn: ["cancelled", "no_show"],
+					},
+					OR: [
+						{
+							// Appointment starts during schedule time
+							AND: [
+								{ requestedDate: { gte: startDateTime } },
+								{ requestedDate: { lt: endDateTime } },
+							],
+						},
+						{
+							// Appointment ends during schedule time
+							AND: [
+								{
+									requestedDate: {
+										lt: startDateTime,
+									},
+								},
+								{
+									requestedDate: {
+										gte: new Date(startDateTime.getTime() - 120 * 60000), // Check 2 hours before
+									},
+								},
+							],
+						},
+					],
+				},
+				include: {
+					student: {
+						include: {
+							person: {
+								select: {
+									firstName: true,
+									lastName: true,
+								},
+							},
+						},
+					},
+				},
+			});
+
+			// Validate actual overlaps with appointments
+			if (conflictingAppointments.length > 0) {
+				const actualConflicts = conflictingAppointments.filter((apt) => {
+					const aptEndTime = new Date(
+						apt.requestedDate.getTime() + (apt.duration || 60) * 60000,
+					);
+					// Check if there's actual overlap
+					return (
+						(apt.requestedDate >= startDateTime && apt.requestedDate < endDateTime) ||
+						(aptEndTime > startDateTime && aptEndTime <= endDateTime) ||
+						(apt.requestedDate <= startDateTime && aptEndTime >= endDateTime)
+					);
+				});
+
+				if (actualConflicts.length > 0) {
+					const conflictDetails = actualConflicts.map((apt) => ({
+						appointmentId: apt.id,
+						studentName: apt.student?.person
+							? `${apt.student.person.firstName} ${apt.student.person.lastName}`
+							: "Unknown",
+						date: apt.requestedDate,
+						duration: apt.duration,
+						type: apt.appointmentType,
+					}));
+
+					scheduleLogger.error(
+						`Cannot create schedule - conflicts with ${actualConflicts.length} existing appointments`,
+					);
+					res.status(409).json({
+						error: "Cannot create schedule - conflicts with existing appointments",
+						message: `Found ${actualConflicts.length} conflicting appointment(s). Please reschedule or cancel these appointments first.`,
+						conflicts: conflictDetails,
+					});
+					return;
+				}
 			}
 
 			// Check for overlapping schedules
@@ -447,6 +570,92 @@ export const controller = (prisma: PrismaClient) => {
 				if (endTime <= startTime) {
 					scheduleLogger.error("End time must be after start time");
 					res.status(400).json({ error: "End time must be after start time" });
+					return;
+				}
+
+				// Validate business hours (08:00 - 20:00) with proper timezone handling
+				// Convert to Philippine timezone (Asia/Manila) for accurate validation
+				const philippineTimeStart = new Date(
+					startTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+				);
+				const philippineTimeEnd = new Date(
+					endTime.toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+				);
+
+				const scheduleStart =
+					philippineTimeStart.getHours() * 60 + philippineTimeStart.getMinutes();
+				const scheduleEnd =
+					philippineTimeEnd.getHours() * 60 + philippineTimeEnd.getMinutes();
+
+				const MIN_TIME = 8 * 60; // 08:00
+				const MAX_TIME = 20 * 60; // 20:00
+
+				scheduleLogger.info(
+					`Update business hours check (Philippine Time) - Start: ${scheduleStart} minutes (${Math.floor(scheduleStart / 60)}:${(scheduleStart % 60).toString().padStart(2, "0")}), End: ${scheduleEnd} minutes (${Math.floor(scheduleEnd / 60)}:${(scheduleEnd % 60).toString().padStart(2, "0")})`,
+				);
+
+				if (scheduleStart < MIN_TIME || scheduleEnd > MAX_TIME) {
+					scheduleLogger.error(
+						`Schedule time outside business hours: Start=${scheduleStart} minutes, End=${scheduleEnd} minutes`,
+					);
+					res.status(400).json({
+						error: "Schedule must be within business hours (08:00 - 20:00)",
+					});
+					return;
+				}
+
+				// Check if time change would invalidate existing appointments
+				const affectedAppointments = await prisma.appointment.findMany({
+					where: {
+						scheduleId: id,
+						isDeleted: false,
+						status: {
+							notIn: ["cancelled", "no_show"],
+						},
+						OR: [
+							{
+								// Appointment would be before new schedule start
+								requestedDate: { lt: startTime },
+							},
+							{
+								// Appointment would be at/after new schedule end
+								requestedDate: { gte: endTime },
+							},
+						],
+					},
+					include: {
+						student: {
+							include: {
+								person: {
+									select: {
+										firstName: true,
+										lastName: true,
+									},
+								},
+							},
+						},
+					},
+				});
+
+				if (affectedAppointments.length > 0) {
+					const appointmentDetails = affectedAppointments.map((apt) => ({
+						appointmentId: apt.id,
+						studentName: apt.student?.person
+							? `${apt.student.person.firstName} ${apt.student.person.lastName}`
+							: "Unknown",
+						date: apt.requestedDate,
+						duration: apt.duration,
+						type: apt.appointmentType,
+					}));
+
+					scheduleLogger.error(
+						`Cannot update schedule - would invalidate ${affectedAppointments.length} existing appointments`,
+					);
+					res.status(409).json({
+						error: "Cannot update schedule - would invalidate existing appointments",
+						message: `Found ${affectedAppointments.length} appointment(s) that would fall outside the new schedule time range. Please reschedule or cancel these appointments first.`,
+						affectedAppointments: appointmentDetails,
+					});
 					return;
 				}
 			}

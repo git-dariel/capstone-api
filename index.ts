@@ -50,6 +50,7 @@ const appointment = require("./app/appointment")(prisma);
 const schedule = require("./app/schedule")(prisma);
 const inventory = require("./app/inventory")(prisma);
 const checklist = require("./app/checklist")(prisma);
+const auditLogs = require("./app/audit-logs")(prisma);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -141,6 +142,7 @@ app.use(config.baseApiPath, appointment);
 app.use(config.baseApiPath, schedule);
 app.use(config.baseApiPath, inventory);
 app.use(config.baseApiPath, checklist);
+app.use(config.baseApiPath, auditLogs);
 
 server.listen(config.port, async () => {
 	await connectDb();

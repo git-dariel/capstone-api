@@ -4,11 +4,48 @@ import jwt from "jsonwebtoken";
 import { PrismaClient, Role, Type } from "../../generated/prisma";
 import { initOTPEmailHelper, validateFirstYearStudentNumber } from "../../helper/auth.helper";
 import { getLogger } from "../../helper/logger";
+import { auditHelpers, extractAuditContext } from "../../helper/audit.helper";
 import { controller as personController } from "../person/person.controller";
 import { controller as studentController } from "../student/student.controller";
 
 const logger = getLogger();
 const authLogger = logger.child({ module: "auth" });
+
+// Helper function to normalize names for comparison
+const normalizeName = (name: string | null | undefined): string => {
+	if (!name) return "";
+	return name.trim().toLowerCase().replace(/\s+/g, " ");
+};
+
+// Helper function to check if names match
+const namesMatch = (
+	firstName1: string | null | undefined,
+	lastName1: string | null | undefined,
+	middleName1: string | null | undefined,
+	firstName2: string | null | undefined,
+	lastName2: string | null | undefined,
+	middleName2: string | null | undefined,
+): boolean => {
+	const normalizedFirst1 = normalizeName(firstName1);
+	const normalizedLast1 = normalizeName(lastName1);
+	const normalizedMiddle1 = normalizeName(middleName1);
+	const normalizedFirst2 = normalizeName(firstName2);
+	const normalizedLast2 = normalizeName(lastName2);
+	const normalizedMiddle2 = normalizeName(middleName2);
+
+	// First and last names must match
+	if (normalizedFirst1 !== normalizedFirst2 || normalizedLast1 !== normalizedLast2) {
+		return false;
+	}
+
+	// Middle names must match if both are provided
+	if (normalizedMiddle1 && normalizedMiddle2) {
+		return normalizedMiddle1 === normalizedMiddle2;
+	}
+
+	// If one has middle name and other doesn't, they still match
+	return true;
+};
 
 export const controller = (prisma: PrismaClient) => {
 	const personCtrl = personController(prisma);
@@ -89,19 +126,80 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Check if student number already exists (if provided)
+			// Check if student number already exists and validate name match (if provided)
+			let existingStudentRecord = null;
 			if (studentNumber) {
 				const existingStudent = await prisma.student.findFirst({
 					where: {
 						studentNumber,
 						isDeleted: false,
 					},
+					include: {
+						person: true,
+					},
 				});
 
 				if (existingStudent) {
-					authLogger.error(`Student number already exists: ${studentNumber}`);
-					res.status(400).json({ message: "Student number already exists" });
-					return;
+					// Check if student is first-year before validating names
+					const isFirstYear =
+						year &&
+						(year.toString().toLowerCase().includes("1st") ||
+							year.toString().toLowerCase().includes("first") ||
+							year.toString().toLowerCase() === "1" ||
+							year.toString().toLowerCase().includes("freshman"));
+
+					// Only validate names for first-year students
+					if (isFirstYear) {
+						// Check if the provided names match the existing student's names (excluding middle name)
+						const nameMatches = namesMatch(
+							firstName,
+							lastName,
+							null,
+							existingStudent.person.firstName,
+							existingStudent.person.lastName,
+							null,
+						);
+
+						if (!nameMatches) {
+							authLogger.error(
+								`Name mismatch for student number ${studentNumber}. Expected: ${existingStudent.person.firstName} ${existingStudent.person.lastName}, Got: ${firstName} ${lastName}`,
+							);
+							res.status(400).json({
+								message:
+									"The provided name does not match the student record. Please verify your full name matches your student record.",
+							});
+							return;
+						}
+					} else {
+						authLogger.info(
+							`Skipping name validation for non-first-year student: ${studentNumber}, Year: ${year}`,
+						);
+					}
+
+					// Names match, check if this student already has a user account
+					const existingUser = await prisma.user.findFirst({
+						where: {
+							personId: existingStudent.personId,
+							isDeleted: false,
+						},
+					});
+
+					if (existingUser) {
+						authLogger.error(
+							`User account already exists for student number: ${studentNumber}`,
+						);
+						res.status(400).json({
+							message:
+								"An account already exists for this student. Please try signing in instead.",
+						});
+						return;
+					}
+
+					// Store the existing student record to link later
+					existingStudentRecord = existingStudent;
+					authLogger.info(
+						`Found matching student record for ${studentNumber}, will link to existing person record`,
+					);
 				}
 
 				// Also check pending registrations for the same student number
@@ -116,7 +214,9 @@ export const controller = (prisma: PrismaClient) => {
 					authLogger.error(
 						`Student number already exists in pending registration: ${studentNumber}`,
 					);
-					res.status(400).json({ message: "Student number already exists" });
+					res.status(400).json({
+						message: "A registration is already in progress for this student number.",
+					});
 					return;
 				}
 			}
@@ -321,16 +421,31 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const isValidFirstYearStudent = validateFirstYearStudentNumber(studentNumber);
-			if (!isValidFirstYearStudent) {
-				authLogger.error(
-					`First-year student number validation failed for: ${studentNumber}`,
+			// Check if student is first-year before validating against first-year database
+			const isFirstYear =
+				year &&
+				(year.toString().toLowerCase().includes("1st") ||
+					year.toString().toLowerCase().includes("first") ||
+					year.toString().toLowerCase() === "1" ||
+					year.toString().toLowerCase().includes("freshman"));
+
+			// Only validate first-year students against the first-year student database
+			if (isFirstYear) {
+				const isValidFirstYearStudent = validateFirstYearStudentNumber(studentNumber);
+				if (!isValidFirstYearStudent) {
+					authLogger.error(
+						`First-year student number validation failed for: ${studentNumber}`,
+					);
+					res.status(400).json({
+						message:
+							"Invalid student number. Your student number is not found in the first-year student database. Please verify and try again.",
+					});
+					return;
+				}
+			} else {
+				authLogger.info(
+					`Skipping first-year validation for non-first-year student: ${studentNumber}, Year: ${year}`,
 				);
-				res.status(400).json({
-					message:
-						"Invalid student number. Your student number is not found in the first-year student database. Please verify and try again.",
-				});
-				return;
 			}
 
 			// Check if email already exists in either person or pending registration tables
@@ -347,19 +462,72 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Check if student number already exists (if provided)
+			// Check if student number already exists and validate name match (if provided)
+			let existingStudentRecord = null;
 			if (studentNumber) {
 				const existingStudent = await prisma.student.findFirst({
 					where: {
 						studentNumber,
 						isDeleted: false,
 					},
+					include: {
+						person: true,
+					},
 				});
 
 				if (existingStudent) {
-					authLogger.error(`Student number already exists: ${studentNumber}`);
-					res.status(400).json({ message: "Student number already exists" });
-					return;
+					// Only validate names for first-year students (already determined above)
+					if (isFirstYear) {
+						// Check if the provided names match the existing student's names (excluding middle name)
+						const nameMatches = namesMatch(
+							firstName,
+							lastName,
+							null,
+							existingStudent.person.firstName,
+							existingStudent.person.lastName,
+							null,
+						);
+
+						if (!nameMatches) {
+							authLogger.error(
+								`Name mismatch for student number ${studentNumber}. Expected: ${existingStudent.person.firstName} ${existingStudent.person.lastName}, Got: ${firstName} ${lastName}`,
+							);
+							res.status(400).json({
+								message:
+									"The provided name does not match the student record. Please verify your full name matches your student record.",
+							});
+							return;
+						}
+					} else {
+						authLogger.info(
+							`Skipping name validation for non-first-year student: ${studentNumber}, Year: ${year}`,
+						);
+					}
+
+					// Names match, check if this student already has a user account
+					const existingUser = await prisma.user.findFirst({
+						where: {
+							personId: existingStudent.personId,
+							isDeleted: false,
+						},
+					});
+
+					if (existingUser) {
+						authLogger.error(
+							`User account already exists for student number: ${studentNumber}`,
+						);
+						res.status(400).json({
+							message:
+								"An account already exists for this student. Please try signing in instead.",
+						});
+						return;
+					}
+
+					// Store the existing student record to link later
+					existingStudentRecord = existingStudent;
+					authLogger.info(
+						`Found matching student record for ${studentNumber}, will link to existing person record`,
+					);
 				}
 
 				// Also check pending registrations for the same student number
@@ -374,7 +542,9 @@ export const controller = (prisma: PrismaClient) => {
 					authLogger.error(
 						`Student number already exists in pending registration: ${studentNumber}`,
 					);
-					res.status(400).json({ message: "Student number already exists" });
+					res.status(400).json({
+						message: "A registration is already in progress for this student number.",
+					});
 					return;
 				}
 			}
@@ -925,6 +1095,32 @@ export const controller = (prisma: PrismaClient) => {
 			const isPasswordValid = await bcrypt.compare(password, user.password);
 			if (!isPasswordValid) {
 				authLogger.error(`Invalid password for user: ${user.id}`);
+
+				// Create audit log for failed login attempt
+				try {
+					const auditContext = extractAuditContext(req);
+					await auditHelpers.logLogin(
+						prisma,
+						user.id,
+						{
+							...auditContext,
+							userId: user.id,
+							userName: user.userName || email,
+							userRole: user.role || "unknown",
+							userType: user.type || "unknown",
+						},
+						{
+							loginMethod: "email",
+							userType: user.type,
+							userRole: user.role,
+							success: false,
+							failureReason: "invalid_password",
+						},
+					);
+				} catch (auditError) {
+					authLogger.error(`Failed to create failed login audit log: ${auditError}`);
+				}
+
 				res.status(401).json({ message: "Invalid credentials" });
 				return;
 			}
@@ -932,6 +1128,34 @@ export const controller = (prisma: PrismaClient) => {
 			// Additional check to ensure type matches
 			if (user.type !== type) {
 				authLogger.error(`User type mismatch. Expected: ${type}, Got: ${user.type}`);
+
+				// Create audit log for type mismatch
+				try {
+					const auditContext = extractAuditContext(req);
+					await auditHelpers.logLogin(
+						prisma,
+						user.id,
+						{
+							...auditContext,
+							userId: user.id,
+							userName: user.userName || email,
+							userRole: user.role || "unknown",
+							userType: user.type || "unknown",
+						},
+						{
+							loginMethod: "email",
+							userType: user.type,
+							userRole: user.role,
+							success: false,
+							failureReason: "type_mismatch",
+							expectedType: type,
+							actualType: user.type,
+						},
+					);
+				} catch (auditError) {
+					authLogger.error(`Failed to create type mismatch audit log: ${auditError}`);
+				}
+
 				res.status(401).json({ message: "Invalid account type" });
 				return;
 			}
@@ -1024,6 +1248,31 @@ export const controller = (prisma: PrismaClient) => {
 
 			authLogger.info(`User logged in successfully: ${user.id} (${user.type})`);
 
+			// Create audit log for successful login
+			try {
+				const auditContext = extractAuditContext(req);
+				await auditHelpers.logLogin(
+					prisma,
+					user.id,
+					{
+						...auditContext,
+						userId: user.id,
+						userName: user.userName || person.email || "unknown",
+						userRole: user.role || "unknown",
+						userType: user.type || "unknown",
+					},
+					{
+						loginMethod: "email",
+						userType: user.type,
+						userRole: user.role,
+						success: true,
+					},
+				);
+			} catch (auditError) {
+				authLogger.error(`Failed to create login audit log: ${auditError}`);
+				// Don't fail the login if audit logging fails
+			}
+
 			const responseData: any = {
 				message: "Logged in successfully",
 				user: {
@@ -1090,67 +1339,150 @@ export const controller = (prisma: PrismaClient) => {
 				}
 
 				// Create the actual user, person, and student records
+				authLogger.info(`Starting email verification transaction for: ${email}`);
 				const result = await prisma.$transaction(async (tx) => {
-					// Create person
-					const mockReq = {
-						body: {
-							firstName: pendingRegistration.firstName,
-							lastName: pendingRegistration.lastName,
-							...(pendingRegistration.middleName && {
-								middleName: pendingRegistration.middleName,
-							}),
-							...(pendingRegistration.suffix && {
-								suffix: pendingRegistration.suffix,
-							}),
-							email: pendingRegistration.email,
-							...(pendingRegistration.contactNumber && {
-								contactNumber: pendingRegistration.contactNumber,
-							}),
-							...(pendingRegistration.gender && {
-								gender: pendingRegistration.gender,
-							}),
-							...(pendingRegistration.birthDate && {
-								birthDate: pendingRegistration.birthDate,
-							}),
-							...(pendingRegistration.birthPlace && {
-								birthPlace: pendingRegistration.birthPlace,
-							}),
-							...(pendingRegistration.age && { age: pendingRegistration.age }),
-							...(pendingRegistration.religion && {
-								religion: pendingRegistration.religion,
-							}),
-							...(pendingRegistration.civilStatus && {
-								civilStatus: pendingRegistration.civilStatus,
-							}),
-							...(pendingRegistration.address && {
-								address: pendingRegistration.address,
-							}),
-							...(pendingRegistration.guardian && {
-								guardian: pendingRegistration.guardian,
-							}),
-						},
-					} as Request;
+					let person;
+					let existingStudentRecord = null;
 
-					const mockRes = {
-						statusCode: 0,
-						data: null,
-						status: function (code: number) {
-							this.statusCode = code;
-							return this;
-						},
-						json: function (data: any) {
-							this.data = data;
-							return this;
-						},
-					} as any;
+					// Helper function to normalize and compare names
+					const namesMatch = (name1: string, name2: string): boolean => {
+						if (!name1 || !name2) return false;
+						return name1.toLowerCase().trim() === name2.toLowerCase().trim();
+					};
 
-					await personCtrl.create(mockReq, mockRes, next);
+					// Check if there's an existing student with matching student number and names
+					if (pendingRegistration.studentNumber) {
+						existingStudentRecord = await tx.student.findFirst({
+							where: {
+								studentNumber: pendingRegistration.studentNumber,
+								isDeleted: false,
+							},
+							include: {
+								person: true,
+							},
+						});
 
-					if (mockRes.statusCode !== 201) {
-						throw new Error("Failed to create person");
+						// Verify names match if existing student found (excluding middle name)
+						if (existingStudentRecord?.person) {
+							const existingPerson = existingStudentRecord.person;
+							const firstNameMatch = namesMatch(
+								pendingRegistration.firstName,
+								existingPerson.firstName || "",
+							);
+							const lastNameMatch = namesMatch(
+								pendingRegistration.lastName,
+								existingPerson.lastName || "",
+							);
+
+							if (firstNameMatch && lastNameMatch) {
+								// Names match, use existing person record but update the email
+								await tx.person.update({
+									where: { id: existingPerson.id },
+									data: {
+										email: pendingRegistration.email, // Update email from registration
+									},
+								});
+
+								// Get updated person record
+								person = await tx.person.findUnique({
+									where: { id: existingPerson.id },
+								});
+
+								authLogger.info(
+									`Using existing person record for student verification and updated email: ${person?.id}`,
+								);
+							} else {
+								// Names don't match, this is a different person
+								existingStudentRecord = null;
+							}
+						}
 					}
 
-					const person = mockRes.data;
+					// Create new person if no matching existing student found
+					if (!person) {
+						// Create person record directly within transaction
+						const personData: any = {
+							firstName: pendingRegistration.firstName,
+							lastName: pendingRegistration.lastName,
+							email: pendingRegistration.email,
+						};
+
+						// Add optional fields only if they exist
+						if (pendingRegistration.middleName)
+							personData.middleName = pendingRegistration.middleName;
+						if (pendingRegistration.suffix)
+							personData.suffix = pendingRegistration.suffix;
+						if (pendingRegistration.contactNumber)
+							personData.contactNumber = pendingRegistration.contactNumber;
+						if (pendingRegistration.gender)
+							personData.gender = pendingRegistration.gender as any; // Cast to enum
+						if (pendingRegistration.birthDate)
+							personData.birthDate = pendingRegistration.birthDate;
+						if (pendingRegistration.birthPlace)
+							personData.birthPlace = pendingRegistration.birthPlace;
+						if (pendingRegistration.age) personData.age = pendingRegistration.age;
+						if (pendingRegistration.religion)
+							personData.religion = pendingRegistration.religion;
+						if (pendingRegistration.civilStatus)
+							personData.civilStatus = pendingRegistration.civilStatus as any; // Cast to enum
+
+						// Handle address field properly (convert zipCode to integer if it's a string)
+						if (pendingRegistration.address) {
+							let addressData = pendingRegistration.address as any;
+							if (
+								typeof addressData === "object" &&
+								!Array.isArray(addressData) &&
+								addressData.zipCode
+							) {
+								// Ensure zipCode is an integer
+								addressData = {
+									...addressData,
+									zipCode:
+										typeof addressData.zipCode === "string"
+											? parseInt(addressData.zipCode) || null
+											: addressData.zipCode,
+								};
+							}
+							personData.address = addressData;
+						}
+
+						// Handle guardian field properly
+						if (pendingRegistration.guardian) {
+							let guardianData = pendingRegistration.guardian as any;
+							if (typeof guardianData === "object" && !Array.isArray(guardianData)) {
+								if (guardianData.address && guardianData.address.zipCode) {
+									// Ensure guardian address zipCode is an integer
+									guardianData = {
+										...guardianData,
+										address: {
+											...guardianData.address,
+											zipCode:
+												typeof guardianData.address.zipCode === "string"
+													? parseInt(guardianData.address.zipCode) || null
+													: guardianData.address.zipCode,
+										},
+									};
+								}
+							}
+							personData.guardian = guardianData;
+						}
+
+						try {
+							person = await tx.person.create({
+								data: personData,
+							});
+
+							authLogger.info(
+								`Created new person record for verification: ${person.id}`,
+							);
+						} catch (personCreateError) {
+							authLogger.error(
+								`Failed to create person record: ${personCreateError}`,
+							);
+							authLogger.error(`Person data:`, JSON.stringify(personData, null, 2));
+							throw new Error(`Failed to create person record: ${personCreateError}`);
+						}
+					}
 
 					// Create user
 					const user = await tx.user.create({
@@ -1169,7 +1501,7 @@ export const controller = (prisma: PrismaClient) => {
 						},
 					});
 
-					// Create student record if needed
+					// Handle student record - use existing or create new
 					let student = null;
 					if (
 						pendingRegistration.type === "student" &&
@@ -1177,35 +1509,27 @@ export const controller = (prisma: PrismaClient) => {
 						pendingRegistration.program &&
 						pendingRegistration.year
 					) {
-						const studentReq = {
-							body: {
-								studentNumber: pendingRegistration.studentNumber,
-								program: pendingRegistration.program,
-								year: pendingRegistration.year,
-								personId: person.id,
-							},
-						} as Request;
+						if (existingStudentRecord) {
+							// Use existing student record
+							student = existingStudentRecord;
+							authLogger.info(
+								`Using existing student record for verification: ${student.id}`,
+							);
+						} else {
+							// Create new student record directly within transaction
+							student = await tx.student.create({
+								data: {
+									studentNumber: pendingRegistration.studentNumber,
+									program: pendingRegistration.program,
+									year: pendingRegistration.year,
+									personId: person.id,
+								},
+							});
 
-						const studentRes = {
-							statusCode: 0,
-							data: null,
-							status: function (code: number) {
-								this.statusCode = code;
-								return this;
-							},
-							json: function (data: any) {
-								this.data = data;
-								return this;
-							},
-						} as any;
-
-						await studentCtrl.create(studentReq, studentRes, next);
-
-						if (studentRes.statusCode !== 201) {
-							throw new Error("Failed to create student record");
+							authLogger.info(
+								`Created new student record for verification: ${student.id}`,
+							);
 						}
-
-						student = studentRes.data;
 					}
 
 					// Get complete user data

@@ -77,6 +77,12 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
+				if (userRole === Role.user) {
+					fieldSelections.showResultToStudent = true;
+					fieldSelections.totalScore = true;
+					fieldSelections.severityLevel = true;
+				}
+
 				query.select = fieldSelections;
 			}
 
@@ -94,9 +100,19 @@ export const controller = (prisma: PrismaClient) => {
 				assessment.severityLevel,
 			);
 
+			const shouldHideResults =
+				userRole === Role.user && assessment.showResultToStudent === false;
+			const responseAssessment = shouldHideResults
+				? {
+						...assessment,
+						totalScore: null,
+						severityLevel: null,
+					}
+				: assessment;
+
 			stressLogger.info(`${config.SUCCESS.STRESS.RETRIEVED}: ${assessment.id}`);
 			res.status(200).json({
-				...assessment,
+				...responseAssessment,
 				analysis: analysisResult,
 			});
 		} catch (error) {
@@ -198,6 +214,12 @@ export const controller = (prisma: PrismaClient) => {
 					{ id: true } as Record<string, any>,
 				);
 
+				if (userRole === Role.user) {
+					fieldSelections.showResultToStudent = true;
+					fieldSelections.totalScore = true;
+					fieldSelections.severityLevel = true;
+				}
+
 				findManyQuery.select = fieldSelections;
 			}
 
@@ -212,11 +234,22 @@ export const controller = (prisma: PrismaClient) => {
 				analysis: createAnalysisResult(assessment.totalScore, assessment.severityLevel),
 			}));
 
+			const sanitizedAssessments = assessmentsWithAnalysis.map((assessment) => {
+				if (userRole === Role.user && assessment.showResultToStudent === false) {
+					return {
+						...assessment,
+						totalScore: null,
+						severityLevel: null,
+					};
+				}
+				return assessment;
+			});
+
 			stressLogger.info(
 				`Retrieved ${assessments.length} stress assessments for role: ${userRole}`,
 			);
 			res.status(200).json({
-				assessments: assessmentsWithAnalysis,
+				assessments: sanitizedAssessments,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
@@ -488,6 +521,7 @@ export const controller = (prisma: PrismaClient) => {
 			difficulties_piling_up_cant_overcome,
 			assessmentDate,
 			cooldownActive,
+			showResultToStudent,
 		} = req.body;
 		const userRole = req.role;
 		const requestingUserId = req.userId;
@@ -547,6 +581,26 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		// Validate visibility update permissions - only admins can modify student visibility
+		if (showResultToStudent !== undefined && userRole === Role.user) {
+			stressLogger.error(
+				`User ${requestingUserId} attempted to modify assessment visibility without admin privileges`,
+			);
+			res.status(403).json({
+				error: "Insufficient permissions to modify assessment visibility",
+				message: "Only admin and guidance personnel can update assessment visibility",
+			});
+			return;
+		}
+
+		if (showResultToStudent !== undefined && typeof showResultToStudent !== "boolean") {
+			stressLogger.error(`Invalid showResultToStudent value: ${showResultToStudent}`);
+			res.status(400).json({
+				error: "Invalid showResultToStudent value - must be true or false",
+			});
+			return;
+		}
+
 		stressLogger.info(`Updating stress assessment: ${id}`);
 
 		try {
@@ -597,6 +651,8 @@ export const controller = (prisma: PrismaClient) => {
 					difficulties_piling_up_cant_overcome;
 			if (assessmentDate !== undefined) updateData.assessmentDate = new Date(assessmentDate);
 			if (cooldownActive !== undefined) updateData.cooldownActive = cooldownActive;
+			if (showResultToStudent !== undefined)
+				updateData.showResultToStudent = showResultToStudent;
 
 			// Recalculate score if any PSS-10 responses were updated
 			const hasPss10Updates = [

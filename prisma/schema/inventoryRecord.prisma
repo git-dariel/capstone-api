@@ -93,6 +93,7 @@ enum Doctors {
   psychiatrist
   psychologist
   councelor
+  none
 }
 
 enum AcademicHobbies {
@@ -279,6 +280,48 @@ type MentalHealthRisk {
   disclaimer        String
 }
 
+type SpecificMentalHealthRisk {
+  riskLevel         MentalHealthRiskLevel
+  riskScore         Int
+  maxScore          Int
+  riskPercentage    Float
+  isProne           Boolean
+  riskFactors       String[]
+  protectiveFactors String[]
+  explanation       String
+  recommendations   String[]
+  warningSignsToWatch String[]
+  immediateAction   String?
+}
+
+type MentalHealthPredictions {
+  anxiety     SpecificMentalHealthRisk
+  depression  SpecificMentalHealthRisk
+  stress      SpecificMentalHealthRisk
+  suicide     SpecificMentalHealthRisk
+}
+
+type MLPredictionResult {
+  riskLevel      String
+  riskScore      Int
+  confidence     Float
+  prediction     String
+  explanation    String
+  modelBasis     String
+  riskFactors    String[]
+  recommendations String[]
+  immediateAction String?
+}
+
+type MLPredictions {
+  anxiety           MLPredictionResult
+  depression        MLPredictionResult
+  stress            MLPredictionResult
+  modelAccuracy     Json
+  trainingDataSize  Int
+  lastTrainingDate  DateTime
+}
+
 model MentalHealthPredictionRecord {
   id                         String                     @id @default(auto()) @map("_id") @db.ObjectId
   inventory                  IndividualInventory        @relation("mentalHealthPredictions", fields: [inventoryId], references: [id], onDelete: Cascade)
@@ -288,6 +331,10 @@ model MentalHealthPredictionRecord {
   modelAccuracy              ModelAccuracy
   riskFactors                String[]
   mentalHealthRisk           MentalHealthRisk
+  // Clinical mental health assessments
+  mentalHealthPredictions    MentalHealthPredictions?
+  // NEW: Machine Learning predictions from actual outcome data
+  mlPredictions              MLPredictions?
   inputData                  Json
   recommendations            String[]
   predictionDate             DateTime                   @default(now())
@@ -299,7 +346,7 @@ model MentalHealthPredictionRecord {
 model IndividualInventory {
   id                                                    String                         @id @default(auto()) @map("_id") @db.ObjectId
   student                                               Student                        @relation(fields: [studentId], references: [id])
-  studentId                                             String                         @unique @db.ObjectId
+  studentId                                             String                         @db.ObjectId
   height                                                String
   weight                                                String
   coplexion                                             String
@@ -317,6 +364,7 @@ model IndividualInventory {
   mentalHealthPredictions                               MentalHealthPredictionRecord[] @relation("mentalHealthPredictions")
   predictionGenerated                                   Boolean                        @default(false)
   predictionUpdatedAt                                   DateTime?
+  showMlPredictionsToStudent                            Boolean                        @default(false)
   isDeleted                                             Boolean                        @default(false)
   createdAt                                             DateTime                       @default(now())
   updatedAt                                             DateTime                       @updatedAt

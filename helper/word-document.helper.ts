@@ -234,6 +234,8 @@ export const fetchMentalHealthAssessmentData = async (
 		docLogger.info(`Fetching mental health assessment data for student: ${studentId}`);
 
 		// Fetch comprehensive student data with all related information
+		// Note: Using 'individualInventories' (plural) as per Student model schema
+		// The relationship is one-to-many, so we get the most recent inventory with take: 1
 		const studentData = await prisma.student.findFirst({
 			where: {
 				id: studentId,
@@ -269,7 +271,22 @@ export const fetchMentalHealthAssessmentData = async (
 						},
 					},
 				},
-				individualInventory: true,
+				individualInventories: {
+					where: { isDeleted: false },
+					orderBy: { createdAt: "desc" },
+					take: 1, // Get only the most recent inventory
+					include: {
+						mentalHealthPredictions: {
+							where: { isDeleted: false },
+							orderBy: { predictionDate: "desc" },
+							take: 1, // Get only the latest prediction
+						},
+						significantNotes: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
+						},
+					},
+				},
 				consent: true,
 			},
 		});
@@ -286,9 +303,9 @@ export const fetchMentalHealthAssessmentData = async (
 };
 
 export const formatMentalHealthAssessmentData = (studentData: any): MentalHealthAssessmentData => {
-	const { person, individualInventory, consent } = studentData;
+	const { person, individualInventories, consent } = studentData;
 	const user = person?.users?.[0] || {};
-	const inventory = individualInventory || {};
+	const inventory = individualInventories?.[0] || {};
 	const consentData = consent || {};
 
 	// Debug logging
@@ -333,7 +350,12 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 	);
 
 	// Enhanced debugging for Mental Health Prediction
-	const predictionDebug = inventory.mentalHealthPrediction || {};
+	// Get the latest prediction from the array
+	const latestPredictionForDebug = inventory.mentalHealthPredictions?.[0] || null;
+	const predictionDebug = latestPredictionForDebug || {};
+	docLogger.info(
+		`Mental Health Predictions count: ${inventory.mentalHealthPredictions?.length || 0}`,
+	);
 	docLogger.info(`Mental Health Prediction keys: ${Object.keys(predictionDebug).join(", ")}`);
 	docLogger.info(`Confidence: ${predictionDebug.confidence || "Not found"}`);
 	docLogger.info(
@@ -374,6 +396,83 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 			name: assessmentName,
 			...assessment,
 		}));
+	};
+
+	// Helper to normalize risk level strings from ML predictions
+	const normalizeRiskLevel = (riskLevel: string | undefined | null): string => {
+		if (!riskLevel) return "";
+
+		const normalized = riskLevel.toLowerCase().trim();
+
+		if (normalized.includes("critical")) return "critical";
+		if (normalized.includes("high")) return "high";
+		if (normalized.includes("moderate")) return "moderate";
+		if (normalized.includes("low")) return "low";
+
+		return riskLevel; // Return original if no match
+	};
+
+	// Helper to get the highest risk level from ML predictions
+	const getHighestRiskFromMLPredictions = (
+		mlPredictions: any,
+	): { level: string; condition: string } => {
+		if (!mlPredictions) return { level: "", condition: "" };
+
+		const conditions = [
+			{ name: "anxiety", data: mlPredictions.anxiety },
+			{ name: "depression", data: mlPredictions.depression },
+			{ name: "stress", data: mlPredictions.stress },
+		];
+
+		let highestRisk = { level: "", condition: "" };
+		let priority = 0;
+
+		for (const condition of conditions) {
+			if (!condition.data?.riskLevel) continue;
+
+			const normalizedLevel = normalizeRiskLevel(condition.data.riskLevel);
+			let currentPriority = 0;
+
+			if (normalizedLevel === "critical") currentPriority = 4;
+			else if (normalizedLevel === "high") currentPriority = 3;
+			else if (normalizedLevel === "moderate") currentPriority = 2;
+			else if (normalizedLevel === "low") currentPriority = 1;
+
+			if (currentPriority > priority) {
+				priority = currentPriority;
+				highestRisk = { level: normalizedLevel, condition: condition.name };
+			}
+		}
+
+		return highestRisk;
+	};
+
+	// Helper to get combined recommendations from ML predictions
+	const getCombinedMLRecommendations = (mlPredictions: any): string[] => {
+		if (!mlPredictions) return [];
+
+		const allRecommendations = [
+			...(mlPredictions.anxiety?.recommendations || []),
+			...(mlPredictions.depression?.recommendations || []),
+			...(mlPredictions.stress?.recommendations || []),
+		];
+
+		// Remove duplicates and return
+		return Array.from(new Set(allRecommendations));
+	};
+
+	// Helper to get combined risk factors from ML predictions
+	const getCombinedMLRiskFactors = (mlPredictions: any): string[] => {
+		if (!mlPredictions) return [];
+
+		const allRiskFactors = [
+			...(mlPredictions.anxiety?.riskFactors || []),
+			...(mlPredictions.depression?.riskFactors || []),
+			...(mlPredictions.stress?.riskFactors || []),
+		];
+
+		// Remove duplicates and return
+		return Array.from(new Set(allRiskFactors));
 	};
 
 	// Helper to get single assessment (for fields that return single objects)
@@ -489,8 +588,88 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 	// Format interest and hobbies
 	const interests = inventory.interest_and_hobbies || {};
 
-	// Get mental health prediction data from inventory
-	const prediction = inventory.mentalHealthPrediction || {};
+	// Get mental health prediction data from inventory - use latest from array
+	const latestPrediction = inventory.mentalHealthPredictions?.[0] || null;
+	const prediction = latestPrediction || {};
+
+	// Extract prediction data - prioritize ML predictions over legacy clinical assessment
+	let predictionData = {
+		riskLevel: "",
+		urgency: "",
+		description: "",
+		assessmentSummary: "",
+		confidence: "",
+		decisionTree: "",
+		randomForest: "",
+		riskFactors: "",
+		recommendations: "",
+	};
+
+	if (prediction.mlPredictions) {
+		// NEW: Use ML predictions
+		const highestRisk = getHighestRiskFromMLPredictions(prediction.mlPredictions);
+		const combinedRecommendations = getCombinedMLRecommendations(prediction.mlPredictions);
+		const combinedRiskFactors = getCombinedMLRiskFactors(prediction.mlPredictions);
+
+		predictionData = {
+			riskLevel: `${highestRisk.condition}: ${highestRisk.level}`,
+			urgency:
+				highestRisk.level === "high" || highestRisk.level === "critical"
+					? "immediate"
+					: "none",
+			description: `ML prediction based on ${highestRisk.condition} assessment showing ${highestRisk.level} risk`,
+			assessmentSummary: `Machine learning model identified ${highestRisk.level} risk level primarily from ${highestRisk.condition} indicators`,
+			confidence: prediction.confidence
+				? Math.round(prediction.confidence * 100).toString()
+				: "",
+			decisionTree: prediction.modelAccuracy?.decisionTree
+				? Math.round(prediction.modelAccuracy.decisionTree * 100).toString()
+				: "",
+			randomForest: prediction.modelAccuracy?.randomForest
+				? Math.round(prediction.modelAccuracy.randomForest * 100).toString()
+				: "",
+			riskFactors: combinedRiskFactors.join(", "),
+			recommendations: combinedRecommendations.join(", "),
+		};
+	} else if (prediction.mentalHealthRisk) {
+		// FALLBACK: Use legacy clinical assessment
+		predictionData = {
+			riskLevel: prediction.mentalHealthRisk?.level || "",
+			urgency: prediction.mentalHealthRisk?.urgency || "",
+			description: prediction.mentalHealthRisk?.description || "",
+			assessmentSummary: prediction.mentalHealthRisk?.assessmentSummary || "",
+			confidence: prediction.confidence
+				? Math.round(prediction.confidence * 100).toString()
+				: "",
+			decisionTree: prediction.modelAccuracy?.decisionTree
+				? Math.round(prediction.modelAccuracy.decisionTree * 100).toString()
+				: "",
+			randomForest: prediction.modelAccuracy?.randomForest
+				? Math.round(prediction.modelAccuracy.randomForest * 100).toString()
+				: "",
+			riskFactors: Array.isArray(prediction.riskFactors)
+				? prediction.riskFactors.join(", ")
+				: String(prediction.riskFactors || ""),
+			recommendations: Array.isArray(prediction.recommendations)
+				? prediction.recommendations.join(", ")
+				: String(prediction.recommendations || ""),
+		};
+	}
+
+	// Debug logging for prediction structure
+	if (prediction.mlPredictions) {
+		docLogger.info("Using NEW ML Predictions structure for report generation");
+		docLogger.info(
+			`ML Predictions available: anxiety=${!!prediction.mlPredictions.anxiety}, depression=${!!prediction.mlPredictions.depression}, stress=${!!prediction.mlPredictions.stress}`,
+		);
+		const highestRisk = getHighestRiskFromMLPredictions(prediction.mlPredictions);
+		docLogger.info(`Highest risk level: ${highestRisk.level} from ${highestRisk.condition}`);
+	} else if (prediction.mentalHealthRisk) {
+		docLogger.info("Using LEGACY clinical assessment structure for report generation");
+		docLogger.info(`Legacy risk level: ${prediction.mentalHealthRisk.level}`);
+	} else {
+		docLogger.warn("No prediction data available for report generation");
+	}
 
 	// Determine the most recent/severe assessment for the summary
 	let primaryAssessment = null;
@@ -655,24 +834,16 @@ export const formatMentalHealthAssessmentData = (studentData: any): MentalHealth
 			? interests.what_are_your_hobbies.join(", ")
 			: String(interests.what_are_your_hobbies || ""),
 
-		// Mental Health Prediction
-		risk_level: prediction.mentalHealthRisk?.level || "",
-		urgency: prediction.mentalHealthRisk?.urgency || "",
-		description: prediction.mentalHealthRisk?.description || "",
-		assessment_summary: prediction.mentalHealthRisk?.assessmentSummary || "",
-		confidence: prediction.confidence ? Math.round(prediction.confidence * 100).toString() : "",
-		decision_tree: prediction.modelAccuracy?.decisionTree
-			? Math.round(prediction.modelAccuracy.decisionTree * 100).toString()
-			: "",
-		random_forest: prediction.modelAccuracy?.randomForest
-			? Math.round(prediction.modelAccuracy.randomForest * 100).toString()
-			: "",
-		risk_factors: Array.isArray(prediction.riskFactors)
-			? prediction.riskFactors.join(", ")
-			: String(prediction.riskFactors || ""),
-		recommendations: Array.isArray(prediction.recommendations)
-			? prediction.recommendations.join(", ")
-			: String(prediction.recommendations || ""),
+		// Mental Health Prediction - from latest prediction record (ML predictions or legacy clinical assessment)
+		risk_level: predictionData.riskLevel,
+		urgency: predictionData.urgency,
+		description: predictionData.description,
+		assessment_summary: predictionData.assessmentSummary,
+		confidence: predictionData.confidence,
+		decision_tree: predictionData.decisionTree,
+		random_forest: predictionData.randomForest,
+		risk_factors: predictionData.riskFactors,
+		recommendations: predictionData.recommendations,
 		prediction_date: formatDate(prediction.predictionDate),
 
 		// Assessment History - Array for table loops
