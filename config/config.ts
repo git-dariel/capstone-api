@@ -9,6 +9,7 @@ export const config = {
 	baseApiPath: "/api",
 	betterStackSourceToken: process.env.BETTER_STACK_SOURCE_TOKEN || "",
 	betterStackHost: process.env.BETTER_STACK_HOST || "",
+	JWT_SECRET: process.env.JWT_SECRET || "capstone-dev",
 
 	// Email configuration
 	email: {
@@ -16,8 +17,8 @@ export const config = {
 		host: process.env.EMAIL_HOST || "",
 		port: parseInt(process.env.EMAIL_PORT || "587"),
 		secure: process.env.EMAIL_SECURE === "true",
-		user: process.env.EMAIL_USER || "",
-		password: process.env.EMAIL_PASSWORD || "",
+		user: process.env.EMAIL_USER || "mental.health.pup.ph@gmail.com",
+		password: process.env.EMAIL_PASSWORD || "qsex zqgy sgdk mkla" || "lanb himo tmtx trla",
 	},
 
 	CORS: {
@@ -26,19 +27,23 @@ export const config = {
 			wildCardOrigin(origin, callback, "http://localhost:5173");
 		},
 		DEV_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://sureone-platform-dev.web.app");
+			wildCardOrigin(origin, callback, "https://pup-guidance-center.vercel.app");
 		},
 		TEST_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://sureone-platform-test.web.app");
+			wildCardOrigin(origin, callback, "https://pup-guidance-center.vercel.app");
 		},
 		PROD_SITE: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "https://sureoneplatform.com");
+			wildCardOrigin(origin, callback, "https://pup-guidance-center.vercel.app");
 		},
 		LOCAL_API: function (origin: string, callback: CallbackFunction) {
 			wildCardOrigin(origin, callback, "http://localhost:5000");
 		},
 		DEV_API: function (origin: string, callback: CallbackFunction) {
-			wildCardOrigin(origin, callback, "");
+			wildCardOrigin(
+				origin,
+				callback,
+				"https://mental-health-dev-796aa66da7d5.herokuapp.com",
+			);
 		},
 		TEST_API: function (origin: string, callback: CallbackFunction) {
 			wildCardOrigin(origin, callback, "");

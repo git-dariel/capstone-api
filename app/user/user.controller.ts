@@ -1,10 +1,13 @@
-import { Request, Response, NextFunction } from "express";
-import { PrismaClient, Prisma, Role } from "../../generated/prisma";
-import { getLogger } from "../../helper/logger";
-import { config } from "../../config/error.config";
-import { AuthRequest } from "../../middleware/verifyToken";
-import { requireAnyRole, requireAdmin, requireSuperAdmin } from "../../middleware/rbac";
 import bcrypt from "bcrypt";
+import { NextFunction, Request, Response } from "express";
+import { config } from "../../config/error.config";
+import { Prisma, PrismaClient, Role } from "../../generated/prisma";
+import { exportStudentDataCsv } from "../../helper/csv.helper";
+import { getLogger } from "../../helper/logger";
+import { generateMentalHealthAssessmentReport } from "../../helper/word-document.helper";
+import { requireAdmin, requireAnyRole } from "../../middleware/rbac";
+import { AuthRequest } from "../../middleware/verifyToken";
+import cloudinaryService from "../../helper/cloudinary.helper";
 
 const logger = getLogger();
 const userLogger = logger.child({ module: "user" });
@@ -65,6 +68,11 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				query.select = fieldSelections;
+			} else {
+				// Default include person when no specific fields are requested
+				query.include = {
+					person: true,
+				};
 			}
 
 			const user = await prisma.user.findFirst(query);
@@ -83,8 +91,19 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	});
 
-	const getAll = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
-		const { page = 1, limit = 10, sort, fields, query, order = "desc" } = req.query;
+	const getAll = requireAnyRole(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const {
+			page = 1,
+			limit = 10,
+			sort,
+			fields,
+			query,
+			order = "desc",
+			userId,
+			type,
+		} = req.query;
+		const userRole = req.role;
+		const requestingUserId = req.userId;
 
 		if (isNaN(Number(page)) || Number(page) < 1) {
 			userLogger.error(`${config.ERROR.USER.INVALID_PAGE}: ${page}`);
@@ -110,6 +129,12 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		if (type && !["student", "guidance"].includes(String(type))) {
+			userLogger.error(`Invalid user type filter: ${type}`);
+			res.status(400).json({ error: "Type must be either 'student' or 'guidance'" });
+			return;
+		}
+
 		if (sort) {
 			if (typeof sort === "string" && sort.startsWith("{")) {
 				try {
@@ -127,12 +152,13 @@ export const controller = (prisma: PrismaClient) => {
 		const skip = (Number(page) - 1) * Number(limit);
 
 		userLogger.info(
-			`${config.SUCCESS.USER.GETTING_ALL_USERS}, page: ${page}, limit: ${limit}, query: ${query}, order: ${order}`,
+			`${config.SUCCESS.USER.GETTING_ALL_USERS}, page: ${page}, limit: ${limit}, query: ${query}, type: ${type}, order: ${order}, requestingUser: ${requestingUserId}, role: ${userRole}`,
 		);
 
 		try {
 			const whereClause: Prisma.UserWhereInput = {
 				isDeleted: false,
+				...(type && { type: String(type) as any }), // Filter by user type (student, guidance)
 				...(query
 					? {
 							OR: [
@@ -150,6 +176,23 @@ export const controller = (prisma: PrismaClient) => {
 						}
 					: {}),
 			};
+
+			// Role-based access control
+			if (userRole === Role.user) {
+				// Regular users can see their own data OR guidance counselors (for booking appointments)
+				if (type === "guidance") {
+					// Allow students to view guidance counselors for appointment booking
+					// The type filter is already applied above, so no additional restriction needed
+				} else {
+					// For other queries, users can only see their own data
+					whereClause.id = requestingUserId;
+				}
+			} else if (userRole === Role.admin || userRole === Role.super_admin) {
+				// Admins can see all users, but can also filter by specific userId if provided
+				if (userId) {
+					whereClause.id = String(userId);
+				}
+			}
 
 			const findManyQuery: Prisma.UserFindManyArgs = {
 				where: whereClause,
@@ -185,6 +228,11 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				findManyQuery.select = fieldSelections;
+			} else {
+				// Default include person when no specific fields are requested
+				findManyQuery.include = {
+					person: true,
+				};
 			}
 
 			const [users, total] = await Promise.all([
@@ -207,7 +255,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const update = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
-		const { userName, role, type, status, password, ...personData } = req.body;
+		const { userName, role, type, status, password, currentPassword, ...personData } = req.body;
 
 		if (!id) {
 			userLogger.error(config.ERROR.USER.MISSING_ID);
@@ -235,9 +283,20 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (personData.contactNumber) {
-			const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-			if (!phoneRegex.test(personData.contactNumber)) {
+		if (personData.contactNumber && personData.contactNumber.trim() !== "") {
+			// More flexible phone regex that allows:
+			// - Optional + at start
+			// - Digits 0-9 (including leading zeros for local formats)
+			// - 7-15 digits total (standard phone number length range)
+			// - Optional spaces, dashes, parentheses for formatting
+			const phoneRegex = /^\+?[\d\s\-\(\)]{7,20}$/;
+			const cleanedPhone = personData.contactNumber.replace(/[\s\-\(\)]/g, "");
+
+			if (
+				!phoneRegex.test(personData.contactNumber) ||
+				cleanedPhone.length < 7 ||
+				cleanedPhone.length > 15
+			) {
 				userLogger.error(`${config.ERROR.USER.INVALID_PHONE}: ${personData.contactNumber}`);
 				res.status(400).json({ error: config.ERROR.USER.INVALID_PHONE });
 				return;
@@ -276,7 +335,39 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Hash password if provided
+			// Validate current password if password is being updated
+			if (password) {
+				if (!currentPassword) {
+					userLogger.error(
+						`Current password is required when updating password for user: ${id}`,
+					);
+					res.status(400).json({
+						error: "Current password is required to update password",
+					});
+					return;
+				}
+
+				// Verify current password
+				if (!existingUser.password) {
+					userLogger.error(`User has no password set: ${id}`);
+					res.status(400).json({ error: "No password set for this user" });
+					return;
+				}
+
+				const isCurrentPasswordValid = await bcrypt.compare(
+					currentPassword,
+					existingUser.password,
+				);
+				if (!isCurrentPasswordValid) {
+					userLogger.error(`Invalid current password for user: ${id}`);
+					res.status(400).json({ error: "Current password is incorrect" });
+					return;
+				}
+
+				userLogger.info(`Current password validated for user: ${id}`);
+			}
+
+			// Hash new password if provided
 			let hashedPassword = null;
 			if (password) {
 				hashedPassword = await bcrypt.hash(password, 10);
@@ -315,46 +406,334 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const remove = requireSuperAdmin(
-		async (req: AuthRequest, res: Response, _next: NextFunction) => {
-			const { id } = req.params;
+	const remove = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
 
-			if (!id) {
-				userLogger.error(config.ERROR.USER.MISSING_ID);
-				res.status(400).json({ error: config.ERROR.USER.USER_ID_REQUIRED });
+		if (!id) {
+			userLogger.error(config.ERROR.USER.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.USER.USER_ID_REQUIRED });
+			return;
+		}
+
+		userLogger.info(`${config.SUCCESS.USER.SOFT_DELETING}: ${id}`);
+
+		try {
+			const existingUser = await prisma.user.findUnique({
+				where: { id },
+				include: { person: true },
+			});
+
+			if (!existingUser) {
+				userLogger.error(`${config.ERROR.USER.NOT_FOUND}: ${id}`);
+				res.status(404).json({ error: config.ERROR.USER.NOT_FOUND });
 				return;
 			}
 
-			userLogger.info(`${config.SUCCESS.USER.SOFT_DELETING}: ${id}`);
+			await prisma.$transaction([
+				prisma.user.update({
+					where: { id },
+					data: { isDeleted: true },
+				}),
+				prisma.person.update({
+					where: { id: existingUser.person?.id },
+					data: { isDeleted: true },
+				}),
+			]);
+
+			userLogger.info(`${config.SUCCESS.USER.DELETED}: ${id}`);
+			res.status(200).json({ message: config.SUCCESS.USER.DELETED });
+		} catch (error) {
+			userLogger.error(`${config.ERROR.USER.ERROR_DELETING_USER}: ${error}`);
+			res.status(500).json({ error: config.ERROR.USER.INTERNAL_SERVER_ERROR });
+		}
+	});
+
+	const exportCsv = requireAdmin(async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const {
+			program,
+			gender,
+			severityLevel,
+			status,
+			assessmentType,
+			studentId,
+			firstName,
+			lastName,
+			year,
+		} = req.query;
+
+		userLogger.info(
+			`CSV export requested with filters: program=${program}, gender=${gender}, severityLevel=${severityLevel}, status=${status}, assessmentType=${assessmentType}, studentId=${studentId}, firstName=${firstName}, lastName=${lastName}, year=${year}`,
+		);
+
+		// Validate filter parameters
+		if (gender && !["male", "female", "other", "prefer_not_to_say"].includes(String(gender))) {
+			userLogger.error(`Invalid gender filter: ${gender}`);
+			res.status(400).json({
+				error: "Invalid gender filter. Must be one of: male, female, other, prefer_not_to_say",
+			});
+			return;
+		}
+
+		if (
+			severityLevel &&
+			!["minimal", "mild", "moderate", "moderately_severe", "severe", "low", "high"].includes(
+				String(severityLevel),
+			)
+		) {
+			userLogger.error(`Invalid severity level filter: ${severityLevel}`);
+			res.status(400).json({
+				error: "Invalid severity level filter. Must be one of: minimal, mild, moderate, moderately_severe, severe, low, high",
+			});
+			return;
+		}
+
+		if (status && !["freshman", "sophomore", "junior", "senior"].includes(String(status))) {
+			userLogger.error(`Invalid status filter: ${status}`);
+			res.status(400).json({
+				error: "Invalid status filter. Must be one of: freshman, sophomore, junior, senior",
+			});
+			return;
+		}
+
+		if (year && !["1st", "2nd", "3rd", "4th", "graduated"].includes(String(year))) {
+			userLogger.error(`Invalid year filter: ${year}`);
+			res.status(400).json({
+				error: "Invalid year filter. Must be one of: 1st, 2nd, 3rd, 4th, graduated",
+			});
+			return;
+		}
+
+		if (
+			assessmentType &&
+			!["anxiety", "depression", "stress", "suicide", "checklist"].includes(
+				String(assessmentType),
+			)
+		) {
+			userLogger.error(`Invalid assessment type filter: ${assessmentType}`);
+			res.status(400).json({
+				error: "Invalid assessment type filter. Must be one of: anxiety, depression, stress, suicide, checklist",
+			});
+			return;
+		}
+
+		try {
+			const filters = {
+				program: program ? String(program) : undefined,
+				gender: gender ? String(gender) : undefined,
+				severityLevel: severityLevel ? String(severityLevel) : undefined,
+				status: status ? String(status) : undefined,
+				assessmentType: assessmentType ? String(assessmentType) : undefined,
+				studentId: studentId ? String(studentId) : undefined,
+				firstName: firstName ? String(firstName) : undefined,
+				lastName: lastName ? String(lastName) : undefined,
+				year: year ? String(year) : undefined,
+			};
+
+			const csvContent = await exportStudentDataCsv(prisma, filters);
+
+			// Generate dynamic filename based on filters
+			let filename = "student_mental_health_data";
+			if (filters.assessmentType) {
+				filename += `_${filters.assessmentType}`;
+			}
+			if (Object.values(filters).some((filter) => filter !== undefined)) {
+				filename += "_filtered";
+			}
+			filename += ".csv";
+
+			// Set headers for CSV download
+			res.setHeader("Content-Type", "text/csv");
+			res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+			userLogger.info("CSV export completed successfully");
+			res.status(200).send(csvContent);
+		} catch (error) {
+			userLogger.error(`Error exporting CSV: ${error}`);
+			res.status(500).json({ error: "Failed to export CSV data" });
+		}
+	});
+
+	const uploadAvatar = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const file = req.file as Express.Multer.File;
+		const userId = req.userId;
+
+		if (!userId) {
+			userLogger.error(config.ERROR.USER.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.USER.USER_ID_REQUIRED });
+			return;
+		}
+
+		if (!file) {
+			userLogger.error("No file provided for avatar upload");
+			res.status(400).json({ error: "No file provided for avatar upload" });
+			return;
+		}
+
+		userLogger.info(`Uploading avatar for user: ${userId}`);
+
+		try {
+			// Verify user exists
+			const user = await prisma.user.findFirst({
+				where: { id: userId, isDeleted: false },
+			});
+
+			if (!user) {
+				userLogger.error(`${config.ERROR.USER.NOT_FOUND}: ${userId}`);
+				res.status(404).json({ error: config.ERROR.USER.NOT_FOUND });
+				return;
+			}
+
+			// Upload file to cloudinary
+			const uploadResult = await cloudinaryService.uploadAttachment(
+				file,
+				`avatars/${userId}`,
+			);
+
+			// Update the user with the new avatar URL
+			const updatedUser = await prisma.user.update({
+				where: { id: userId },
+				data: { avatar: uploadResult.url },
+				include: { person: true },
+			});
+
+			userLogger.info(`Successfully uploaded avatar for user: ${userId}`);
+			res.status(200).json({
+				avatar: {
+					name: uploadResult.filename,
+					url: uploadResult.url,
+				},
+				updatedUser: {
+					id: updatedUser.id,
+					avatar: updatedUser.avatar,
+				},
+			});
+		} catch (error) {
+			userLogger.error(`Error uploading avatar for user ${userId}: ${error}`);
+			res.status(500).json({ error: "Failed to upload avatar" });
+		}
+	};
+
+	const deleteAvatar = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const userId = req.userId;
+
+		if (!userId) {
+			userLogger.error(config.ERROR.USER.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.USER.USER_ID_REQUIRED });
+			return;
+		}
+
+		try {
+			const user = await prisma.user.findFirst({
+				where: { id: userId, isDeleted: false },
+			});
+
+			if (!user) {
+				userLogger.error(`${config.ERROR.USER.NOT_FOUND}: ${userId}`);
+				res.status(404).json({ error: config.ERROR.USER.NOT_FOUND });
+				return;
+			}
+
+			if (!user.avatar) {
+				userLogger.error(`No avatar found for user ${userId}`);
+				res.status(404).json({ error: "No avatar found for this user" });
+				return;
+			}
+
+			// Extract the filename from the URL if needed
+			const urlParts = user.avatar.split("/");
+			const filename = urlParts[urlParts.length - 1];
+
+			// Remove the avatar from the user
+			await prisma.user.update({
+				where: { id: userId },
+				data: { avatar: null },
+			});
+
+			// Attempt to delete from Cloudinary
+			try {
+				await cloudinaryService.deleteAttachment(filename, `avatars/${userId}`);
+			} catch (error) {
+				userLogger.error(
+					`Error deleting avatar from Cloudinary for user ${userId}: ${error}`,
+				);
+			}
+
+			userLogger.info(`Deleted avatar for user: ${userId}`);
+			res.status(200).json({
+				message: "Avatar deleted successfully",
+			});
+		} catch (error) {
+			userLogger.error(`Error deleting avatar for user ${userId}: ${error}`);
+			res.status(500).json({ error: "Failed to delete avatar" });
+		}
+	};
+
+	const exportMentalHealthAssessment = requireAdmin(
+		async (req: AuthRequest, res: Response, _next: NextFunction) => {
+			const { studentId } = req.params;
+
+			if (!studentId) {
+				userLogger.error("Missing student ID for mental health assessment export");
+				res.status(400).json({ error: "Student ID is required" });
+				return;
+			}
+
+			userLogger.info(
+				`Mental health assessment report requested for student: ${studentId}, by user: ${req.userId}`,
+			);
 
 			try {
-				const existingUser = await prisma.user.findUnique({
-					where: { id },
-					include: { person: true },
+				// Verify the student exists
+				const student = await prisma.student.findFirst({
+					where: {
+						id: studentId,
+						isDeleted: false,
+					},
+					include: {
+						person: {
+							select: {
+								firstName: true,
+								lastName: true,
+							},
+						},
+					},
 				});
 
-				if (!existingUser) {
-					userLogger.error(`${config.ERROR.USER.NOT_FOUND}: ${id}`);
-					res.status(404).json({ error: config.ERROR.USER.NOT_FOUND });
+				if (!student) {
+					userLogger.error(`Student not found: ${studentId}`);
+					res.status(404).json({ error: "Student not found" });
 					return;
 				}
 
-				await prisma.$transaction([
-					prisma.user.update({
-						where: { id },
-						data: { isDeleted: true },
-					}),
-					prisma.person.update({
-						where: { id: existingUser.person?.id },
-						data: { isDeleted: true },
-					}),
-				]);
+				// Generate the mental health assessment report
+				const { buffer, fileName } = await generateMentalHealthAssessmentReport(
+					prisma,
+					studentId,
+					req.userId!,
+				);
 
-				userLogger.info(`${config.SUCCESS.USER.DELETED}: ${id}`);
-				res.status(200).json({ message: config.SUCCESS.USER.DELETED });
-			} catch (error) {
-				userLogger.error(`${config.ERROR.USER.ERROR_DELETING_USER}: ${error}`);
-				res.status(500).json({ error: config.ERROR.USER.INTERNAL_SERVER_ERROR });
+				userLogger.info(
+					`Mental health assessment report generated successfully for student: ${studentId}`,
+				);
+
+				// Set response headers for file download
+				res.setHeader(
+					"Content-Type",
+					"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				);
+				res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+				res.setHeader("Content-Length", buffer.length);
+
+				// Send the file buffer
+				res.send(buffer);
+			} catch (error: any) {
+				userLogger.error(
+					`Error generating mental health assessment report: ${error.message}`,
+				);
+				res.status(500).json({
+					error: "Failed to generate mental health assessment report",
+					details: error.message,
+				});
 			}
 		},
 	);
@@ -364,5 +743,9 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		update,
 		remove,
+		exportCsv,
+		uploadAvatar,
+		deleteAvatar,
+		exportMentalHealthAssessment,
 	};
 };

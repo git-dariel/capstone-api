@@ -36,6 +36,7 @@ interface EmailMessage {
 	html?: string;
 	attachments?: EmailAttachment[];
 	replyTo?: string;
+	headers?: Record<string, string>;
 }
 
 interface EmailResponse {
@@ -101,6 +102,7 @@ class NodeMailerService implements EmailService {
 				html: message.html,
 				attachments: message.attachments,
 				replyTo: message.replyTo,
+				headers: message.headers,
 			};
 
 			const result = await this.transporter.sendMail(mailOptions);
@@ -262,6 +264,112 @@ export const createSMTPConfig = (
 ): EmailConfig => {
 	return createEmailConfig("smtp", { host, port, user, password, secure });
 };
+
+// OTP Email functionality
+export class OTPEmailHelper {
+	private emailHelper: EmailHelper;
+
+	constructor(config: EmailConfig) {
+		this.emailHelper = new EmailHelper(config);
+	}
+
+	/**
+	 * Generate a 6-digit OTP
+	 */
+	generateOTP(): string {
+		return Math.floor(100000 + Math.random() * 900000).toString();
+	}
+
+	/**
+	 * Send OTP email to user
+	 * @param email - Recipient email address
+	 * @param otp - 6-digit OTP code
+	 * @param firstName - User's first name for personalization
+	 */
+	async sendOTPEmail(email: string, otp: string, firstName?: string): Promise<EmailResponse> {
+		const subject = "Verify Your Email - Mental Health System";
+		const htmlContent = this.generateOTPEmailHTML(otp, firstName);
+
+		return this.emailHelper.sendHtmlEmail(email, subject, htmlContent);
+	}
+
+	/**
+	 * Generate HTML content for OTP email
+	 * @param otp - 6-digit OTP code
+	 * @param firstName - User's first name
+	 */
+	private generateOTPEmailHTML(otp: string, firstName?: string): string {
+		const greeting = firstName ? `Hello ${firstName}!` : "Hello!";
+
+		return `
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<meta charset="UTF-8">
+				<title>Email Verification</title>
+				<style>
+					body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px; }
+					.container { max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 10px; }
+					.header { text-align: center; margin-bottom: 30px; }
+					.otp-container { 
+						background-color: #f8f9fa; 
+						border: 2px solid #007bff; 
+						padding: 20px; 
+						text-align: center; 
+						margin: 20px 0; 
+						border-radius: 5px;
+					}
+					.otp-code { 
+						font-size: 24px; 
+						font-weight: bold; 
+						color: #007bff; 
+						letter-spacing: 2px; 
+						font-family: monospace; 
+					}
+					.otp-label { 
+						color: #666666; 
+						margin-bottom: 10px; 
+						font-weight: bold;
+					}
+				</style>
+			</head>
+			<body>
+				<div class="container">
+					<div class="header">
+						<h1>🔐 Email Verification</h1>
+					</div>
+					
+					<p>${greeting}</p>
+					<p>Welcome to the Mental Health System! To complete your registration and verify your email address, please use the verification code below:</p>
+
+					<div class="otp-container">
+						<div class="otp-label">Your Verification Code</div>
+						<div class="otp-code">${otp}</div>
+					</div>
+
+					<p>Please enter this code in the verification form to activate your account. This code is valid for <strong>10 minutes</strong> only.</p>
+
+					<p><strong>Security Notice:</strong></p>
+					<ul>
+						<li>Never share this code with anyone</li>
+						<li>We will never ask for this code via phone or email</li>
+						<li>If you didn't request this verification, please ignore this email</li>
+					</ul>
+
+					<p>Best regards,<br>Mental Health System Team</p>
+				</div>
+			</body>
+			</html>
+		`;
+	}
+
+	/**
+	 * Verify email service connection
+	 */
+	async verifyConnection(): Promise<boolean> {
+		return this.emailHelper.verifyConnection();
+	}
+}
 
 // Export types for external use
 export type { EmailConfig, EmailMessage, EmailResponse, EmailAttachment };

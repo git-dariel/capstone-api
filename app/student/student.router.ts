@@ -1,11 +1,19 @@
 import { Router, Request, Response, NextFunction } from "express";
+import { Role } from "../../generated/prisma";
+import verifyToken from "../../middleware/verifyToken";
+import verifyRole from "../../middleware/verifyRole";
+import multerHelper from "../../helper/multer.helper";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
+	updateYearLevels(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
+	uploadStudentsCSV(req: Request, res: Response, next: NextFunction): Promise<void>;
+	graduateStudent(req: Request, res: Response, next: NextFunction): Promise<void>;
+	graduateMultipleStudents(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -17,7 +25,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 * /api/student/{id}:
 	 *   get:
 	 *     summary: Get student by id
-	 *     description: Get student by id with optional fields to include
+	 *     description: Get student by id with optional field selection using dot notation
 	 *     tags: [Student]
 	 *     parameters:
 	 *       - in: path
@@ -25,18 +33,42 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         required: true
 	 *         schema:
 	 *           type: string
+	 *         description: Student ID
 	 *       - in: query
 	 *         name: fields
 	 *         schema:
 	 *           type: string
-	 *         description: Comma-separated list of fields to include
+	 *         description: Comma-separated list of fields to include (supports dot notation for nested fields like "person.firstName")
+	 *         example: "id,studentNumber,program,person.firstName,person.lastName"
 	 *     responses:
 	 *       200:
 	 *         description: Returns student data
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: '#/components/schemas/Student'
 	 *       400:
 	 *         description: Missing ID or invalid fields parameter
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "User ID is required"
+	 *                     - "Populate must be a string"
 	 *       404:
 	 *         description: Student not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student not found"
 	 *       500:
 	 *         description: Internal server error
 	 */
@@ -47,7 +79,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 * /api/student:
 	 *   get:
 	 *     summary: Get all students
-	 *     description: Get all students with pagination, sorting, and field selection
+	 *     description: Get all students with pagination, sorting, field selection, and search functionality
 	 *     tags: [Student]
 	 *     parameters:
 	 *       - in: query
@@ -55,34 +87,40 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         schema:
 	 *           type: integer
 	 *           minimum: 1
-	 *         description: Page number (default 1)
+	 *           default: 1
+	 *         description: Page number
 	 *       - in: query
 	 *         name: limit
 	 *         schema:
 	 *           type: integer
 	 *           minimum: 1
-	 *         description: Records per page (default 10)
+	 *           default: 10
+	 *         description: Records per page
 	 *       - in: query
 	 *         name: sort
 	 *         schema:
 	 *           type: string
 	 *         description: Field to sort by or JSON string of sort criteria
+	 *         example: "studentNumber"
 	 *       - in: query
 	 *         name: order
 	 *         schema:
 	 *           type: string
 	 *           enum: [asc, desc]
-	 *         description: Sort order (default desc)
+	 *           default: desc
+	 *         description: Sort order
 	 *       - in: query
 	 *         name: fields
 	 *         schema:
 	 *           type: string
 	 *         description: Comma-separated list of fields to include, supports nested fields with dot notation
+	 *         example: "id,studentNumber,program,person.firstName,person.email"
 	 *       - in: query
 	 *         name: query
 	 *         schema:
 	 *           type: string
-	 *         description: Search query to filter results by studentNumber, program, or year
+	 *         description: Search query to filter results by studentNumber, program, year, person firstName, lastName, or email
+	 *         example: "Computer Science"
 	 *     responses:
 	 *       200:
 	 *         description: Returns paginated students list with total count and page info
@@ -94,15 +132,31 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                 students:
 	 *                   type: array
 	 *                   items:
-	 *                     type: object
+	 *                     $ref: '#/components/schemas/Student'
 	 *                 total:
 	 *                   type: integer
+	 *                   description: Total number of students
 	 *                 page:
 	 *                   type: integer
+	 *                   description: Current page number
 	 *                 totalPages:
 	 *                   type: integer
+	 *                   description: Total number of pages
 	 *       400:
-	 *         description: Invalid page, limit, order, fields, or sort parameters
+	 *         description: Invalid parameters
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Invalid page number"
+	 *                     - "Invalid limit"
+	 *                     - "Order must be 'asc' or 'desc'"
+	 *                     - "Populate must be a string"
+	 *                     - "Sort must be a string"
 	 *       500:
 	 *         description: Internal server error
 	 */
@@ -112,8 +166,8 @@ export const router = (route: Router, controller: IController): Router => {
 	 * @openapi
 	 * /api/student:
 	 *   post:
-	 *     summary: Create student with user and person
-	 *     description: Creates a new student with associated user and person data
+	 *     summary: Create a new student
+	 *     description: Creates a new student record. Can either link to existing person (via personId) or create a new person.
 	 *     tags: [Student]
 	 *     requestBody:
 	 *       required: true
@@ -125,7 +179,6 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               - studentNumber
 	 *               - program
 	 *               - year
-	 *               - user
 	 *             properties:
 	 *               studentNumber:
 	 *                 type: string
@@ -139,107 +192,123 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                 type: string
 	 *                 example: "1st Year"
 	 *                 description: Current academic year level
-	 *               user:
+	 *               personId:
+	 *                 type: string
+	 *                 description: Optional - ID of existing person to link to student
+	 *               firstName:
+	 *                 type: string
+	 *                 example: "John"
+	 *                 description: Required if creating new person (no personId provided)
+	 *               lastName:
+	 *                 type: string
+	 *                 example: "Doe"
+	 *                 description: Required if creating new person (no personId provided)
+	 *               middleName:
+	 *                 type: string
+	 *                 example: "Michael"
+	 *               suffix:
+	 *                 type: string
+	 *                 example: "Jr."
+	 *               email:
+	 *                 type: string
+	 *                 format: email
+	 *                 example: "john.doe@university.edu"
+	 *               contactNumber:
+	 *                 type: string
+	 *                 example: "+1234567890"
+	 *               gender:
+	 *                 type: string
+	 *                 example: "Male"
+	 *               birthDate:
+	 *                 type: string
+	 *                 format: date
+	 *                 example: "2000-01-01"
+	 *               birthPlace:
+	 *                 type: string
+	 *                 example: "New York"
+	 *               age:
+	 *                 type: integer
+	 *                 example: 20
+	 *               religion:
+	 *                 type: string
+	 *                 example: "Christian"
+	 *               civilStatus:
+	 *                 type: string
+	 *                 example: "Single"
+	 *               address:
 	 *                 type: object
-	 *                 required:
-	 *                   - userName
-	 *                   - email
-	 *                   - password
-	 *                   - person
 	 *                 properties:
-	 *                   userName:
+	 *                   street:
 	 *                     type: string
-	 *                     example: "john.doe"
-	 *                   email:
+	 *                     example: "123 Main St"
+	 *                   city:
 	 *                     type: string
-	 *                     format: email
-	 *                     example: "john.doe@university.edu"
-	 *                   password:
+	 *                     example: "New York"
+	 *                   houseNo:
 	 *                     type: string
-	 *                     minLength: 6
-	 *                     example: "password123"
-	 *                   person:
-	 *                     type: object
-	 *                     required:
-	 *                       - firstName
-	 *                       - lastName
-	 *                       - email
-	 *                     properties:
-	 *                       firstName:
-	 *                         type: string
-	 *                         example: "John"
-	 *                       lastName:
-	 *                         type: string
-	 *                         example: "Doe"
-	 *                       middleName:
-	 *                         type: string
-	 *                         example: "Michael"
-	 *                       email:
-	 *                         type: string
-	 *                         format: email
-	 *                         example: "john.doe@university.edu"
-	 *                       contactNumber:
-	 *                         type: string
-	 *                         example: "+1234567890"
-	 *                       suffix:
-	 *                         type: string
-	 *                         example: "Jr."
-	 *                       gender:
-	 *                         type: string
-	 *                         enum: [male, female, others]
-	 *                         example: "male"
-	 *                       birthDate:
-	 *                         type: string
-	 *                         format: date-time
-	 *                         example: "2000-01-01T00:00:00.000Z"
-	 *                       birthPlace:
-	 *                         type: string
-	 *                         example: "New York"
-	 *                       age:
-	 *                         type: integer
-	 *                         example: 20
-	 *                       religion:
-	 *                         type: string
-	 *                         example: "Christian"
-	 *                       civilStatus:
-	 *                         type: string
-	 *                         enum: [single, married, separated, widow, cohabiting]
-	 *                         example: "single"
-	 *                       address:
-	 *                         type: object
-	 *                         properties:
-	 *                           houseNo:
-	 *                             type: integer
-	 *                             example: 123
-	 *                           street:
-	 *                             type: string
-	 *                             example: "Main Street"
-	 *                           province:
-	 *                             type: string
-	 *                             example: "Metro Manila"
-	 *                           city:
-	 *                             type: string
-	 *                             example: "Quezon City"
-	 *                           barangay:
-	 *                             type: string
-	 *                             example: "Barangay 1"
-	 *                           zipCode:
-	 *                             type: integer
-	 *                             example: 1100
-	 *                           country:
-	 *                             type: string
-	 *                             example: "Philippines"
-	 *                           type:
-	 *                             type: string
-	 *                             enum: [permanent, current, temporary, previous]
-	 *                             example: "current"
+	 *                     example: "123"
+	 *                   province:
+	 *                     type: string
+	 *                     example: "New York"
+	 *                   barangay:
+	 *                     type: string
+	 *                     example: "Downtown"
+	 *                   zipCode:
+	 *                     type: string
+	 *                     example: "10001"
+	 *                   country:
+	 *                     type: string
+	 *                     example: "USA"
+	 *                   type:
+	 *                     type: string
+	 *                     example: "Home"
 	 *     responses:
 	 *       201:
-	 *         description: Returns newly created student with user and person data
-	 *       200:
-	 *         description: Returns existing student if email already exists
+	 *         description: Student created successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Student created successfully"
+	 *                 id:
+	 *                   type: string
+	 *                 studentNumber:
+	 *                   type: string
+	 *                 program:
+	 *                   type: string
+	 *                 year:
+	 *                   type: string
+	 *                 person:
+	 *                   $ref: '#/components/schemas/Person'
 	 *       400:
-	 *         description: Missing required fields or student number already exists
+	 *         description: Bad request
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "Student number is required"
+	 *                     - "Program is required"
+	 *                     - "Year is required"
+	 *                     - "First name and last name are required when creating a new person"
+	 *                     - "Student number already exists"
+	 *                     - "Person with this email already exists"
+	 *       404:
+	 *         description: Person not found (when personId provided)
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Person not found"
 	 *       500:
 	 *         description: Internal server error
 	 */
@@ -250,7 +319,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 * /api/student/{id}:
 	 *   patch:
 	 *     summary: Update student
-	 *     description: Update student data with nested user and person information
+	 *     description: Update student data and optionally associated person information
 	 *     tags: [Student]
 	 *     parameters:
 	 *       - in: path
@@ -258,6 +327,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         required: true
 	 *         schema:
 	 *           type: string
+	 *         description: Student ID
 	 *     requestBody:
 	 *       content:
 	 *         application/json:
@@ -276,98 +346,118 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                 type: string
 	 *                 example: "2nd Year"
 	 *                 description: Current academic year level
-	 *               user:
+	 *               person:
 	 *                 type: object
+	 *                 description: Person data to update
 	 *                 properties:
-	 *                   userName:
+	 *                   firstName:
 	 *                     type: string
-	 *                     example: "john.doe"
+	 *                     example: "John"
+	 *                   lastName:
+	 *                     type: string
+	 *                     example: "Doe"
+	 *                   middleName:
+	 *                     type: string
+	 *                     example: "Michael"
+	 *                   suffix:
+	 *                     type: string
+	 *                     example: "Jr."
 	 *                   email:
 	 *                     type: string
 	 *                     format: email
 	 *                     example: "john.doe@university.edu"
-	 *                   password:
+	 *                   contactNumber:
 	 *                     type: string
-	 *                     minLength: 6
-	 *                     example: "newpassword123"
-	 *                   person:
+	 *                     example: "+1234567890"
+	 *                   gender:
+	 *                     type: string
+	 *                     example: "Male"
+	 *                   birthDate:
+	 *                     type: string
+	 *                     format: date
+	 *                     example: "2000-01-01"
+	 *                   birthPlace:
+	 *                     type: string
+	 *                     example: "New York"
+	 *                   age:
+	 *                     type: integer
+	 *                     example: 21
+	 *                   religion:
+	 *                     type: string
+	 *                     example: "Christian"
+	 *                   civilStatus:
+	 *                     type: string
+	 *                     example: "Single"
+	 *                   address:
 	 *                     type: object
+	 *                     description: Address fields to update (will be merged with existing address)
 	 *                     properties:
-	 *                       firstName:
+	 *                       street:
 	 *                         type: string
-	 *                         example: "John"
-	 *                       lastName:
+	 *                         example: "456 Oak Avenue"
+	 *                       city:
 	 *                         type: string
-	 *                         example: "Doe"
-	 *                       middleName:
+	 *                         example: "Boston"
+	 *                       houseNo:
 	 *                         type: string
-	 *                         example: "Michael"
-	 *                       email:
+	 *                         example: "456"
+	 *                       province:
 	 *                         type: string
-	 *                         format: email
-	 *                         example: "john.doe@university.edu"
-	 *                       contactNumber:
+	 *                         example: "Massachusetts"
+	 *                       barangay:
 	 *                         type: string
-	 *                         example: "+1234567890"
-	 *                       suffix:
+	 *                         example: "Back Bay"
+	 *                       zipCode:
 	 *                         type: string
-	 *                         example: "Jr."
-	 *                       gender:
+	 *                         example: "02101"
+	 *                       country:
 	 *                         type: string
-	 *                         enum: [male, female, others]
-	 *                         example: "male"
-	 *                       birthDate:
+	 *                         example: "USA"
+	 *                       type:
 	 *                         type: string
-	 *                         format: date-time
-	 *                         example: "2000-01-01T00:00:00.000Z"
-	 *                       birthPlace:
-	 *                         type: string
-	 *                         example: "New York"
-	 *                       age:
-	 *                         type: integer
-	 *                         example: 21
-	 *                       religion:
-	 *                         type: string
-	 *                         example: "Christian"
-	 *                       civilStatus:
-	 *                         type: string
-	 *                         enum: [single, married, separated, widow, cohabiting]
-	 *                         example: "single"
-	 *                       address:
-	 *                         type: object
-	 *                         properties:
-	 *                           houseNo:
-	 *                             type: integer
-	 *                             example: 123
-	 *                           street:
-	 *                             type: string
-	 *                             example: "Main Street"
-	 *                           province:
-	 *                             type: string
-	 *                             example: "Metro Manila"
-	 *                           city:
-	 *                             type: string
-	 *                             example: "Quezon City"
-	 *                           barangay:
-	 *                             type: string
-	 *                             example: "Barangay 1"
-	 *                           zipCode:
-	 *                             type: integer
-	 *                             example: 1100
-	 *                           country:
-	 *                             type: string
-	 *                             example: "Philippines"
-	 *                           type:
-	 *                             type: string
-	 *                             enum: [permanent, current, temporary, previous]
-	 *                             example: "current"
+	 *                         example: "Current"
 	 *     responses:
 	 *       200:
-	 *         description: Returns updated student with user and person data
+	 *         description: Student updated successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 id:
+	 *                   type: string
+	 *                 studentNumber:
+	 *                   type: string
+	 *                 program:
+	 *                   type: string
+	 *                 year:
+	 *                   type: string
+	 *                 person:
+	 *                   $ref: '#/components/schemas/Person'
 	 *       400:
-	 *         description: Missing ID, no update fields provided, or student number already exists
+	 *         description: Bad request
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "User ID is required"
+	 *                     - "At least one field is required for update"
+	 *                     - "Student number already exists"
+	 *                     - "Student person data not found"
 	 *       404:
 	 *         description: Student not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student not found"
 	 *       500:
 	 *         description: Internal server error
 	 */
@@ -386,17 +476,266 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         required: true
 	 *         schema:
 	 *           type: string
+	 *         description: Student ID
 	 *     responses:
 	 *       200:
 	 *         description: Student marked as deleted successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Student deleted successfully"
 	 *       400:
 	 *         description: Missing ID
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "User ID is required"
+	 *       404:
+	 *         description: Student not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Student not found"
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.put("/:id", controller.remove);
+
+	/**
+	 * @openapi
+	 * /api/student/update-year-levels:
+	 *   post:
+	 *     summary: Manually update all student year levels
+	 *     description: Manually trigger the year level update job for all students. Updates year levels based on enrollment year extracted from student numbers.
+	 *     tags: [Student]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: Year levels updated successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "Student year levels updated successfully"
+	 *                 success:
+	 *                   type: boolean
+	 *                   example: true
+	 *                 total:
+	 *                   type: number
+	 *                   example: 100
+	 *                 updated:
+	 *                   type: number
+	 *                   example: 25
+	 *                 skipped:
+	 *                   type: number
+	 *                   example: 75
+	 *                 errors:
+	 *                   type: number
+	 *                   example: 0
+	 *                 duration:
+	 *                   type: number
+	 *                   example: 1250
+	 *       500:
+	 *         description: Internal server error
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   example: "Failed to update student year levels"
+	 */
+	routes.post("/update-year-levels", controller.updateYearLevels);
+
+	/**
+	 * @openapi
+	 * /api/student/upload-csv:
+	 *   post:
+	 *     summary: Upload students from CSV file
+	 *     description: Bulk upload first-year students from CSV file. Only accessible to guidance users. CSV should have columns STUDENT NUMBER and FULL NAME.
+	 *     tags: [Student]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       content:
+	 *         multipart/form-data:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               file:
+	 *                 type: string
+	 *                 format: binary
+	 *                 description: CSV file with student data
+	 *     responses:
+	 *       200:
+	 *         description: CSV processed successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                   example: "CSV upload completed"
+	 *                 results:
+	 *                   type: object
+	 *                   properties:
+	 *                     total:
+	 *                       type: number
+	 *                       example: 100
+	 *                     successful:
+	 *                       type: number
+	 *                       example: 95
+	 *                     skipped:
+	 *                       type: number
+	 *                       example: 3
+	 *                     errors:
+	 *                       type: array
+	 *                       items:
+	 *                         type: object
+	 *                         properties:
+	 *                           studentNumber:
+	 *                             type: string
+	 *                           fullName:
+	 *                             type: string
+	 *                           error:
+	 *                             type: string
+	 *       400:
+	 *         description: Invalid request or CSV format
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 error:
+	 *                   type: string
+	 *                   examples:
+	 *                     - "CSV file is required"
+	 *                     - "File must be a CSV"
+	 *                     - "CSV must contain the following columns: STUDENT NUMBER, FULL NAME"
+	 *       403:
+	 *         description: Access denied - guidance users only
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.post(
+		"/upload-csv",
+		verifyToken,
+		verifyRole([Role.admin, Role.super_admin]),
+		multerHelper.uploadSingle,
+		controller.uploadStudentsCSV,
+	);
+
+	/**
+	 * @openapi
+	 * /api/student/{id}/graduate:
+	 *   patch:
+	 *     summary: Graduate a student
+	 *     description: Mark a student as graduated by setting their year to "graduated"
+	 *     tags: [Student]
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Student ID
+	 *     responses:
+	 *       200:
+	 *         description: Student graduated successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                 student:
+	 *                   $ref: '#/components/schemas/Student'
+	 *       400:
+	 *         description: Student is already graduated or missing ID
 	 *       404:
 	 *         description: Student not found
 	 *       500:
 	 *         description: Internal server error
 	 */
-	routes.delete("/:id", controller.remove);
+	routes.patch(
+		"/:id/graduate",
+		verifyToken,
+		verifyRole([Role.admin, Role.super_admin]),
+		controller.graduateStudent,
+	);
+
+	/**
+	 * @openapi
+	 * /api/student/graduate-batch:
+	 *   post:
+	 *     summary: Graduate multiple students
+	 *     description: Mark multiple students as graduated by setting their year to "graduated"
+	 *     tags: [Student]
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - studentIds
+	 *             properties:
+	 *               studentIds:
+	 *                 type: array
+	 *                 items:
+	 *                   type: string
+	 *                 description: Array of student IDs to graduate
+	 *     responses:
+	 *       200:
+	 *         description: Batch graduation completed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 message:
+	 *                   type: string
+	 *                 results:
+	 *                   type: object
+	 *                   properties:
+	 *                     successful:
+	 *                       type: number
+	 *                     failed:
+	 *                       type: number
+	 *                     errors:
+	 *                       type: array
+	 *                       items:
+	 *                         type: string
+	 *       400:
+	 *         description: Student IDs array is required
+	 *       500:
+	 *         description: Internal server error
+	 */
+	routes.post(
+		"/graduate-batch",
+		verifyToken,
+		verifyRole([Role.admin, Role.super_admin]),
+		controller.graduateMultipleStudents,
+	);
 
 	route.use(path, routes);
 

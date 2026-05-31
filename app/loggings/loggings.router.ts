@@ -254,7 +254,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       404:
 	 *         description: Log not found
 	 */
-	routes.delete("/:id", controller.remove);
+	routes.put("/:id", controller.remove);
 
 	route.use(path, routes);
 

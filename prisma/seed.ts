@@ -1,19 +1,845 @@
 import { PrismaClient } from "../generated/prisma";
+import * as bcrypt from "bcrypt";
+import { faker } from "@faker-js/faker";
 
 const prisma = new PrismaClient();
 
-async function main() {
-	await prisma.user.upsert({
-		where: { id: "67c7064d13d130902d5877ca" },
-		update: {},
-		create: {
-			id: "67c7064d13d130902d5877ca",
-			email: "maik@sureone.com",
-			firstName: "Maik",
-			lastName: "Ardan",
-			password: "123456",
+// Helper functions
+const getRandomElement = <T>(array: T[]): T => {
+	return array[Math.floor(Math.random() * array.length)];
+};
+
+const getRandomInt = (min: number, max: number): number => {
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+// Data arrays for randomization
+
+const programs = ["bsit", "bscs", "dcpet", "bsba", "bsed", "beed", "bsce"];
+const years = ["1st", "2nd", "3rd", "4th"];
+const academicStatus = ["freshman", "sophomore", "junior", "senior"];
+const cities = [
+	"Manila",
+	"Quezon City",
+	"Caloocan",
+	"Makati",
+	"Pasig",
+	"Taguig",
+	"Paranaque",
+	"Las Pinas",
+	"Muntinlupa",
+	"Macalelon",
+];
+const provinces = ["Metro Manila", "Quezon Province", "Rizal", "Cavite", "Laguna"];
+const religions = ["Catholic", "Protestant", "Islam", "Buddhism", "Others"];
+
+// Assessment response options
+const frequencyOptions = ["not_at_all", "several_days", "more_than_half_days", "nearly_every_day"];
+const stressOptions = ["never", "almost_never", "sometimes", "fairly_often", "very_often"];
+const difficultyOptions = [
+	"not_difficult_at_all",
+	"somewhat_difficult",
+	"very_difficult",
+	"extremely_difficult",
+];
+const concernLevels = [
+	"not_applicable",
+	"least_important",
+	"somewhat_important",
+	"important",
+	"very_important",
+	"most_important",
+];
+const referredOptions = ["self", "family", "friend", "faculty", "administrative_staff", "others"];
+const liveOptions = ["alone", "spouse", "partner", "roommates", "children", "guardians"];
+const financialOptions = [
+	"always_stressful",
+	"often_stressful",
+	"never_stressful",
+	"sometimes_stressful",
+	"rarely_stressful",
+];
+const servicesOptions = [
+	"general_information",
+	"one_or_two_session_problem_solving",
+	"stress_management",
+	"group_counseling",
+	"substance_abuse_services",
+	"career_exploration",
+	"individual_counseling",
+	"referral_for_university",
+];
+const physicalSymptoms = [
+	"shortness_of_breath",
+	"racing_heart",
+	"headaches",
+	"insomnia",
+	"teeth_clenching",
+	"cold_hands_and_feet",
+	"high_blood_pressure",
+	"muscle_tension",
+	"diarrhea",
+	"stomach_discomfort",
+];
+
+// Calculate severity levels
+const calculateAnxietySeverity = (score: number): string => {
+	if (score <= 4) return "minimal";
+	if (score <= 9) return "mild";
+	if (score <= 14) return "moderate";
+	return "severe";
+};
+
+const calculateDepressionSeverity = (score: number): string => {
+	if (score <= 4) return "minimal";
+	if (score <= 9) return "mild";
+	if (score <= 14) return "moderate";
+	if (score <= 19) return "moderately_severe";
+	return "severe";
+};
+
+const calculateStressSeverity = (score: number): string => {
+	if (score <= 13) return "low";
+	if (score <= 26) return "moderate";
+	return "high";
+};
+
+const scoreMapping: { [key: string]: number } = {
+	not_at_all: 0,
+	several_days: 1,
+	more_than_half_days: 2,
+	nearly_every_day: 3,
+	never: 0,
+	almost_never: 1,
+	sometimes: 2,
+	fairly_often: 3,
+	very_often: 4,
+};
+
+// Function to generate mental health prediction with new structure
+const generateMentalHealthPrediction = (studentGender: "male" | "female") => {
+	const predictions = ["Improved", "Same", "Declined"];
+	const prediction = getRandomElement(predictions);
+	const confidence = Math.round((0.65 + Math.random() * 0.3) * 100) / 100; // 0.65 to 0.95
+
+	const riskLevels: ("low" | "moderate" | "high" | "critical")[] = [
+		"low",
+		"moderate",
+		"high",
+		"critical",
+	];
+
+	const concerns = ["anxiety", "depression", "stress", "suicide"];
+	const primaryConcern = getRandomElement(concerns);
+	const priority = getRandomElement(["Low", "Moderate", "High", "Critical"]);
+
+	const riskFactorOptions = [
+		"Low family support",
+		"Financial stress",
+		"Academic pressure",
+		"Social isolation",
+		"Sleep deprivation",
+		"Health concerns",
+		"Relationship issues",
+		"Career uncertainty",
+		"Housing instability",
+		"Physical health challenges",
+	];
+
+	const protectiveFactorOptions = [
+		"Strong family support",
+		"Good academic performance",
+		"Active social connections",
+		"Regular exercise routine",
+		"Healthy sleep habits",
+		"Effective coping strategies",
+		"Access to counseling services",
+		"Positive peer relationships",
+	];
+
+	const warningSignsOptions = [
+		"Increased isolation from friends and family",
+		"Declining academic performance",
+		"Changes in sleep patterns",
+		"Loss of interest in activities",
+		"Increased irritability or mood swings",
+		"Physical symptoms like headaches or fatigue",
+		"Difficulty concentrating",
+		"Changes in appetite",
+	];
+
+	const recommendationsOptions = [
+		"Schedule regular counseling sessions",
+		"Engage in stress management activities",
+		"Maintain healthy sleep schedule",
+		"Seek peer support",
+		"Participate in campus activities",
+		"Consult with academic advisor",
+		"Practice mindfulness and relaxation techniques",
+		"Establish a regular exercise routine",
+		"Maintain social connections",
+		"Utilize campus health services and seek appropriate medical support",
+	];
+
+	// Generate concern-specific data
+	const generateConcernData = (concernType: string) => {
+		const riskLevel = getRandomElement(riskLevels);
+		const isHighRisk = riskLevel === "high" || riskLevel === "critical";
+		const riskScore = getRandomInt(0, 100);
+		const maxScore = 100;
+		const riskPercentage = Math.round((riskScore / maxScore) * 100 * 100) / 100;
+
+		return {
+			riskLevel: riskLevel as any,
+			riskScore,
+			maxScore,
+			riskPercentage,
+			isProne: isHighRisk,
+			riskFactors: [getRandomElement(riskFactorOptions), getRandomElement(riskFactorOptions)],
+			protectiveFactors: [
+				getRandomElement(protectiveFactorOptions),
+				getRandomElement(protectiveFactorOptions),
+			],
+			explanation: `${concernType.charAt(0).toUpperCase() + concernType.slice(1)} assessment shows ${riskLevel} risk level based on current indicators and behavioral patterns.`,
+			recommendations: [
+				getRandomElement(recommendationsOptions),
+				getRandomElement(recommendationsOptions),
+				getRandomElement(recommendationsOptions),
+			],
+			warningSignsToWatch: [
+				getRandomElement(warningSignsOptions),
+				getRandomElement(warningSignsOptions),
+			],
+			immediateAction: isHighRisk
+				? "Contact counseling services immediately for professional support"
+				: null,
+		};
+	};
+
+	const mentalHealthPredictions = {
+		anxiety: generateConcernData("anxiety"),
+		depression: generateConcernData("depression"),
+		stress: generateConcernData("stress"),
+		suicide: generateConcernData("suicide"),
+	};
+
+	const selectedRecommendations = [
+		getRandomElement(recommendationsOptions),
+		getRandomElement(recommendationsOptions),
+		getRandomElement(recommendationsOptions),
+	];
+
+	// Generate ML Predictions (binary classification: Low Risk or High Risk)
+	const generateMLPrediction = (condition: string) => {
+		// Randomly determine if it's High Risk (30% chance) or Low Risk (70% chance)
+		const isHighRisk = getRandomInt(1, 10) <= 3;
+		const riskLevel = isHighRisk ? "high risk" : "low risk";
+		const riskScore = isHighRisk ? 1 : 0;
+		const confidence = Math.round((0.75 + Math.random() * 0.2) * 100) / 100; // 0.75 to 0.95
+
+		const mlRiskFactors = [
+			"Demographic factors matching high-risk profiles",
+			"Educational background indicators",
+			"Family structure and support patterns",
+			"Financial stress indicators",
+			"Living situation challenges",
+			"Health history patterns",
+			"Academic engagement levels",
+			"Social support indicators",
+		];
+
+		const mlRecommendations = [
+			"Consider proactive mental health screening",
+			"Maintain regular check-ins with counseling services",
+			"Engage in preventive mental health activities",
+			"Monitor for early warning signs",
+			"Build strong support networks",
+			"Develop effective coping strategies",
+		];
+
+		return {
+			riskLevel,
+			riskScore,
+			confidence,
+			prediction: isHighRisk ? "High Risk" : "Low Risk",
+			explanation: `Machine learning model trained on historical student outcome data predicts ${riskLevel} for ${condition} based on patterns in similar student profiles.`,
+			modelBasis:
+				"Trained on actual student mental health outcome data using decision tree and random forest algorithms",
+			riskFactors: [getRandomElement(mlRiskFactors), getRandomElement(mlRiskFactors)],
+			recommendations: [
+				getRandomElement(mlRecommendations),
+				getRandomElement(mlRecommendations),
+				getRandomElement(mlRecommendations),
+			],
+			immediateAction: isHighRisk
+				? "Schedule a consultation with counseling services for early intervention"
+				: null,
+		};
+	};
+
+	const mlModelAccuracy = {
+		anxiety: Math.round((0.75 + Math.random() * 0.15) * 100) / 100, // 0.75 to 0.90
+		depression: Math.round((0.73 + Math.random() * 0.17) * 100) / 100, // 0.73 to 0.90
+		stress: Math.round((0.74 + Math.random() * 0.16) * 100) / 100, // 0.74 to 0.90
+	};
+
+	const mlPredictions = {
+		anxiety: generateMLPrediction("anxiety"),
+		depression: generateMLPrediction("depression"),
+		stress: generateMLPrediction("stress"),
+		modelAccuracy: mlModelAccuracy,
+		trainingDataSize: getRandomInt(200, 500),
+		lastTrainingDate: new Date(Date.now() - getRandomInt(1, 30) * 24 * 60 * 60 * 1000), // Within last 30 days
+	};
+
+	return {
+		academicPerformanceOutlook: prediction.toLowerCase() as "improved" | "same" | "declined",
+		confidence,
+		modelAccuracy: {
+			decisionTree: Math.round((0.7 + Math.random() * 0.25) * 100) / 100,
+			randomForest: Math.round((0.72 + Math.random() * 0.25) * 100) / 100,
 		},
-	});
+		riskFactors: [getRandomElement(riskFactorOptions), getRandomElement(riskFactorOptions)],
+		// Legacy field - kept for schema compatibility but data comes from mentalHealthPredictions
+		mentalHealthRisk: {
+			level: "low" as any,
+			description: "Legacy field - see mentalHealthPredictions for actual data",
+			needsAttention: false,
+			urgency: "none" as any,
+			assessmentSummary: "Data migrated to mentalHealthPredictions structure",
+			disclaimer: "This field is deprecated. Use mentalHealthPredictions for current data.",
+		},
+		mentalHealthPredictions,
+		mlPredictions,
+		inputData: {
+			gender: studentGender === "male" ? "Male" : "Female",
+			age: getRandomInt(18, 26),
+			highSchoolAverage: getRandomInt(75, 95),
+			natureOfSchooling: "continuous",
+			parentsMaritalRelationship: "married_and_staying_together",
+			numberOfChildren: getRandomInt(1, 5),
+			whoFinancesYourSchooling: "parents",
+			parentsTotalMonthlyIncome: "fifteen_thousand_to_twenty_thousand",
+			quietPlaceToStudy: "yes",
+			natureOfResidence: "family_home",
+			visionProblems: "no",
+			generalHealthProblems: "no",
+			psychologicalConsultation: "no",
+			favoriteSubject: "Mathematics",
+			leastFavoriteSubject: "History",
+			academicOrganizations: "math_club",
+			organizationPosition: "member",
+		},
+		recommendations: selectedRecommendations,
+		predictionDate: new Date(),
+	};
+};
+
+async function main() {
+	console.log("Starting seed process...");
+	console.log("Creating 10 students with complete mental health data...\n");
+
+	const startTime = Date.now();
+
+	// Pre-hash passwords to speed up the process
+	const hashedPassword = await bcrypt.hash("password123", 10);
+
+	// Create 10 students with complete data
+	for (let i = 1; i <= 10; i++) {
+		// Using Faker.js for realistic names
+		const firstName = faker.person.firstName();
+		const lastName = faker.person.lastName();
+		const timestamp = Date.now();
+		const studentNumber = `2024-${String(i + (timestamp % 10000)).padStart(5, "0")}-LQ-${getRandomInt(0, 9)}`;
+		const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}${timestamp}@iskolarngbayan.pup.edu.ph`;
+		const contactNumber = `09${getRandomInt(100000000, 999999999)}`;
+		const gender = getRandomElement(["male", "female"]) as "male" | "female";
+
+		if (i % 10 === 1) {
+			console.log(`Creating student ${i}-${Math.min(i + 9, 10)}...`);
+		}
+
+		try {
+			// Create Person
+			const person = await prisma.person.create({
+				data: {
+					firstName,
+					lastName,
+					middleName: faker.person.firstName(),
+					contactNumber,
+					email,
+					gender,
+					birthDate: new Date(
+						getRandomInt(1998, 2006),
+						getRandomInt(0, 11),
+						getRandomInt(1, 28),
+					),
+					age: getRandomInt(18, 26),
+					religion: getRandomElement(religions),
+					civilStatus: "single",
+					address: {
+						street: `${getRandomInt(1, 999)} ${getRandomElement(["Main", "Oak", "Maple", "Pine"])} St`,
+						city: getRandomElement(cities),
+						province: getRandomElement(provinces),
+						zipCode: getRandomInt(1000, 9999),
+						barangay: `Barangay ${getRandomInt(1, 50)}`,
+						country: "Philippines",
+						type: "current",
+					},
+					guardian: {
+						firstName: faker.person.firstName(),
+						lastName,
+						middleName: faker.person.firstName(),
+						contactNumber: `09${getRandomInt(100000000, 999999999)}`,
+						relationship: gender === "male" ? "mother" : "father",
+					},
+				},
+			});
+
+			// Create User
+			const user = await prisma.user.create({
+				data: {
+					personId: person.id,
+					userName: email,
+					password: hashedPassword,
+					role: "user",
+					type: "student",
+					status: "active",
+					emailVerified: true,
+					loginMethod: "email",
+					lastLogin: new Date(),
+				},
+			});
+
+			// Create Student
+			const student = await prisma.student.create({
+				data: {
+					studentNumber,
+					program: getRandomElement(programs),
+					year: getRandomElement(years),
+					status: getRandomElement(academicStatus) as
+						| "freshman"
+						| "sophomore"
+						| "junior"
+						| "senior",
+					personId: person.id,
+					notes:
+						getRandomInt(0, 3) > 0
+							? [
+									{
+										title: "Consultation Note",
+										content:
+											"Student showed good progress in managing stress levels.",
+									},
+								]
+							: [],
+				},
+			});
+
+			// Create Consent
+			await prisma.consent.create({
+				data: {
+					studentId: student.id,
+					referred: getRandomElement(referredOptions) as any,
+					with_whom_do_you_live: getRandomElement(liveOptions) as any,
+					financial_status: getRandomElement(financialOptions) as any,
+					what_brings_you_to_guidance:
+						"Seeking guidance for academic and personal growth",
+					physical_problem: getRandomElement(["yes", "no"]) as "yes" | "no",
+					physical_symptoms: getRandomElement(physicalSymptoms) as any,
+					services: getRandomElement(servicesOptions) as any,
+					concerns: {
+						personal_growth: getRandomElement(concernLevels) as any,
+						depression: getRandomElement(concernLevels) as any,
+						suicidal_thoughts: getRandomElement(concernLevels) as any,
+						study_skills: getRandomElement(concernLevels) as any,
+						family_concerns: getRandomElement(concernLevels) as any,
+						sexual_concerns: getRandomElement(concernLevels) as any,
+						educational_concerns: getRandomElement(concernLevels) as any,
+						anxiety: getRandomElement(concernLevels) as any,
+						drug_use: getRandomElement(concernLevels) as any,
+						physical_concerns: getRandomElement(concernLevels) as any,
+						self_concept: getRandomElement(concernLevels) as any,
+						decision_making_about_leaving_pup: getRandomElement(concernLevels) as any,
+						financial_concerns: getRandomElement(concernLevels) as any,
+						relationship_with_others: getRandomElement(concernLevels) as any,
+						spirituality: getRandomElement(concernLevels) as any,
+						weight_eating_issues: getRandomElement(concernLevels) as any,
+						career: getRandomElement(concernLevels) as any,
+					},
+				},
+			});
+
+			// Create Individual Inventory
+			await prisma.individualInventory.create({
+				data: {
+					studentId: student.id,
+					height: `${getRandomInt(150, 190)}`,
+					weight: `${getRandomInt(45, 90)}`,
+					coplexion: getRandomElement(["Light", "Medium", "Dark"]),
+					student_signature: `${firstName.toUpperCase()} ${lastName.toUpperCase()}`,
+					predictionGenerated: true,
+					predictionUpdatedAt: new Date(),
+					mentalHealthPredictions: {
+						create: [generateMentalHealthPrediction(gender)],
+					},
+					person_to_be_contacted_in_case_of_accident_or_illness: {
+						firstName: faker.person.firstName(),
+						lastName,
+						middleName: faker.person.firstName(),
+						relationship: "parent",
+						address: {
+							street: `${getRandomInt(1, 999)} Main St`,
+							city: getRandomElement(cities),
+							province: getRandomElement(provinces),
+							zipCode: getRandomInt(1000, 9999),
+							barangay: `Barangay ${getRandomInt(1, 50)}`,
+							country: "Philippines",
+						},
+					},
+					educational_background: {
+						level: "high_school" as any,
+						school_graduation: `${getRandomElement(cities)} National High School`,
+						school_address: {
+							street: "",
+							province: getRandomElement(provinces),
+							city: getRandomElement(cities),
+							barangay: "",
+							country: "Philippines",
+						},
+						status: getRandomElement(["public", "private"]) as any,
+						dates_of_attendance: new Date(2020, 5, 1),
+						honors_received: getRandomElement(["yes", "no"]) as any,
+					},
+					nature_of_schooling: {
+						continuous: getRandomInt(0, 1) === 1,
+						interrupted: getRandomInt(0, 1) === 1,
+						exaplain_why: null,
+					},
+					home_and_family_background: {
+						father: {
+							firstName: faker.person.firstName(),
+							lastName,
+							middleName: faker.person.firstName(),
+							age: getRandomInt(40, 65),
+							status: "living" as any,
+							educational_attainment: getRandomElement([
+								"high_school",
+								"bachelors_degree",
+								"vocational",
+							]) as any,
+							occupation: getRandomElement([
+								"Engineer",
+								"Driver",
+								"Seaman",
+								"Teacher",
+								"Business Owner",
+							]),
+							employer: {
+								name: `${getRandomElement(["ABC", "XYZ", "Global", "National"])} Corporation`,
+								address: {
+									street: "",
+									province: "",
+									city: "",
+									barangay: "",
+									country: "Philippines",
+								},
+							},
+						},
+						mother: {
+							firstName: faker.person.firstName(),
+							lastName,
+							middleName: faker.person.firstName(),
+							age: getRandomInt(38, 60),
+							status: "living" as any,
+							educational_attainment: getRandomElement([
+								"elementary",
+								"high_school",
+								"bachelors_degree",
+							]) as any,
+							occupation: getRandomElement([
+								"Teacher",
+								"Nurse",
+								"House Wife",
+								"Business Owner",
+								"Government Employee",
+							]),
+							employer: {
+								name: "",
+								address: {
+									street: "",
+									province: "",
+									city: "",
+									barangay: "",
+									country: "Philippines",
+								},
+							},
+						},
+						guardian: {
+							firstName: "",
+							lastName: "",
+							middleName: "",
+							age: 0,
+							status: "living" as any,
+							educational_attainment: "none" as any,
+							occupation: "",
+							employer: {
+								name: "",
+								address: {
+									street: "",
+									province: "",
+									city: "",
+									barangay: "",
+									country: "Philippines",
+								},
+							},
+						},
+						parents_martial_relationship: "married_and_staying_together" as any,
+						number_of_children_in_the_family_including_yourself: getRandomInt(1, 6),
+						number_of_brothers: getRandomInt(0, 3),
+						number_of_sisters: getRandomInt(0, 3),
+						number_of_brothers_or_sisters_employed: getRandomInt(0, 2),
+						ordinal_position: `${getRandomInt(1, 4)}${getRandomInt(1, 4) === 1 ? "st" : getRandomInt(1, 4) === 2 ? "nd" : getRandomInt(1, 4) === 3 ? "rd" : "th"} child`,
+						is_your_brother_sister_who_is_gainfully_employed_providing_support_to_your:
+							getRandomElement([
+								"family",
+								"your_studies",
+								"his__or_her_own_family",
+							]) as any,
+						who_finances_your_schooling: getRandomElement([
+							"parents",
+							"scholarship",
+							"self_supporting",
+						]) as any,
+						how_much_is_your_weekly_allowance: getRandomInt(500, 2000),
+						parents_total_montly_income: {
+							income: getRandomElement([
+								"five_thousand_to_ten_thousand",
+								"ten_thousand_to_fifteen_thousand",
+								"fifteen_thousand_to_twenty_thousand",
+								"twenty_thousand_to_twenty_five_thousand",
+							]) as any,
+							others: "",
+						},
+						do_you_have_quiet_place_to_study: getRandomElement(["yes", "no"]) as any,
+						do_you_share_your_room_with_anyone: {
+							status: getRandomElement(["yes", "no"]) as any,
+							if_yes_with_whom: getRandomInt(0, 1) === 1 ? "siblings" : undefined,
+						},
+						nature_of_residence_while_attending_school: getRandomElement([
+							"family_home",
+							"dorm",
+							"rented_apartment",
+							"bed_spacer",
+						]) as any,
+					},
+					health: {
+						physical: {
+							your_vision: getRandomInt(0, 10) > 8,
+							your_hearing: getRandomInt(0, 10) > 8,
+							your_speech: getRandomInt(0, 10) > 8,
+							your_general_health: getRandomInt(0, 10) > 7,
+							if_yes_please_specify: undefined,
+						},
+						psychological: {
+							consulted: getRandomElement([
+								"psychiatrist",
+								"psychologist",
+								"councelor",
+							]) as any,
+							status: getRandomElement(["yes", "no"]) as any,
+							when: undefined,
+							for_what: undefined,
+						},
+					},
+					interest_and_hobbies: {
+						academic: getRandomElement([
+							"match_club",
+							"debating_club",
+							"science_club",
+							"quizzers_club",
+						]) as any,
+						favorite_subject: getRandomElement([
+							"Mathematics",
+							"Science",
+							"English",
+							"Filipino",
+							"Programming",
+						]),
+						favorite_least_subject: getRandomElement([
+							"Mathematics",
+							"Science",
+							"History",
+							"PE",
+						]),
+						what_are_your_hobbies: ["Reading", "Gaming", "Sports"],
+						organizations_participated: getRandomElement([
+							"athletics",
+							"dramatics",
+							"religous_organization",
+							"chess_club",
+						]) as any,
+						occupational_position_organization: getRandomElement([
+							"officer",
+							"member",
+						]) as any,
+					},
+					test_results: undefined,
+					significantNotes: {
+						create:
+							getRandomInt(0, 3) > 0
+								? [
+										{
+											date: new Date(),
+											incident: getRandomElement([
+												"Student appeared withdrawn during session",
+												"Student reported increased stress levels",
+												"Student showed improvement in coping mechanisms",
+												"Student discussed personal challenges",
+												"Student requested additional support",
+											]),
+											remarks: getRandomElement([
+												"Recommend follow-up session",
+												"Continue current support plan",
+												"Monitor for further developments",
+												"Positive progress observed",
+												"Consider referral to specialist",
+											]),
+										},
+									]
+								: [],
+					},
+				},
+			});
+
+			// Create Anxiety Assessment
+			const anxietyResponses = Array(7)
+				.fill(0)
+				.map(() => getRandomElement(frequencyOptions));
+			const anxietyScore = anxietyResponses.reduce(
+				(sum, response) => sum + scoreMapping[response],
+				0,
+			);
+
+			await prisma.anxietyAssessment.create({
+				data: {
+					userId: user.id,
+					feeling_nervous_anxious_edge: anxietyResponses[0] as any,
+					not_able_stop_control_worrying: anxietyResponses[1] as any,
+					worrying_too_much_different_things: anxietyResponses[2] as any,
+					trouble_relaxing: anxietyResponses[3] as any,
+					restless_hard_sit_still: anxietyResponses[4] as any,
+					easily_annoyed_irritable: anxietyResponses[5] as any,
+					feeling_afraid_awful_happen: anxietyResponses[6] as any,
+					totalScore: anxietyScore,
+					severityLevel: calculateAnxietySeverity(anxietyScore) as any,
+					assessmentDate: new Date(),
+					difficulty_level: getRandomElement(difficultyOptions) as any,
+					cooldownActive: false,
+				},
+			});
+
+			// Create Depression Assessment
+			const depressionResponses = Array(9)
+				.fill(0)
+				.map(() => getRandomElement(frequencyOptions));
+			const depressionScore = depressionResponses.reduce(
+				(sum, response) => sum + scoreMapping[response],
+				0,
+			);
+
+			await prisma.depressionAssessment.create({
+				data: {
+					userId: user.id,
+					little_interest_pleasure_doing_things: depressionResponses[0] as any,
+					feeling_down_depressed_hopeless: depressionResponses[1] as any,
+					trouble_falling_staying_asleep_too_much: depressionResponses[2] as any,
+					feeling_tired_having_little_energy: depressionResponses[3] as any,
+					poor_appetite_overeating: depressionResponses[4] as any,
+					feeling_bad_about_yourself_failure: depressionResponses[5] as any,
+					trouble_concentrating_things: depressionResponses[6] as any,
+					moving_speaking_slowly_fidgety_restless: depressionResponses[7] as any,
+					thoughts_better_off_dead_hurting_yourself: depressionResponses[8] as any,
+					totalScore: depressionScore,
+					severityLevel: calculateDepressionSeverity(depressionScore) as any,
+					assessmentDate: new Date(),
+					difficulty_level: getRandomElement(difficultyOptions) as any,
+					cooldownActive: false,
+				},
+			});
+
+			// Create Stress Assessment
+			const stressResponses = Array(10)
+				.fill(0)
+				.map(() => getRandomElement(stressOptions));
+			const stressScore = stressResponses.reduce(
+				(sum, response) => sum + scoreMapping[response],
+				0,
+			);
+
+			await prisma.stressAssessment.create({
+				data: {
+					userId: user.id,
+					upset_because_something_unexpected: stressResponses[0] as any,
+					unable_control_important_things: stressResponses[1] as any,
+					feeling_nervous_and_stressed: stressResponses[2] as any,
+					confident_handle_personal_problems: stressResponses[3] as any,
+					feeling_things_going_your_way: stressResponses[4] as any,
+					unable_cope_with_all_things: stressResponses[5] as any,
+					able_control_irritations: stressResponses[6] as any,
+					feeling_on_top_of_things: stressResponses[7] as any,
+					angered_things_outside_control: stressResponses[8] as any,
+					difficulties_piling_up_cant_overcome: stressResponses[9] as any,
+					totalScore: stressScore,
+					severityLevel: calculateStressSeverity(stressScore) as any,
+					assessmentDate: new Date(),
+					cooldownActive: false,
+				},
+			});
+
+			// Create Suicide Assessment (only for some students - about 20%)
+			if (getRandomInt(1, 5) === 1) {
+				const hasHighRisk = getRandomInt(1, 10) > 7;
+
+				await prisma.suicideAssessment.create({
+					data: {
+						userId: user.id,
+						wished_dead_or_sleep_not_wake_up: hasHighRisk
+							? "yes"
+							: (getRandomElement(["yes", "no"]) as any),
+						actually_had_thoughts_killing_self: hasHighRisk
+							? "yes"
+							: (getRandomElement(["yes", "no"]) as any),
+						thinking_about_how_might_do_this: hasHighRisk
+							? "yes"
+							: (getRandomElement(["yes", "no"]) as any),
+						had_thoughts_and_some_intention: hasHighRisk ? "yes" : ("no" as any),
+						started_worked_out_details_how_kill: hasHighRisk ? "yes" : ("no" as any),
+						done_anything_started_prepared_end_life: "no" as any,
+						behavior_timeframe: getRandomElement([
+							"past_three_months",
+							"lifetime_but_not_recent",
+							"never",
+						]) as any,
+						riskLevel: hasHighRisk
+							? "high"
+							: (getRandomElement(["low", "moderate"]) as any),
+						requires_immediate_intervention: hasHighRisk,
+						assessmentDate: new Date(),
+					},
+				});
+			}
+
+			console.log(`✓ Successfully created student ${i}/50`);
+		} catch (error) {
+			console.error(`✗ Error creating student ${i}:`, error);
+		}
+	}
+
+	const endTime = Date.now();
+	const duration = ((endTime - startTime) / 1000).toFixed(2);
+	console.log(`\n✅ Seed completed successfully! 10 students created in ${duration} seconds.`);
+	console.log("All students have mental health predictions generated.");
 }
 
 main()

@@ -1,0 +1,36 @@
+enum SuicideResponse {
+  yes
+  no
+}
+
+enum SuicideRiskLevel {
+  low
+  moderate
+  high
+}
+
+enum SuicideBehaviorTimeframe {
+  past_three_months
+  lifetime_but_not_recent
+  never
+}
+
+model SuicideAssessment {
+  id                                      String                    @id @default(auto()) @map("_id") @db.ObjectId
+  user                                    User                      @relation(fields: [userId], references: [id])
+  userId                                  String                    @db.ObjectId
+  wished_dead_or_sleep_not_wake_up        SuicideResponse           @default(no)
+  actually_had_thoughts_killing_self      SuicideResponse           @default(no)
+  thinking_about_how_might_do_this        SuicideResponse?
+  had_thoughts_and_some_intention         SuicideResponse?
+  started_worked_out_details_how_kill     SuicideResponse?
+  done_anything_started_prepared_end_life SuicideResponse?
+  behavior_timeframe                      SuicideBehaviorTimeframe?
+  riskLevel                               SuicideRiskLevel          @default(low)
+  requires_immediate_intervention         Boolean                   @default(false)
+  showResultToStudent                     Boolean                   @default(false)
+  assessmentDate                          DateTime                  @default(now())
+  createdAt                               DateTime                  @default(now())
+  updatedAt                               DateTime                  @updatedAt
+  isDeleted                               Boolean                   @default(false)
+}

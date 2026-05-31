@@ -3,16 +3,13 @@
 	"definition": {
 		"openapi": "3.0.0",
 		"info": {
-			"title": "SureOne Backend API",
+			"title": "Mental Health Backend API",
 			"version": "1.0.0",
-			"description": "Welcome to the SureOne API documentation. This is a RESTful API that allows you to interact with the SureOne backend services."
-		},
-		"tags": [
-			{
-				"name": "Template",
-				"description": "Template routes"
-			}
-		]
+			"description": "Welcome to the Mental Health API documentation. This is a RESTful API that allows you to interact with the Mental Health backend services."
+		}
 	},
-	"apis": ["./docs/models/*.yaml", "./app/**/*.router.ts"]
+	"apis": [
+		"./docs/models/*.yaml",
+		"./app/**/*.router.ts"
+	]
 }

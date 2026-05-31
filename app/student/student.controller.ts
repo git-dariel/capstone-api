@@ -2,14 +2,15 @@ import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger";
 import { config } from "../../config/error.config";
-import { controller as authController } from "../auth/auth.controller";
-import bcrypt from "bcrypt";
+import { controller as personController } from "../person/person.controller";
+import { updateStudentYearLevels } from "../../services/student-year-level-cron.service";
+import { parse } from "csv-parse/sync";
 
 const logger = getLogger();
 const studentLogger = logger.child({ module: "student" });
 
 export const controller = (prisma: PrismaClient) => {
-	const authCtrl = authController(prisma);
+	const personCtrl = personController(prisma);
 
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
@@ -134,6 +135,9 @@ export const controller = (prisma: PrismaClient) => {
 								{ studentNumber: { contains: String(query) } },
 								{ program: { contains: String(query) } },
 								{ year: { contains: String(query) } },
+								{ person: { firstName: { contains: String(query) } } },
+								{ person: { lastName: { contains: String(query) } } },
+								{ person: { email: { contains: String(query) } } },
 							],
 						}
 					: {}),
@@ -151,7 +155,12 @@ export const controller = (prisma: PrismaClient) => {
 			};
 
 			if (fields) {
-				const fieldSelections = fields.split(",").reduce(
+				// Filter out userId from fields since it's not a database field
+				const filteredFields = fields
+					.split(",")
+					.filter((field) => field.trim() !== "userId");
+
+				const fieldSelections = filteredFields.reduce(
 					(acc, field) => {
 						const parts = field.trim().split(".");
 						if (parts.length > 1) {
@@ -173,6 +182,8 @@ export const controller = (prisma: PrismaClient) => {
 				);
 
 				findManyQuery.select = fieldSelections;
+				// Always include personId for userId lookup
+				findManyQuery.select.personId = true;
 			}
 
 			const [students, total] = await Promise.all([
@@ -180,9 +191,35 @@ export const controller = (prisma: PrismaClient) => {
 				prisma.student.count({ where: whereClause }),
 			]);
 
-			studentLogger.info(`Retrieved ${students.length} students`);
+			// Get user IDs for each student by matching personId
+			// Fetch all users at once for better performance and accuracy
+			const personIds = students
+				.map((student) => student.personId)
+				.filter((id) => id !== undefined);
+			const users = await prisma.user.findMany({
+				where: {
+					personId: { in: personIds },
+					type: "student",
+					isDeleted: false,
+				},
+				select: { id: true, personId: true },
+			});
+
+			// Create a map of personId to userId for quick lookup
+			const personIdToUserIdMap = new Map<string, string>();
+			users.forEach((user) => {
+				personIdToUserIdMap.set(user.personId, user.id);
+			});
+
+			// Map students to include their corresponding userId
+			const studentsWithUserIds = students.map((student) => ({
+				...student,
+				userId: personIdToUserIdMap.get(student.personId) || null,
+			}));
+
+			studentLogger.info(`Retrieved ${studentsWithUserIds.length} students`);
 			res.status(200).json({
-				students,
+				students: studentsWithUserIds,
 				total,
 				page: Number(page),
 				totalPages: Math.ceil(total / Number(limit)),
@@ -193,16 +230,29 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const create = async (req: Request, res: Response, _next: NextFunction) => {
-		const { studentNumber, program, year, user } = req.body;
-
-		if (!studentNumber) {
-			studentLogger.error(config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED);
-			res.status(400).json({
-				error: config.ERROR.STUDENT.STUDENT_NUMBER_REQUIRED,
-			});
-			return;
-		}
+	const create = async (req: Request, res: Response, next: NextFunction) => {
+		const {
+			studentNumber,
+			program,
+			year,
+			status,
+			notes,
+			personId,
+			firstName,
+			lastName,
+			middleName,
+			suffix,
+			contactNumber,
+			email,
+			gender,
+			birthDate,
+			birthPlace,
+			age,
+			religion,
+			civilStatus,
+			address,
+			...otherData
+		} = req.body;
 
 		if (!program) {
 			studentLogger.error(config.ERROR.STUDENT.PROGRAM_REQUIRED);
@@ -220,10 +270,72 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		if (!user || !user.person || !user.person.email) {
-			studentLogger.error(config.ERROR.STUDENT.INVALID_USER_DATA);
+		// Validate status if provided
+		if (status && !["freshman", "sophomore", "junior", "senior"].includes(status)) {
+			studentLogger.error(`Invalid academic status: ${status}`);
 			res.status(400).json({
-				error: config.ERROR.STUDENT.INVALID_USER_DATA,
+				error: "Status must be one of: freshman, sophomore, junior, senior",
+			});
+			return;
+		}
+
+		// Validate notes array if provided
+		if (notes && !Array.isArray(notes)) {
+			studentLogger.error(`Invalid notes format: ${notes}`);
+			res.status(400).json({
+				error: "Notes must be an array",
+			});
+			return;
+		}
+
+		if (notes && Array.isArray(notes)) {
+			for (const note of notes) {
+				if (typeof note !== "object" || note === null) {
+					studentLogger.error(`Invalid note format: ${note}`);
+					res.status(400).json({
+						error: "Each note must be an object",
+					});
+					return;
+				}
+
+				if (note.title && typeof note.title !== "string") {
+					studentLogger.error(`Invalid note title: ${note.title}`);
+					res.status(400).json({
+						error: "Note title must be a string",
+					});
+					return;
+				}
+
+				if (note.content && typeof note.content !== "string") {
+					studentLogger.error(`Invalid note content: ${note.content}`);
+					res.status(400).json({
+						error: "Note content must be a string",
+					});
+					return;
+				}
+
+				// Validate and normalize createdAt if provided
+				if (note.createdAt !== undefined && note.createdAt !== null) {
+					// Try to parse as Date to ensure it's valid
+					const dateValue = new Date(note.createdAt);
+					if (isNaN(dateValue.getTime())) {
+						studentLogger.error(`Invalid note createdAt: ${note.createdAt}`);
+						res.status(400).json({
+							error: "Note createdAt must be a valid date",
+						});
+						return;
+					}
+					// Convert to ISO string to ensure proper format
+					note.createdAt = dateValue.toISOString();
+				}
+			}
+		}
+
+		// Only require firstName and lastName if we're creating a new person
+		if (!personId && (!firstName || !lastName)) {
+			studentLogger.error("First name and last name are required when creating a new person");
+			res.status(400).json({
+				error: "First name and last name are required when creating a new person",
 			});
 			return;
 		}
@@ -247,112 +359,132 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const existingUser = await prisma.user.findFirst({
-				where: {
-					person: {
-						email: user.person.email,
-					},
-					isDeleted: false,
-				},
-			});
-
-			if (existingUser) {
-				const existingStudent = await prisma.student.findFirst({
+			// If personId is provided, verify the person exists
+			if (personId) {
+				const existingPerson = await prisma.person.findFirst({
 					where: {
-						userId: existingUser.id,
+						id: personId,
 						isDeleted: false,
-					},
-					include: {
-						user: {
-							include: {
-								person: true,
-							},
-						},
 					},
 				});
 
-				if (existingStudent) {
-					studentLogger.info(
-						`${config.SUCCESS.STUDENT.RETRIEVED}: ${existingStudent.id}`,
-					);
-					res.status(200).json({
-						...existingStudent,
-						message: config.ERROR.STUDENT.EXISTING_STUDENT,
+				if (!existingPerson) {
+					studentLogger.error(`Person not found with ID: ${personId}`);
+					res.status(404).json({
+						error: "Person not found",
+					});
+					return;
+				}
+			}
+			// Check if email already exists (if provided and creating new person)
+			else if (email) {
+				const existingPerson = await prisma.person.findFirst({
+					where: {
+						email,
+						isDeleted: false,
+					},
+				});
+
+				if (existingPerson) {
+					studentLogger.error(`Person with this email already exists: ${email}`);
+					res.status(400).json({
+						error: "Person with this email already exists",
 					});
 					return;
 				}
 			}
 
-			const { person, ...userData } = user;
-			const { firstName, lastName, email, ...otherPersonData } = person;
+			const result = await prisma.$transaction(async (tx) => {
+				let person;
 
-			const mockAuthReq = {
-				body: {
-					...userData,
-					firstName,
-					lastName,
-					email,
-					type: "client",
-					role: "user",
-					...otherPersonData,
-				},
-			} as Request;
+				if (personId) {
+					// If personId is provided, use existing person
+					person = await tx.person.findUnique({
+						where: { id: personId },
+					});
 
-			const mockAuthRes = {
-				statusCode: 0,
-				data: null,
-				status: function (code: number) {
-					this.statusCode = code;
-					return this;
-				},
-				json: function (data: any) {
-					this.data = data;
-					return this;
-				},
-				cookie: function () {
-					return this;
-				},
-			} as any;
+					if (!person) {
+						throw new Error("Person not found");
+					}
+				} else {
+					// Create person if no personId provided
+					const mockReq = {
+						body: {
+							firstName,
+							lastName,
+							...(middleName ? { middleName } : {}),
+							...(suffix ? { suffix } : {}),
+							...(email ? { email } : {}),
+							...(contactNumber ? { contactNumber } : {}),
+							...(gender ? { gender } : {}),
+							...(birthDate && { birthDate: new Date(birthDate) }),
+							...(birthPlace ? { birthPlace } : {}),
+							...(age ? { age } : {}),
+							...(religion ? { religion } : {}),
+							...(civilStatus ? { civilStatus } : {}),
+							...(address ? { address } : {}),
+							...otherData,
+						},
+					} as Request;
 
-			await authCtrl.register(mockAuthReq, mockAuthRes, _next);
+					const mockRes = {
+						statusCode: 0,
+						data: null,
+						status: function (code: number) {
+							this.statusCode = code;
+							return this;
+						},
+						json: function (data: any) {
+							this.data = data;
+							return this;
+						},
+					} as any;
 
-			if (mockAuthRes.statusCode !== 201 || !mockAuthRes.data.user) {
-				throw new Error("Failed to create user");
-			}
+					await personCtrl.create(mockReq, mockRes, next);
 
-			const createdUser = mockAuthRes.data.user;
+					if (mockRes.statusCode !== 201) {
+						throw new Error("Failed to create person");
+					}
 
-			const newStudent = await prisma.student.create({
-				data: {
-					studentNumber,
-					program,
-					year,
-					user: {
-						connect: {
-							id: createdUser.id,
+					person = mockRes.data;
+				}
+
+				// Create student record
+				const student = await tx.student.create({
+					data: {
+						studentNumber,
+						program,
+						year,
+						...(status && { status }),
+						...(notes && Array.isArray(notes) && { notes }),
+						person: {
+							connect: {
+								id: person.id,
+							},
 						},
 					},
-				},
-				include: {
-					user: {
-						include: {
-							person: true,
-						},
+					include: {
+						person: true,
 					},
-				},
+				});
+
+				return student;
 			});
 
-			studentLogger.info(`${config.SUCCESS.STUDENT.CREATED}: ${newStudent.id}`);
-			res.status(201).json(newStudent);
+			studentLogger.info(`${config.SUCCESS.STUDENT.CREATED}: ${result.id}`);
+			res.status(201).json({
+				message: "Student created successfully",
+				...result,
+			});
 		} catch (error) {
 			studentLogger.error(`${config.ERROR.STUDENT.INTERNAL_SERVER_ERROR}: ${error}`);
 			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
 		}
 	};
 
-	const update = async (req: Request, res: Response, _next: NextFunction) => {
+	const update = async (req: Request, res: Response, next: NextFunction) => {
 		const { id } = req.params;
-		const { studentNumber, program, year, user } = req.body;
+		const { studentNumber, program, year, status, notes, person } = req.body;
 
 		if (!id) {
 			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
@@ -370,6 +502,67 @@ export const controller = (prisma: PrismaClient) => {
 
 		studentLogger.info(`Updating student: ${id}`);
 
+		// Validate status if provided
+		if (status && !["freshman", "sophomore", "junior", "senior"].includes(status)) {
+			studentLogger.error(`Invalid academic status: ${status}`);
+			res.status(400).json({
+				error: "Status must be one of: freshman, sophomore, junior, senior",
+			});
+			return;
+		}
+
+		// Validate notes array if provided
+		if (notes && !Array.isArray(notes)) {
+			studentLogger.error(`Invalid notes format: ${notes}`);
+			res.status(400).json({
+				error: "Notes must be an array",
+			});
+			return;
+		}
+
+		if (notes && Array.isArray(notes)) {
+			for (const note of notes) {
+				if (typeof note !== "object" || note === null) {
+					studentLogger.error(`Invalid note format: ${note}`);
+					res.status(400).json({
+						error: "Each note must be an object",
+					});
+					return;
+				}
+
+				if (note.title && typeof note.title !== "string") {
+					studentLogger.error(`Invalid note title: ${note.title}`);
+					res.status(400).json({
+						error: "Note title must be a string",
+					});
+					return;
+				}
+
+				if (note.content && typeof note.content !== "string") {
+					studentLogger.error(`Invalid note content: ${note.content}`);
+					res.status(400).json({
+						error: "Note content must be a string",
+					});
+					return;
+				}
+
+				// Validate and normalize createdAt if provided
+				if (note.createdAt !== undefined && note.createdAt !== null) {
+					// Try to parse as Date to ensure it's valid
+					const dateValue = new Date(note.createdAt);
+					if (isNaN(dateValue.getTime())) {
+						studentLogger.error(`Invalid note createdAt: ${note.createdAt}`);
+						res.status(400).json({
+							error: "Note createdAt must be a valid date",
+						});
+						return;
+					}
+					// Convert to ISO string to ensure proper format
+					note.createdAt = dateValue.toISOString();
+				}
+			}
+		}
+
 		try {
 			const existingStudent = await prisma.student.findFirst({
 				where: {
@@ -377,11 +570,7 @@ export const controller = (prisma: PrismaClient) => {
 					isDeleted: false,
 				},
 				include: {
-					user: {
-						include: {
-							person: true,
-						},
-					},
+					person: true,
 				},
 			});
 
@@ -391,9 +580,9 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			if (!existingStudent.user || !existingStudent.user.person) {
-				studentLogger.error(`Student user or person data not found: ${id}`);
-				res.status(400).json({ error: "Student user or person data not found" });
+			if (!existingStudent.person) {
+				studentLogger.error(`Student person data not found: ${id}`);
+				res.status(400).json({ error: "Student person data not found" });
 				return;
 			}
 
@@ -419,65 +608,49 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			await prisma.$transaction(async (tx) => {
-				if (studentNumber || program || year) {
+				// Update student fields
+				if (studentNumber || program || year || status || notes) {
 					await tx.student.update({
 						where: { id },
 						data: {
 							...(studentNumber && { studentNumber }),
 							...(program && { program }),
 							...(year && { year }),
+							...(status && { status }),
+							...(notes && Array.isArray(notes) && { notes }),
 						},
 					});
 				}
 
-				if (user) {
-					const { person, password, ...userData } = user;
+				// Update person fields
+				if (person) {
+					const { address: newAddress, ...personData } = person;
 
-					let hashedPassword = null;
-					if (password) {
-						hashedPassword = await bcrypt.hash(password, 10);
-						studentLogger.info(`Password hashed for user: ${existingStudent.user!.id}`);
-					}
+					if (newAddress) {
+						const existingPerson = await tx.person.findUnique({
+							where: { id: existingStudent.person!.id },
+							select: { address: true },
+						});
 
-					if (Object.keys(userData).length > 0 || hashedPassword) {
-						await tx.user.update({
-							where: { id: existingStudent.user!.id },
+						const mergedAddress = {
+							...existingPerson?.address,
+							...newAddress,
+						};
+
+						await tx.person.update({
+							where: { id: existingStudent.person!.id },
 							data: {
-								...userData,
-								...(hashedPassword && { password: hashedPassword }),
+								...personData,
+								address: {
+									set: mergedAddress,
+								},
 							},
 						});
-					}
-
-					if (person) {
-						const { address: newAddress, ...personData } = person;
-
-						if (newAddress) {
-							const existingPerson = await tx.person.findUnique({
-								where: { id: existingStudent.user!.person!.id },
-								select: { address: true },
-							});
-
-							const mergedAddress = {
-								...existingPerson?.address,
-								...newAddress,
-							};
-
-							await tx.person.update({
-								where: { id: existingStudent.user!.person!.id },
-								data: {
-									...personData,
-									address: {
-										set: mergedAddress,
-									},
-								},
-							});
-						} else {
-							await tx.person.update({
-								where: { id: existingStudent.user!.person!.id },
-								data: personData,
-							});
-						}
+					} else {
+						await tx.person.update({
+							where: { id: existingStudent.person!.id },
+							data: personData,
+						});
 					}
 				}
 			});
@@ -485,11 +658,7 @@ export const controller = (prisma: PrismaClient) => {
 			const updatedStudent = await prisma.student.findUnique({
 				where: { id },
 				include: {
-					user: {
-						include: {
-							person: true,
-						},
-					},
+					person: true,
 				},
 			});
 
@@ -516,11 +685,7 @@ export const controller = (prisma: PrismaClient) => {
 			const existingStudent = await prisma.student.findUnique({
 				where: { id },
 				include: {
-					user: {
-						include: {
-							person: true,
-						},
-					},
+					person: true,
 				},
 			});
 
@@ -543,11 +708,345 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const updateYearLevels = async (req: Request, res: Response, _next: NextFunction) => {
+		studentLogger.info("Manual year level update requested");
+
+		try {
+			const result = await updateStudentYearLevels(prisma);
+
+			studentLogger.info(
+				`Year level update completed. Updated: ${result.updated}, Skipped: ${result.skipped}, Errors: ${result.errors}`,
+			);
+
+			res.status(200).json({
+				message: "Student year levels updated successfully",
+				...result,
+			});
+		} catch (error) {
+			studentLogger.error(`Failed to update student year levels: ${error}`);
+			res.status(500).json({
+				error: "Failed to update student year levels",
+				details: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+
+	const uploadStudentsCSV = async (req: Request, res: Response, _next: NextFunction) => {
+		studentLogger.info("CSV upload request received");
+
+		// Verify user type is guidance (admin/super_admin users are guidance users)
+		const authReq = req as any;
+		if (!authReq.userId) {
+			studentLogger.error("User not authenticated");
+			res.status(401).json({ error: "Authentication required" });
+			return;
+		}
+
+		// Check if user is guidance type
+		const user = await prisma.user.findUnique({
+			where: { id: authReq.userId },
+			select: { type: true, role: true },
+		});
+
+		if (!user || user.type !== "guidance") {
+			studentLogger.error(`Access denied for user type: ${user?.type}`);
+			res.status(403).json({ error: "Only guidance users can upload student CSV files" });
+			return;
+		}
+
+		if (!req.file) {
+			studentLogger.error("No CSV file provided");
+			res.status(400).json({ error: "CSV file is required" });
+			return;
+		}
+
+		if (req.file.mimetype !== "text/csv") {
+			studentLogger.error(`Invalid file type: ${req.file.mimetype}`);
+			res.status(400).json({ error: "File must be a CSV" });
+			return;
+		}
+
+		try {
+			const csvContent = req.file.buffer.toString("utf-8");
+
+			// Parse CSV with validation
+			const records = parse(csvContent, {
+				columns: true,
+				skip_empty_lines: true,
+				trim: true,
+			}) as any[];
+
+			if (records.length === 0) {
+				studentLogger.error("CSV file is empty or contains no valid records");
+				res.status(400).json({ error: "CSV file contains no valid records" });
+				return;
+			}
+
+			// Validate CSV format - should have STUDENT NUMBER, FIRSTNAME, and LASTNAME columns
+			const requiredColumns = ["STUDENT NUMBER", "FIRSTNAME", "LASTNAME"];
+			const csvColumns = Object.keys(records[0]);
+
+			const missingColumns = requiredColumns.filter((col) => !csvColumns.includes(col));
+			if (missingColumns.length > 0) {
+				studentLogger.error(`Missing required columns: ${missingColumns.join(", ")}`);
+				res.status(400).json({
+					error: `CSV must contain the following columns: ${requiredColumns.join(", ")}. MIDDLENAME is optional.`,
+					missingColumns,
+				});
+				return;
+			}
+
+			const results = {
+				total: 0,
+				successful: 0,
+				skipped: 0,
+				errors: [] as any[],
+			};
+
+			// Process records in batches for better performance
+			const batchSize = 50;
+			for (let i = 0; i < records.length; i += batchSize) {
+				const batch = records.slice(i, i + batchSize);
+
+				await prisma.$transaction(
+					async (tx) => {
+						for (const record of batch) {
+							results.total++;
+
+							const studentNumber = record["STUDENT NUMBER"]?.trim();
+							const firstName = record["FIRSTNAME"]?.trim();
+							const lastName = record["LASTNAME"]?.trim();
+							const middleName = record["MIDDLENAME"]?.trim() || null;
+
+							// Skip empty rows - require student number, first name, and last name
+							if (!studentNumber || !firstName || !lastName) {
+								results.skipped++;
+								continue;
+							}
+
+							try {
+								// Check if student already exists
+								const existingStudent = await tx.student.findFirst({
+									where: {
+										studentNumber,
+										isDeleted: false,
+									},
+								});
+
+								if (existingStudent) {
+									results.skipped++;
+									studentLogger.info(
+										`Student ${studentNumber} already exists, skipping`,
+									);
+									continue;
+								}
+
+								// Create person record
+								const person = await tx.person.create({
+									data: {
+										firstName,
+										lastName,
+										middleName: middleName || null,
+										isDeleted: false,
+									},
+								});
+
+								// Create student record
+								await tx.student.create({
+									data: {
+										studentNumber,
+										program: "To be assigned", // Default program
+										year: "1st", // Default year for first year students
+										status: "freshman",
+										person: {
+											connect: {
+												id: person.id,
+											},
+										},
+										isDeleted: false,
+									},
+								});
+
+								results.successful++;
+								studentLogger.info(
+									`Successfully created student: ${studentNumber} - ${firstName} ${middleName || ""} ${lastName}`
+										.trim()
+										.replace(/\s+/g, " "),
+								);
+							} catch (error) {
+								results.errors.push({
+									studentNumber,
+									firstName,
+									lastName,
+									middleName,
+									error: error instanceof Error ? error.message : String(error),
+								});
+								studentLogger.error(
+									`Failed to create student ${studentNumber}: ${error}`,
+								);
+							}
+						}
+					},
+					{
+						timeout: 60000, // 60 second timeout for large batches
+					},
+				);
+			}
+
+			studentLogger.info(
+				`CSV upload completed. Total: ${results.total}, Successful: ${results.successful}, Skipped: ${results.skipped}, Errors: ${results.errors.length}`,
+			);
+
+			res.status(200).json({
+				message: "CSV upload completed",
+				results,
+			});
+		} catch (error) {
+			studentLogger.error(`CSV upload failed: ${error}`);
+			res.status(500).json({
+				error: "Failed to process CSV file",
+				details: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+
+	const graduateStudent = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+
+		if (!id) {
+			studentLogger.error(config.ERROR.STUDENT.MISSING_ID);
+			res.status(400).json({ error: config.ERROR.STUDENT.USER_ID_REQUIRED });
+			return;
+		}
+
+		studentLogger.info(`Graduating student: ${id}`);
+
+		try {
+			const existingStudent = await prisma.student.findFirst({
+				where: {
+					id,
+					isDeleted: false,
+				},
+				include: {
+					person: true,
+				},
+			});
+
+			if (!existingStudent) {
+				studentLogger.error(`${config.ERROR.STUDENT.NOT_FOUND}: ${id}`);
+				res.status(404).json({ error: config.ERROR.STUDENT.NOT_FOUND });
+				return;
+			}
+
+			// Check if student is already graduated
+			if (existingStudent.year === "graduated") {
+				studentLogger.info(`Student ${id} is already graduated`);
+				res.status(400).json({ error: "Student is already graduated" });
+				return;
+			}
+
+			// Update student year to "graduated"
+			const graduatedStudent = await prisma.student.update({
+				where: { id },
+				data: {
+					year: "graduated",
+					status: "senior", // Set status to senior when graduated
+				},
+				include: {
+					person: true,
+				},
+			});
+
+			studentLogger.info(`Student ${id} graduated successfully`);
+			res.status(200).json({
+				message: "Student graduated successfully",
+				student: graduatedStudent,
+			});
+		} catch (error) {
+			studentLogger.error(`Error graduating student ${id}: ${error}`);
+			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
+		}
+	};
+
+	const graduateMultipleStudents = async (req: Request, res: Response, _next: NextFunction) => {
+		const { studentIds } = req.body;
+
+		if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+			studentLogger.error("Student IDs array is required");
+			res.status(400).json({ error: "Student IDs array is required" });
+			return;
+		}
+
+		studentLogger.info(`Graduating ${studentIds.length} students`);
+
+		try {
+			const results = {
+				successful: 0,
+				failed: 0,
+				errors: [] as string[],
+			};
+
+			// Process students in batches
+			for (const studentId of studentIds) {
+				try {
+					const existingStudent = await prisma.student.findFirst({
+						where: {
+							id: studentId,
+							isDeleted: false,
+						},
+					});
+
+					if (!existingStudent) {
+						results.failed++;
+						results.errors.push(`Student ${studentId} not found`);
+						continue;
+					}
+
+					if (existingStudent.year === "graduated") {
+						results.failed++;
+						results.errors.push(`Student ${studentId} is already graduated`);
+						continue;
+					}
+
+					await prisma.student.update({
+						where: { id: studentId },
+						data: {
+							year: "graduated",
+							status: "senior",
+						},
+					});
+
+					results.successful++;
+				} catch (error) {
+					results.failed++;
+					results.errors.push(`Failed to graduate student ${studentId}: ${error}`);
+					studentLogger.error(`Error graduating student ${studentId}: ${error}`);
+				}
+			}
+
+			studentLogger.info(
+				`Batch graduation completed. Successful: ${results.successful}, Failed: ${results.failed}`,
+			);
+
+			res.status(200).json({
+				message: "Batch graduation completed",
+				results,
+			});
+		} catch (error) {
+			studentLogger.error(`Error in batch graduation: ${error}`);
+			res.status(500).json({ error: config.ERROR.STUDENT.INTERNAL_SERVER_ERROR });
+		}
+	};
+
 	return {
 		getById,
 		getAll,
 		create,
 		update,
 		remove,
+		updateYearLevels,
+		uploadStudentsCSV,
+		graduateStudent,
+		graduateMultipleStudents,
 	};
 };

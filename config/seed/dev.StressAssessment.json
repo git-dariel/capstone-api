@@ -1,0 +1,33 @@
+[{
+  "_id": {
+    "$oid": "6907788da0c12690205aa660"
+  },
+  "userId": {
+    "$oid": "690777d5a0c12690205aa65c"
+  },
+  "upset_because_something_unexpected": "sometimes",
+  "unable_control_important_things": "sometimes",
+  "feeling_nervous_and_stressed": "sometimes",
+  "confident_handle_personal_problems": "sometimes",
+  "feeling_things_going_your_way": "sometimes",
+  "unable_cope_with_all_things": "sometimes",
+  "able_control_irritations": "sometimes",
+  "feeling_on_top_of_things": "sometimes",
+  "angered_things_outside_control": "sometimes",
+  "difficulties_piling_up_cant_overcome": "sometimes",
+  "totalScore": {
+    "$numberLong": "20"
+  },
+  "severityLevel": "moderate",
+  "assessmentDate": {
+    "$date": "2025-11-02T15:28:13.809Z"
+  },
+  "cooldownActive": true,
+  "createdAt": {
+    "$date": "2025-11-02T15:28:13.811Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:28:13.811Z"
+  },
+  "isDeleted": false
+}]

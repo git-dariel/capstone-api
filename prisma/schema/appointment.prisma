@@ -1,0 +1,93 @@
+enum AppointmentStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+enum AppointmentType {
+  general_information
+  one_or_two_session_problem_solving
+  stress_management
+  group_counseling
+  substance_abuse_services
+  career_exploration
+  individual_counseling
+  referral_for_university
+}
+
+enum ScheduleStatus {
+  available
+  booked
+  unavailable
+  cancelled
+}
+
+enum RecurringType {
+  none
+  daily
+  weekly
+  monthly
+}
+
+// Schedule model for guidance counselors to set their availability
+model Schedule {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  counselor     User           @relation("CounselorSchedules", fields: [counselorId], references: [id])
+  counselorId   String         @db.ObjectId
+  title         String? // e.g., "Morning Consultation", "Academic Guidance Hours"
+  description   String? // Additional details about the schedule
+  startTime     DateTime // Start time of the availability
+  endTime       DateTime // End time of the availability
+  status        ScheduleStatus @default(available)
+  isRecurring   Boolean        @default(false)
+  recurringType RecurringType  @default(none)
+  maxSlots      Int            @default(1) // Maximum number of appointments for this time slot
+  bookedSlots   Int            @default(0) // Number of currently booked appointments
+  location      String? // Office location or online meeting link
+  notes         String? // Additional notes for the schedule
+  appointments  Appointment[] // Related appointments
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+// Appointment model for students to book appointments with counselors
+model Appointment {
+  id                 String                  @id @default(auto()) @map("_id") @db.ObjectId
+  student            User                    @relation("StudentAppointments", fields: [studentId], references: [id])
+  studentId          String                  @db.ObjectId
+  studentIds         String[]                @db.ObjectId // Array of student IDs for group sessions
+  counselor          User                    @relation("CounselorAppointments", fields: [counselorId], references: [id])
+  counselorId        String                  @db.ObjectId
+  schedule           Schedule?               @relation(fields: [scheduleId], references: [id])
+  scheduleId         String?                 @db.ObjectId
+  title              String? // Subject/title of the appointment
+  description        String? // Student's description of what they want to discuss
+  appointmentType    AppointmentType         @default(general_information)
+  requestedDate      DateTime // When the appointment is scheduled for
+  status             AppointmentStatus       @default(pending)
+  priority           String?                 @default("normal") // normal, high, urgent
+  location           String? // Meeting location (can override schedule location)
+  duration           Int?                    @default(60) // Duration in minutes
+  reminderSent       Boolean                 @default(false)
+  cancellationReason String? // Reason if cancelled
+  completionNotes    String? // Counselor's notes after completion
+  followUpRequired   Boolean                 @default(false)
+  followUpDate       DateTime? // If follow-up is needed
+  attachments        AppointmentAttachment[]
+  maxStudents        Int?                    @default(10) // Maximum students for group sessions
+  isDeleted          Boolean                 @default(false)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+}
+
+// Type for appointment attachments (documents, images, etc.)
+type AppointmentAttachment {
+  name       String?
+  url        String?
+  type       String? // file type
+  uploadedBy String? // userId who uploaded
+  uploadedAt DateTime?
+}

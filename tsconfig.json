@@ -7,11 +7,11 @@
 		"skipLibCheck": true,
 		"outDir": "./dist",
 		"rootDir": ".",
-		"typeRoots": ["./node_modules/@types", "type"],
+		"typeRoots": ["./node_modules/@types", "./types"],
 		"moduleResolution": "node",
 		"sourceMap": true,
 		"resolveJsonModule": true
 	},
-	"include": ["app/**/*.ts", "index.ts"],
+	"include": ["app/**/*.ts", "index.ts", "helper/**/*.ts"],
 	"exclude": ["node_modules"]
 }

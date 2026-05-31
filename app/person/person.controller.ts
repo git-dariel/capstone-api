@@ -190,65 +190,67 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
-		const { firstName, lastName, middleName, suffix, contactNumber, ...others } = req.body;
+		const {
+			firstName,
+			lastName,
+			middleName,
+			suffix,
+			email,
+			contactNumber,
+			gender,
+			birthDate,
+			birthPlace,
+			age,
+			religion,
+			civilStatus,
+			address,
+			...otherData
+		} = req.body;
+
+		if (!firstName || !lastName) {
+			logger.error("First name and last name are required");
+			res.status(400).json({ error: "First name and last name are required" });
+			return;
+		}
 
 		try {
-			if (contactNumber) {
-				const existingPerson = await prisma.person.findFirst({
-					where: {
-						AND: [
-							{ contactNumber },
-							{ isDeleted: false },
-							...(firstName ? [{ firstName }] : []),
-							...(lastName ? [{ lastName }] : []),
-						],
-					},
-				});
-
-				if (existingPerson) {
-					personLogger.info(`${config.SUCCESS.PERSON.RETRIEVED}: ${existingPerson.id}`);
-					res.status(201).json(existingPerson);
-					return;
-				}
-
-				const existingPhoneNumber = await prisma.person.findFirst({
-					where: {
-						contactNumber,
-						isDeleted: false,
-					},
-				});
-
-				if (existingPhoneNumber) {
-					personLogger.error(
-						`${config.ERROR.PERSON.PHONE_ALREADY_IN_USE}: ${contactNumber}`,
-					);
-					res.status(400).json({
-						error: "Contact number is already registered to a different person",
-						existingPerson: {
-							firstName: existingPhoneNumber.firstName,
-							lastName: existingPhoneNumber.lastName,
-						},
-					});
-					return;
-				}
-			}
-
 			const newPerson = await prisma.person.create({
 				data: {
-					...(firstName && { firstName }),
-					...(lastName && { lastName }),
-					...(middleName && { middleName }),
-					...(suffix && { suffix }),
-					contactNumber,
-					...others,
+					firstName,
+					lastName,
+					...(middleName ? { middleName } : {}),
+					...(suffix ? { suffix } : {}),
+					...(email ? { email } : {}),
+					...(contactNumber ? { contactNumber } : {}),
+					...(gender ? { gender } : {}),
+					...(birthDate && { birthDate: new Date(birthDate) }),
+					...(birthPlace ? { birthPlace } : {}),
+					...(age ? { age } : {}),
+					...(religion ? { religion } : {}),
+					...(civilStatus ? { civilStatus } : {}),
+					...(address
+						? {
+								address: {
+									street: address.street,
+									city: address.city,
+									...(address.houseNo && { houseNo: parseInt(address.houseNo) }),
+									...(address.province && { province: address.province }),
+									...(address.barangay && { barangay: address.barangay }),
+									...(address.zipCode && { zipCode: parseInt(address.zipCode) }),
+									...(address.country && { country: address.country }),
+									...(address.type && { type: address.type }),
+								},
+							}
+						: {}),
+					...otherData,
 				},
 			});
 
-			personLogger.info(`${config.SUCCESS.PERSON.CREATED}: ${newPerson.id}`);
+			logger.info(`Person created successfully: ${newPerson.id}`);
 			res.status(201).json(newPerson);
 		} catch (error) {
-			personLogger.error(`${config.ERROR.PERSON.INTERNAL_SERVER_ERROR}: ${error}`);
-			res.status(500).json({ error: config.ERROR.PERSON.INTERNAL_SERVER_ERROR });
+			logger.error(`Error creating person: ${error}`);
+			res.status(500).json({ error: "Internal server error" });
 		}
 	};
 

@@ -137,7 +137,3 @@ dist
 
 # Prisma
 generated/prisma
-
-# CSV data files
-config/csv/
-*.csv

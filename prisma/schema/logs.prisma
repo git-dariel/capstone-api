@@ -2,6 +2,8 @@ enum LogType {
   activity
   audit
   notification
+  system
+  security
 }
 
 enum LogStatus {
@@ -20,6 +22,30 @@ enum LogSeverity {
   info
 }
 
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VIEW
+  EXPORT
+  APPROVE
+  REJECT
+  CANCEL
+  RESTORE
+  ASSIGN
+  UNASSIGN
+  ACTIVATE
+  DEACTIVATE
+  RESET_PASSWORD
+  CHANGE_ROLE
+  BULK_UPDATE
+  BULK_DELETE
+  FILE_UPLOAD
+  FILE_DOWNLOAD
+}
+
 model Log {
   id         String      @id @default(auto()) @map("_id") @db.ObjectId
   type       LogType
@@ -27,7 +53,7 @@ model Log {
   title      String
   message    String?
   user       User?       @relation(fields: [userId], references: [id])
-  userId     String      @unique @db.ObjectId
+  userId     String      @db.ObjectId
   entityType String? // e.g., "User", "Insurance", "Payment"
   entityId   String?
   data       Json?
@@ -35,4 +61,40 @@ model Log {
   severity   LogSeverity @default(info)
   readAt     DateTime?
   createdAt  DateTime    @default(now())
+}
+
+model AuditLog {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  action         AuditAction
+  entityType     String // e.g., "User", "Appointment", "Inventory"
+  entityId       String?
+  tableName      String? // Database table name for reference
+  recordId       String? // Primary key of the affected record
+  user           User?        @relation(fields: [userId], references: [id])
+  userId         String?      @db.ObjectId
+  userName       String? // Store username for deleted users
+  userRole       String? // Store user role at time of action
+  userType       String? // Store user type at time of action
+  ipAddress      String?
+  userAgent      String?
+  sessionId      String?
+  description    String // Human readable description of the action
+  module         String // System module (e.g., "appointment", "inventory", "user-management")
+  beforeValues   Json? // State before the change
+  afterValues    Json? // State after the change
+  changedFields  String[] // Array of field names that changed
+  metadata       Json? // Additional context data
+  riskLevel      LogSeverity  @default(info)
+  isSystemAction Boolean      @default(false) // True for automated system actions
+  isSecurityLog  Boolean      @default(false) // True for security-related actions
+  timestamp      DateTime     @default(now())
+  isDeleted      Boolean      @default(false) // For log retention policies
+  retentionDate  DateTime? // When this log can be safely deleted
+
+  @@index([entityType, entityId])
+  @@index([userId, timestamp])
+  @@index([action, timestamp])
+  @@index([module, timestamp])
+  @@index([isSecurityLog, timestamp])
+  @@index([riskLevel, timestamp])
 }

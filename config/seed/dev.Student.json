@@ -1,0 +1,44 @@
+[{
+  "_id": {
+    "$oid": "69072dd2804d83922b69746f"
+  },
+  "studentNumber": "2024-01044-LQ-1",
+  "program": "bsit",
+  "year": "4th",
+  "status": "freshman",
+  "personId": {
+    "$oid": "69072dd0804d83922b69746d"
+  },
+  "isDeleted": false,
+  "createdAt": {
+    "$date": "2025-11-02T10:09:22.608Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T14:23:53.978Z"
+  },
+  "notes": [
+    {
+      "title": "Sample",
+      "content": "Please always drink water. 8 glasses of bottle per day."
+    }
+  ]
+},
+{
+  "_id": {
+    "$oid": "690777d5a0c12690205aa65d"
+  },
+  "studentNumber": "2022-00772-LQ-0",
+  "program": "dcpet",
+  "year": "3rd",
+  "status": "freshman",
+  "personId": {
+    "$oid": "690777d5a0c12690205aa65b"
+  },
+  "isDeleted": false,
+  "createdAt": {
+    "$date": "2025-11-02T15:25:09.522Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-02T15:25:09.522Z"
+  }
+}]

@@ -5,11 +5,16 @@ import { Role } from "../generated/prisma";
 export interface AuthRequest extends Request {
 	role?: Role;
 	userId?: string;
+	userName?: string;
+	type?: string;
 }
 
 interface JwtPayload {
 	userId: string;
 	role: Role;
+	type?: string;
+	firstName?: string;
+	lastName?: string;
 }
 
 // Routes that don't require authentication
@@ -23,7 +28,16 @@ export default (req: AuthRequest, res: Response, next: NextFunction) => {
 		return next();
 	}
 
-	const token = req.cookies.token;
+	// Check for token in cookies first, then in Authorization header
+	let token = req.cookies.token;
+
+	if (!token) {
+		// Check Authorization header
+		const authHeader = req.headers.authorization;
+		if (authHeader && authHeader.startsWith("Bearer ")) {
+			token = authHeader.substring(7); // Remove "Bearer " prefix
+		}
+	}
 
 	if (!token) {
 		res.status(401).json({ message: "Unauthorized" });
@@ -34,6 +48,11 @@ export default (req: AuthRequest, res: Response, next: NextFunction) => {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
 		req.role = decoded.role;
 		req.userId = decoded.userId;
+		req.type = decoded.type;
+		req.userName =
+			decoded.firstName && decoded.lastName
+				? `${decoded.firstName}.${decoded.lastName}`
+				: decoded.userId;
 		next();
 	} catch (error) {
 		res.status(401).json({ message: "Invalid token" });
