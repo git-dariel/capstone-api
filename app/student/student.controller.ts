@@ -9,6 +9,29 @@ import { parse } from "csv-parse/sync";
 const logger = getLogger();
 const studentLogger = logger.child({ module: "student" });
 
+const buildFieldSelections = (fields: string[], initialFields = { id: true }) => {
+	return fields.reduce(
+		(acc, field) => {
+			const parts = field.trim().split(".");
+			if (parts.length > 1) {
+				const [parent, ...children] = parts;
+				acc[parent] = acc[parent] || { select: {} };
+
+				let current = acc[parent].select;
+				for (let i = 0; i < children.length - 1; i++) {
+					current[children[i]] = current[children[i]] || { select: {} };
+					current = current[children[i]].select;
+				}
+				current[children[children.length - 1]] = true;
+			} else {
+				acc[parts[0]] = true;
+			}
+			return acc;
+		},
+		{ ...initialFields } as Record<string, any>,
+	);
+};
+
 export const controller = (prisma: PrismaClient) => {
 	const personCtrl = personController(prisma);
 
@@ -154,36 +177,36 @@ export const controller = (prisma: PrismaClient) => {
 					: { id: order as Prisma.SortOrder },
 			};
 
+			let shouldAttachPerson = false;
+			let personSelect: Record<string, any> | undefined;
+
 			if (fields) {
 				// Filter out userId from fields since it's not a database field
 				const filteredFields = fields
 					.split(",")
-					.filter((field) => field.trim() !== "userId");
+					.map((field) => field.trim())
+					.filter((field) => field && field !== "userId");
 
-				const fieldSelections = filteredFields.reduce(
-					(acc, field) => {
-						const parts = field.trim().split(".");
-						if (parts.length > 1) {
-							const [parent, ...children] = parts;
-							acc[parent] = acc[parent] || { select: {} };
-
-							let current = acc[parent].select;
-							for (let i = 0; i < children.length - 1; i++) {
-								current[children[i]] = current[children[i]] || { select: {} };
-								current = current[children[i]].select;
-							}
-							current[children[children.length - 1]] = true;
-						} else {
-							acc[parts[0]] = true;
-						}
-						return acc;
-					},
-					{ id: true } as Record<string, any>,
+				const studentFields = filteredFields.filter(
+					(field) => field !== "person" && !field.startsWith("person."),
 				);
+				const personFields = filteredFields
+					.filter((field) => field.startsWith("person."))
+					.map((field) => field.replace("person.", ""));
+
+				shouldAttachPerson = filteredFields.some(
+					(field) => field === "person" || field.startsWith("person."),
+				);
+
+				const fieldSelections = buildFieldSelections(studentFields);
 
 				findManyQuery.select = fieldSelections;
 				// Always include personId for userId lookup
 				findManyQuery.select.personId = true;
+
+				if (personFields.length > 0) {
+					personSelect = buildFieldSelections(personFields);
+				}
 			}
 
 			const [students, total] = await Promise.all([
@@ -195,7 +218,7 @@ export const controller = (prisma: PrismaClient) => {
 			// Fetch all users at once for better performance and accuracy
 			const personIds = students
 				.map((student) => student.personId)
-				.filter((id) => id !== undefined);
+				.filter((id): id is string => id !== undefined && id !== null);
 			const users = await prisma.user.findMany({
 				where: {
 					personId: { in: personIds },
@@ -211,9 +234,28 @@ export const controller = (prisma: PrismaClient) => {
 				personIdToUserIdMap.set(user.personId, user.id);
 			});
 
+			const personIdToPersonMap = new Map<string, any>();
+
+			if (shouldAttachPerson && personIds.length > 0) {
+				const people = await prisma.person.findMany({
+					where: {
+						id: { in: personIds },
+						isDeleted: false,
+					},
+					...(personSelect ? { select: personSelect } : {}),
+				});
+
+				people.forEach((person) => {
+					personIdToPersonMap.set(person.id, person);
+				});
+			}
+
 			// Map students to include their corresponding userId
 			const studentsWithUserIds = students.map((student) => ({
 				...student,
+				...(shouldAttachPerson
+					? { person: personIdToPersonMap.get(student.personId) || null }
+					: {}),
 				userId: personIdToUserIdMap.get(student.personId) || null,
 			}));
 
